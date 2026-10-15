@@ -19,7 +19,7 @@ from pathlib import Path
 
 from . import clock, env, models, report
 from .store import DataStore
-from .vinted import MAX_PAGES, BlockedError, VintedClient, VintedError
+from .vinted import MAX_PAGES, BlockedError, VintedClient, VintedError, age_days
 
 WINDOW_START_HOUR = 7  # Berlin; the window ends at midnight
 TICK_PAGES = 2
@@ -31,6 +31,15 @@ MAX_REQUESTS = 60
 DAILY_CHECKS_PER_TICK = 25
 DESCRIPTION_CHECKS_PER_TICK = 10
 BOUNDARY_TAIL = 10
+
+# Daily search for older cheap list cameras (listed before the tracker saw them).
+SEARCH_QUERIES = ("zenit", "zenith", "fed", "zorki", "kiev", "praktica", "canon", "nikon", "pentax", "olympus",
+                  "minolta", "konica", "yashica", "mamiya", "contax", "leica", "hasselblad", "rollei")
+SEARCH_MAX_PRICE = 20
+SEARCH_MAX_PAGES = 4
+SEARCH_PAGES_PER_TICK = 2
+SEARCH_CHECKS_PER_TICK = 8
+FOUND_MAX_AGE_DAYS = 183  # half a year
 
 LIST_BRANDS = {brand for brand, *_ in models.MODELS}
 SIGNAL_FLAGS = {"accessory?", "digital?"}
@@ -157,7 +166,7 @@ def check_priority(item, now, vanished):
     """Priority for opening the item page this tick, or None if not due."""
     age = clock.minutes_between(item["first_seen"], now)
     since = clock.minutes_between(item["last_checked_at"], now)
-    preexisting = "preexisting" in item["flags"]
+    preexisting = bool({"preexisting", "found"} & set(item["flags"]))  # listing time unknown
     if item["group"] == "rest":
         if vanished:
             return P_REST_VANISHED
@@ -169,6 +178,65 @@ def check_priority(item, now, vanished):
     if age < 180:
         return P_LIST_DUE
     return P_LIST_DUE if since >= 240 else None
+
+
+def search_sweep(state, client, active, closed, now, today, stats, changed):
+    """Find older list cameras at <= 20 EUR by text search, one slice per tick.
+
+    Candidates get their item page opened: active and at most half a year old
+    on Vinted -> tracked with the 'found' flag; otherwise remembered and skipped.
+    One full pass over SEARCH_QUERIES per day.
+    """
+    search = state.setdefault("search", {"query": 0, "page": 1, "done_on": None, "pending": {}, "skipped": []})
+    skipped = set(search["skipped"])
+
+    for key in list(search["pending"])[:SEARCH_CHECKS_PER_TICK]:
+        if client.requests_made >= MAX_REQUESTS:
+            return
+        rec = search["pending"][key]
+        page = client.item_page(rec["id"])
+        del search["pending"][key]
+        stats["checks"] += 1
+        age = age_days(page["uploaded_ago"])
+        item = new_item(rec, now, None, ["found"])
+        if page["status"] != "active" or item["group"] != "list" or (age is not None and age > FOUND_MAX_AGE_DAYS):
+            search["skipped"].append(rec["id"])
+            stats["search_skipped"] += 1
+            continue
+        item["uploaded_ago"] = page["uploaded_ago"]
+        item["age_days_at_discovery"] = age
+        apply_page(item, page, now)
+        active[rec["id"]] = item
+        changed.add(rec["id"])
+        stats["found"] += 1
+
+    if search["done_on"] == today:
+        return
+    for _ in range(SEARCH_PAGES_PER_TICK):
+        if client.requests_made >= MAX_REQUESTS:
+            return
+        results = client.search_page(SEARCH_QUERIES[search["query"]], search["page"], SEARCH_MAX_PRICE)
+        stats["search_pages"] += 1
+        list_on_page = 0
+        for rec in results:
+            cls = models.classify(rec["title"], vinted_brand=rec["brand"])
+            if not cls["model"] or SIGNAL_FLAGS & set(cls["flags"]):
+                continue
+            list_on_page += 1
+            if rec["id"] in active:
+                mark_seen(active[rec["id"]], rec, now)
+                changed.add(rec["id"])
+            elif rec["id"] not in closed and rec["id"] not in skipped and str(rec["id"]) not in search["pending"]:
+                search["pending"][str(rec["id"])] = rec
+                stats["search_candidates"] += 1
+        last_page = len(results) < 96 or search["page"] >= SEARCH_MAX_PAGES or (search["page"] > 1 and not list_on_page)
+        if not last_page:
+            search["page"] += 1
+            continue
+        search["query"], search["page"] = search["query"] + 1, 1
+        if search["query"] >= len(SEARCH_QUERIES):
+            search["query"], search["done_on"] = 0, today
+            return
 
 
 # ---------------------------------------------------------------- tick
@@ -320,6 +388,16 @@ def run_tick(store, client, labels=None, now=None):
                 set_model(item, cls["model"], "description")
                 stats["description_to_list"] += 1
 
+    # ---- search for older cheap list cameras (lowest priority)
+    if rest_enabled and not first_run:
+        try:
+            search_sweep(state, client, active, closed, now, today, stats, changed)
+        except BlockedError as exc:
+            errors.append(f"search: {exc}")
+            rest_enabled = False
+        except VintedError:
+            stats["check_errors"] += 1
+
     # ---- close items whose tracking period is over
     for item in active.values():
         if item.get("closed_at"):
@@ -362,6 +440,8 @@ def _finish(store, state, now, started, client, stats, errors, full_scan, pages,
         "descriptions": stats["descriptions"], "description_to_list": stats["description_to_list"],
         "deferred": stats["deferred"], "check_errors": stats["check_errors"],
         "reclassified": stats["reclassified"],
+        "search_pages": stats["search_pages"], "search_candidates": stats["search_candidates"],
+        "found": stats["found"], "search_skipped": stats["search_skipped"],
         "rest_enabled": rest_enabled, "errors": [env.redact(e) for e in errors],
     }
     store.save_state(state)
@@ -385,6 +465,8 @@ def log_line(run):
             f" | descriptions {run['descriptions']} (-> list {run['description_to_list']})"
             f" | deferred {run['deferred']}, check errors {run['check_errors']}"
             f"{' | reclassified ' + str(run['reclassified']) if run.get('reclassified') else ''}"
+            f" | search: pages {run.get('search_pages', 0)}, candidates {run.get('search_candidates', 0)},"
+            f" found {run.get('found', 0)}, too old/gone {run.get('search_skipped', 0)}"
             f"{'' if run['rest_enabled'] else ' | rest disabled today'}"
             f" | errors: {'; '.join(run['errors']) or 'none'}")
 

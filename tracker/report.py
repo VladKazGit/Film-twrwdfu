@@ -21,6 +21,7 @@ SOURCE_RU = {"title": "заголовок", "description": "описание", "
 
 ITEM_HEADER = [
     "id", "Модель", "Заголовок", "Статус", "Цена старт", "Цена финал", "Сохранений", "Выставлен после", "Впервые",
+    "Выставлен на Vinted (при обнаружении)",
     "Последний раз активен", "Продажа обнаружена", "Время продажи мин, мин", "Время продажи макс, мин",
     "Корзина", "Комплект", "Детали комплекта", "Тип", "Формат", "Регион", "Бренд", "Источник модели",
     "Флаги", "Состояние", "Ссылка",
@@ -30,7 +31,7 @@ ITEM_HEADER = [
 def bucket(item):
     """Speed bucket of a sold item, or None if it has no usable estimate."""
     flags = set(item.get("flags") or [])
-    if item.get("status") != "sold" or item.get("time_to_sell_max") is None or flags & {"preexisting", "night", "bumped"}:
+    if item.get("status") != "sold" or item.get("time_to_sell_max") is None or flags & {"preexisting", "night", "bumped", "found"}:
         return None
     for limit, label in BUCKETS:
         if limit is None or item["time_to_sell_max"] <= limit:
@@ -45,7 +46,7 @@ def fast_confidence(item):
     (late GitHub runs widen the upper estimate).
     """
     flags = set(item.get("flags") or [])
-    if item.get("status") != "sold" or flags & (EXCLUDED_FLAGS | {"preexisting", "night"}):
+    if item.get("status") != "sold" or flags & (EXCLUDED_FLAGS | {"preexisting", "night", "found"}):
         return None
     if item.get("time_to_sell_max") is not None and item["time_to_sell_max"] <= FAST_MINUTES:
         return "точно"
@@ -72,7 +73,8 @@ def item_row(item):
         item["id"], item.get("model") or "", item.get("title") or "",
         STATUS_RU.get(item.get("status"), item.get("status") or ""),
         _num(item.get("price_start")), _num(item.get("price_final")), _num(item.get("favourites")),
-        item.get("listed_after") or "", item.get("first_seen") or "", item.get("last_seen_active") or "",
+        item.get("listed_after") or "", item.get("first_seen") or "", item.get("uploaded_ago") or "",
+        item.get("last_seen_active") or "",
         item.get("sold_detected_at") or "", _num(item.get("time_to_sell_min")), _num(item.get("time_to_sell_max")),
         bucket(item) or "", KIT_RU.get(item.get("kit"), ""), ", ".join(item.get("kit_details") or []),
         MECH_RU.get(item.get("mech_type"), ""), FORMAT_RU.get(item.get("format"), ""),
@@ -97,9 +99,10 @@ def current_price(item):
 
 
 def cheap_cameras(items, max_price):
-    """Rows of 'Список' (list cameras, flagged ones too) priced max_price or less."""
+    """Cameras from 'Список' (not flagged accessory/digital) priced max_price or less."""
     return [i for i in items
-            if i.get("group") == "list" and current_price(i) is not None and current_price(i) <= max_price]
+            if i.get("group") == "list" and not set(i.get("flags") or []) & EXCLUDED_FLAGS
+            and current_price(i) is not None and current_price(i) <= max_price]
 
 
 def _num(value):
@@ -125,6 +128,7 @@ def summarize(items, now):
             "preexisting": flags["preexisting"],
             "night": flags["night"],
             "bumped": flags["bumped"],
+            "found": flags["found"],
             "buckets": {label: sum(bucket(i) == label for i in group) for _, label in BUCKETS},
             "sold_without_estimate": sum(i.get("status") == "sold" and bucket(i) is None for i in group),
             "fast_maybe": sum(_maybe_fast(i) for i in group),
@@ -159,6 +163,7 @@ TOTAL_ROWS = [
     ("deleted", "Удалено"), ("unsold_3h", "Не продано за 3 ч"), ("unsold_30d", "Не продано за 30 дн"),
     ("preexisting", "preexisting (были до старта)"), ("night", "night (выставлены ночью)"),
     ("bumped", "bumped (поднятые старые объявления)"),
+    ("found", "found (старые дешёвые, найдены поиском)"),
 ]
 
 
@@ -172,7 +177,7 @@ def summary_rows(summary):
     rows += [[], ["Время продажи (верхняя оценка)", "Список", "Остальные"]]
     rows += [[label, lst["buckets"][label], rest["buckets"][label]] for _, label in BUCKETS]
     rows += [["Возможно < 30 мин (по нижней оценке)", lst["fast_maybe"], rest["fast_maybe"]]]
-    rows += [["Продано без оценки (preexisting/night/bumped)", lst["sold_without_estimate"], rest["sold_without_estimate"]]]
+    rows += [["Продано без оценки (preexisting/night/bumped/found)", lst["sold_without_estimate"], rest["sold_without_estimate"]]]
     rows += [[], ["Модель", "Появилось", "Продано", "Продано < 30 мин", "Возможно < 30 мин",
                   "Медиана макс. времени продажи, мин", "Сохранений в среднем"]]
     rows += [[m["model"], m["seen"], m["sold"], m["sold_under_30"], m["maybe_under_30"], _num(m["median_max_minutes"]),

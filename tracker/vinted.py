@@ -204,6 +204,18 @@ def _json_ld_product(html):
     return None
 
 
+_AGE_UNITS = (("min", 0), ("std", 0), ("stunde", 0), ("tag", 1), ("woche", 7), ("monat", 30), ("jahr", 365))
+
+
+def age_days(uploaded_ago):
+    """Days from Vinted's relative upload text ('3 Std.', '2 Wochen', '5 Monaten'), or None."""
+    m = re.match(r"\s*(\d+)\s*([^\W\d_]+)", uploaded_ago or "")
+    if not m:
+        return None
+    unit = m.group(2).lower()
+    return next((int(m.group(1)) * days for prefix, days in _AGE_UNITS if unit.startswith(prefix)), None)
+
+
 def parse_item(html, status_code, final_url, item_id):
     """Status and details of an item page.
 
@@ -355,6 +367,16 @@ class VintedClient:
                 return []
             raise BlockedError("catalog page without items")
         return items
+
+    def search_page(self, text, page, max_price):
+        """Category search by text (relevance order) up to max_price. Empty list past the end."""
+        resp = self.fetch(BASE_URL + "/catalog", {"search_text": text, "catalog[]": CATEGORY_ID,
+                                                  "price_to": max_price, "order": "relevance", "page": page})
+        if resp.status_code != 200:
+            raise VintedError(f"search http {resp.status_code}")
+        if not flight_payload(resp.text):
+            raise BlockedError("search page without data")
+        return parse_catalog(resp.text)[0]
 
     def item_page(self, item_id):
         resp = self.fetch(f"{BASE_URL}/items/{item_id}")

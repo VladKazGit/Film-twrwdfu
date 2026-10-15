@@ -11,9 +11,13 @@ def rec(item_id, title, price=50.0, brand=None, promoted=False):
 
 
 class FakeClient:
-    def __init__(self, pages, item_pages=None):
-        self.pages, self.item_pages = pages, item_pages or {}
+    def __init__(self, pages, item_pages=None, search=None):
+        self.pages, self.item_pages, self.search = pages, item_pages or {}, search or {}
         self.requests_made, self.bytes_received, self.opened = 0, 0, []
+
+    def search_page(self, text, page, max_price):
+        self.requests_made += 1
+        return self.search.get((text, page), [])
 
     def catalog_page(self, page):
         self.requests_made += 1
@@ -22,7 +26,7 @@ class FakeClient:
     def item_page(self, item_id):
         self.requests_made += 1
         self.opened.append(item_id)
-        base = {"status": "active", "price": None, "description": None}
+        base = {"status": "active", "price": None, "description": None, "uploaded_ago": None, "favourites": None}
         return {**base, **self.item_pages.get(item_id, {})}
 
 
@@ -186,11 +190,31 @@ def main():
         assert r7["models_updated"] and a[1031]["model"] == "Zenit TTL" and a[1031]["group"] == "list"
         assert a[1020]["model_source"] == "manual"
         print("log:", tick.log_line(r4["run"]))
+    # Search for older cheap list cameras: half a year limit, list models only.
+    with tempfile.TemporaryDirectory() as tmp:
+        store = DataStore(tmp)
+        base = {1: [rec(2000, "Kamera", 30.0)] + older(1999)}
+        tick.run_tick(store, FakeClient(base), now="2026-10-18 08:07")
+        search = {("zenit", 1): [rec(300, "Zenit 12 XP", 20.0), rec(301, "Zenit E", 5.0), rec(302, "Canon Prima", 10.0)]}
+        pages_age = {300: {"uploaded_ago": "5 Monaten"}, 301: {"uploaded_ago": "7 Monaten"}}
+        r = tick.run_tick(store, FakeClient(base, pages_age, search), now="2026-10-18 08:22")
+        assert r["run"]["search_candidates"] == 2 and r["run"]["found"] == 0, r["run"]
+        r = tick.run_tick(store, FakeClient(base, pages_age, search), now="2026-10-18 08:37")
+        a = store.load_active()
+        assert r["run"]["found"] == 1 and r["run"]["search_skipped"] == 1, r["run"]
+        assert a[300]["flags"] == ["found"] and a[300]["uploaded_ago"] == "5 Monaten" and 301 not in a and 302 not in a
+        assert [i["id"] for i in report.cheap_cameras(r["items"], 20.0)] == [300]
+        assert report.fast_confidence({**a[300], "status": "sold", "time_to_sell_min": 0}) is None
+        for minute in range(52, 52 + 15 * 10, 15):  # finish the daily pass over all queries
+            now = f"2026-10-18 {9 + minute // 60:02d}:{minute % 60:02d}"
+            tick.run_tick(store, FakeClient(base, pages_age, search), now=now)
+        assert store.load_state()["search"]["done_on"] == "2026-10-18"
+
     # 'До 20 €' includes exactly 20 EUR.
     at = lambda price, group="list", flags=(): {"price_history": [{"at": "x", "price": price}], "group": group,
                                                 "flags": list(flags)}
     assert len(report.cheap_cameras([at(20.0), at(19.99), at(20.01)], 20.0)) == 2
-    assert len(report.cheap_cameras([at(10.0, flags=["accessory?"]), at(10.0, group="rest")], 20.0)) == 1,         "flagged list rows stay (as in 'Список'), rest rows do not"
+    assert not report.cheap_cameras([at(10.0, flags=["accessory?"]), at(10.0, group="rest")], 20.0),         "accessories and rest rows are not in 'До 20 €'"
     print("tick tests passed")
 
 
