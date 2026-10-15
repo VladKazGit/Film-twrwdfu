@@ -64,6 +64,8 @@ def new_item(rec, now, listed_after, extra_flags):
         "price_start": rec["price"],
         "price_final": None,
         "price_history": [{"at": now, "price": rec["price"]}],
+        "favourites": rec.get("favourites"),
+        "favourites_history": [] if rec.get("favourites") is None else [{"at": now, "count": rec["favourites"]}],
         "listed_after": listed_after,
         "first_seen": now,
         "last_seen_active": now,
@@ -83,12 +85,20 @@ def _set_price(item, price, now):
         item["price_history"].append({"at": now, "price": price})
 
 
+def _set_favourites(item, count, now):
+    """Users' saves: keep the latest count and every change."""
+    if count is not None and item.get("favourites") != count:
+        item["favourites"] = count
+        item.setdefault("favourites_history", []).append({"at": now, "count": count})
+
+
 def mark_seen(item, rec, now):
     """Item is in the catalog: it is active now."""
     item["status"] = "active"
     item["last_seen_active"] = now
     item["last_checked_at"] = now
     _set_price(item, rec["price"], now)
+    _set_favourites(item, rec.get("favourites"), now)
 
 
 def close(item, status, now, price=None):
@@ -117,6 +127,7 @@ def set_model(item, model, source):
 def apply_page(item, page, now):
     """Update an item from its page. Returns the page status."""
     item["last_checked_at"] = now
+    _set_favourites(item, page.get("favourites"), now)
     if page["description"] and not item.get("description"):
         item["description"] = page["description"]
         kit, details = models.kit_of(f"{item['title']} {page['description']}")

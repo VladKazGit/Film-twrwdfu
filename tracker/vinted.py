@@ -122,7 +122,7 @@ def parse_catalog(html):
     """Items and pagination of a catalog page.
 
     Returns (items, pagination); items are dicts with id, title, url, price,
-    brand, condition, seller_id, promoted. pagination may be None.
+    brand, condition, seller_id, promoted, favourites. pagination may be None.
     """
     payload = flight_payload(html)
     items, seen = [], set()
@@ -148,9 +148,28 @@ def parse_catalog(html):
             "condition": _text(box.get("secondLine")),
             "seller_id": (raw.get("user") or {}).get("id"),
             "promoted": bool(raw.get("isPromoted")),
+            "favourites": _count(raw.get("favouriteCount")),
         })
     pagination = next((p for p in _values_after(payload, "pagination") if isinstance(p, dict)), None)
     return items, pagination
+
+
+def _count(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _favourites(payload, item_id):
+    """Users' saves ('favourite_count') of this item, or None."""
+    pos = payload.find('"favourite_count":')
+    while pos != -1:
+        obj = _enclosing_object(payload, pos)
+        if isinstance(obj, dict) and str(obj.get("item_id", obj.get("id"))) == str(item_id):
+            return _count(obj.get("favourite_count"))
+        pos = payload.find('"favourite_count":', pos + 1)
+    return None
 
 
 def _plugins(payload):
@@ -190,9 +209,10 @@ def parse_item(html, status_code, final_url, item_id):
 
     status: active / reserved / hidden / sold / deleted / unknown.
     Other keys (None when absent): title, description, price, brand,
-    condition, uploaded_ago (relative text like '3 Std.'), reason.
+    condition, uploaded_ago (relative text like '3 Std.'), favourites
+    (users' saves), reason.
     """
-    result = dict.fromkeys(("title", "description", "price", "brand", "condition", "uploaded_ago"))
+    result = dict.fromkeys(("title", "description", "price", "brand", "condition", "uploaded_ago", "favourites"))
     result.update(status="unknown", reason=None)
 
     if status_code in (404, 410):
@@ -219,6 +239,7 @@ def parse_item(html, status_code, final_url, item_id):
         brand=_text(attributes.get("brand")),
         condition=_text(attributes.get("status")),
         uploaded_ago=_text(attributes.get("upload_date")),
+        favourites=_favourites(payload, item_id),
     )
     if ld:
         result["title"] = result["title"] or _text(ld.get("name"))

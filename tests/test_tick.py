@@ -7,7 +7,7 @@ from tracker.store import DataStore
 
 def rec(item_id, title, price=50.0, brand=None, promoted=False):
     return {"id": item_id, "title": title, "url": f"https://www.vinted.de/items/{item_id}", "price": price,
-            "brand": brand, "condition": "Gut", "seller_id": 1, "promoted": promoted}
+            "brand": brand, "condition": "Gut", "seller_id": 1, "promoted": promoted, "favourites": 0}
 
 
 class FakeClient:
@@ -111,12 +111,13 @@ def main():
         assert store.load_active()[1011]["status"] == "reserved"
 
         # Tick 4 (3 h later, no full scan): FM2 sold, preexisting rest item closed after 3 h.
-        client = FakeClient(pages, {1011: {"status": "sold", "price": 140.0}})
+        client = FakeClient(pages, {1011: {"status": "sold", "price": 140.0, "favourites": 7}})
         r4 = tick.run_tick(store, client, now="2026-10-16 10:30")
         c = store.load_closed()
         assert not r4["run"]["full_scan"]
         assert c[1011]["status"] == "sold" and c[1011]["time_to_sell_min"] == 0 and c[1011]["time_to_sell_max"] == 203
         assert c[1011]["price_final"] == 140.0
+        assert c[1011]["favourites"] == 7 and c[1011]["favourites_history"][-1]["count"] == 7
         assert c[1009]["status"] == "unsold_3h"
 
         # Tick 5: next morning -> full scan, new items flagged night, daily exports.

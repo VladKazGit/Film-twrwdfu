@@ -63,7 +63,7 @@
 
 ## Поля карточки
 
-`id, url, title, description, condition, brand, model, model_source (title/description/brand_only/photo/manual), in_list, mech_type (механическая / полуавтомат-электронная), region, format (35mm/medium), kit (body / with_lens / extras / unklar), kit_details[], seller_id (только для склейки дублей), price_start, price_final, price_history[{at, price}], listed_after, first_seen, last_seen_active, sold_detected_at, status (active/reserved/hidden/sold/deleted/unsold_3h/unsold_30d), time_to_sell_min, time_to_sell_max, flags[] (preexisting, night, accessory?, digital?)`
+`id, url, title, description, condition, brand, model, model_source (title/description/brand_only/photo/manual), in_list, mech_type (механическая / полуавтомат-электронная), region, format (35mm/medium), kit (body / with_lens / extras / unklar), kit_details[], seller_id (только для склейки дублей), price_start, price_final, price_history[{at, price}], favourites (сохранения пользователей: каталог `favouriteCount`, страница товара `favourite_count`), favourites_history[{at, count}], listed_after, first_seen, last_seen_active, sold_detected_at, status (active/reserved/hidden/sold/deleted/unsold_3h/unsold_30d), time_to_sell_min, time_to_sell_max, flags[] (preexisting, night, accessory?, digital?)`
 
 - Время — дата + время по Берлину, до минуты.
 - Время продажи — диапазон: `[last_seen_active, sold_detected_at]` минус время выставления.

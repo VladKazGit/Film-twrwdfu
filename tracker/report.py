@@ -20,7 +20,7 @@ SOURCE_RU = {"title": "заголовок", "description": "описание", "
              "photo": "фото", "manual": "вручную"}
 
 ITEM_HEADER = [
-    "id", "Модель", "Заголовок", "Статус", "Цена старт", "Цена финал", "Выставлен после", "Впервые",
+    "id", "Модель", "Заголовок", "Статус", "Цена старт", "Цена финал", "Сохранений", "Выставлен после", "Впервые",
     "Последний раз активен", "Продажа обнаружена", "Время продажи мин, мин", "Время продажи макс, мин",
     "Корзина", "Комплект", "Детали комплекта", "Тип", "Формат", "Регион", "Бренд", "Источник модели",
     "Флаги", "Состояние", "Ссылка",
@@ -66,7 +66,7 @@ def item_row(item):
     return [
         item["id"], item.get("model") or "", item.get("title") or "",
         STATUS_RU.get(item.get("status"), item.get("status") or ""),
-        _num(item.get("price_start")), _num(item.get("price_final")),
+        _num(item.get("price_start")), _num(item.get("price_final")), _num(item.get("favourites")),
         item.get("listed_after") or "", item.get("first_seen") or "", item.get("last_seen_active") or "",
         item.get("sold_detected_at") or "", _num(item.get("time_to_sell_min")), _num(item.get("time_to_sell_max")),
         bucket(item) or "", KIT_RU.get(item.get("kit"), ""), ", ".join(item.get("kit_details") or []),
@@ -126,8 +126,11 @@ def summarize(items, now):
         }
     per_model = {}
     for item in groups["list"]:
-        stats = per_model.setdefault(item["model"], {"seen": 0, "sold": 0, "fast": 0, "maybe": 0, "times": []})
+        stats = per_model.setdefault(item["model"], {"seen": 0, "sold": 0, "fast": 0, "maybe": 0, "times": [],
+                                                     "favourites": []})
         stats["seen"] += 1
+        if item.get("favourites") is not None:
+            stats["favourites"].append(item["favourites"])
         if item.get("status") == "sold":
             stats["sold"] += 1
             if bucket(item):
@@ -138,7 +141,8 @@ def summarize(items, now):
                 stats["maybe"] += 1
     models = [
         {"model": model, "seen": s["seen"], "sold": s["sold"], "sold_under_30": s["fast"], "maybe_under_30": s["maybe"],
-         "median_max_minutes": statistics.median(s["times"]) if s["times"] else None}
+         "median_max_minutes": statistics.median(s["times"]) if s["times"] else None,
+         "mean_favourites": round(statistics.mean(s["favourites"]), 1) if s["favourites"] else None}
         for model, s in per_model.items()
     ]
     models.sort(key=lambda m: (-m["sold_under_30"], -m["maybe_under_30"], -m["sold"], -m["seen"], m["model"]))
@@ -164,8 +168,9 @@ def summary_rows(summary):
     rows += [["Возможно < 30 мин (по нижней оценке)", lst["fast_maybe"], rest["fast_maybe"]]]
     rows += [["Продано без оценки (preexisting/night)", lst["sold_without_estimate"], rest["sold_without_estimate"]]]
     rows += [[], ["Модель", "Появилось", "Продано", "Продано < 30 мин", "Возможно < 30 мин",
-                  "Медиана макс. времени продажи, мин"]]
-    rows += [[m["model"], m["seen"], m["sold"], m["sold_under_30"], m["maybe_under_30"], _num(m["median_max_minutes"])]
+                  "Медиана макс. времени продажи, мин", "Сохранений в среднем"]]
+    rows += [[m["model"], m["seen"], m["sold"], m["sold_under_30"], m["maybe_under_30"], _num(m["median_max_minutes"]),
+              _num(m["mean_favourites"])]
              for m in summary["models"]]
     width = max(len(r) for r in rows)
     return [r + [""] * (width - len(r)) for r in rows]
