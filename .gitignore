@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Local secrets and data: never commit
+.env
+*.key.json
+service-account*.json
+data/
+local/
+samples/
+*.html
+
+# Editors / tools
+.vscode/
+.idea/
+.claude/settings.local.json
