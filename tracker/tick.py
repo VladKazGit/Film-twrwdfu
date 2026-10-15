@@ -413,8 +413,10 @@ def write_sheets(writer, result, state_flags):
         updates["models_offered"] = sorted(set(offered) | set(names))
 
     writer.replace(sheets.LIST_SHEET, report.item_rows([i for i in items if i.get("group") == "list"]))
-    cheap = [i for i in report.cheap_cameras(items, sheets.CHEAP_MAX_PRICE)
-             if i.get("model") and sheets.model_key(i["model"]) in allowed]
+    candidates = report.cheap_cameras(items, sheets.CHEAP_MAX_PRICE)
+    cheap = [i for i in candidates if i.get("model") and sheets.model_key(i["model"]) in allowed]
+    print(f"sheets: cheap sheet {len(cheap)} of {len(candidates)} list cameras at <= 20 EUR"
+          f" (the others have models missing from the models sheet)")
     writer.replace(sheets.CHEAP_SHEET, report.item_rows(cheap, with_group=True))
     writer.replace(sheets.FAST_SHEET, report.fast_rows(items))
     writer.replace(sheets.SUMMARY_SHEET, report.summary_rows(result["summary"]))

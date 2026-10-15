@@ -187,8 +187,10 @@ def main():
         assert a[1020]["model_source"] == "manual"
         print("log:", tick.log_line(r4["run"]))
     # 'До 20 €' includes exactly 20 EUR.
-    at = lambda price: {"price_history": [{"at": "x", "price": price}], "flags": []}
+    at = lambda price, group="list", flags=(): {"price_history": [{"at": "x", "price": price}], "group": group,
+                                                "flags": list(flags)}
     assert len(report.cheap_cameras([at(20.0), at(19.99), at(20.01)], 20.0)) == 2
+    assert len(report.cheap_cameras([at(10.0, flags=["accessory?"]), at(10.0, group="rest")], 20.0)) == 1,         "flagged list rows stay (as in 'Список'), rest rows do not"
     print("tick tests passed")
 
 
