@@ -510,6 +510,18 @@ def _format_hint(title, description):
     return MED if _MEDIUM_HINT.search(normalize(" ".join(filter(None, [title, description])))) else None
 
 
+_CANONICAL = {re.sub(r"[^a-z0-9]", "", normalize(m)): m for m in MODEL_INFO}
+
+
+def canonical_model(text):
+    """Watch-list model name for user-typed text ('canon ae1' -> 'Canon AE-1'), or None."""
+    exact = _CANONICAL.get(re.sub(r"[^a-z0-9]", "", normalize(text)))
+    if exact:
+        return exact
+    hits = find_models(text)
+    return hits[0][2] if hits else None
+
+
 def list_models():
     """Rows for the 'Модели' sheet: model, brand, mech_type, format, region."""
     return [(m, i["brand"], i["mech_type"], i["format"], i["region"]) for m, i in MODEL_INFO.items()]

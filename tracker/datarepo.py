@@ -47,5 +47,10 @@ def commit_and_push(repo_dir, message):
     if not _git(["status", "--porcelain"], cwd=repo_dir).strip():
         return False
     _git(["commit", "--quiet", "-m", message], cwd=repo_dir)
-    _git(["push", "--quiet", "origin", "HEAD"], cwd=repo_dir)
+    try:
+        _git(["push", "--quiet", "origin", "HEAD"], cwd=repo_dir)
+    except DataRepoError:
+        # Someone else pushed meanwhile: replay our commit on top and retry once.
+        _git(["pull", "--quiet", "--rebase", "origin", "HEAD"], cwd=repo_dir)
+        _git(["push", "--quiet", "origin", "HEAD"], cwd=repo_dir)
     return True
