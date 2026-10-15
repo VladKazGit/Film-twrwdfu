@@ -52,6 +52,12 @@ class FakeWorksheet:
     def get_all_values(self):
         return self.rows
 
+    def col_values(self, n):
+        return [r[n - 1] if len(r) >= n else "" for r in self.rows]
+
+    def append_rows(self, rows, value_input_option):
+        self.rows += [list(r) for r in rows]
+
 
 class FakeSpreadsheet:
     def __init__(self):
@@ -142,6 +148,25 @@ def main():
         assert ss.sheets["Модели"].rows[0] == sheets.MODELS_HEADER and len(ss.sheets["Модели"].rows) > 150
         assert ss.sheets["Сводка"].rows[0][0] == "Обновлено"
         assert "Остальные" in ss.sheets
+        cheap = ss.sheets["До 20 €"].rows
+        assert cheap[0][-1] == "Группа" and any(r[0] == 1009 for r in cheap[1:]), "10 EUR item in 'До 20 €'"
+        assert not any(r[0] == 1010 for r in cheap[1:]), "45 EUR item not in 'До 20 €'"
+        # 'Модели' exists and was edited by the user: only missing models are appended.
+        models_ws = ss.sheets["Модели"]
+        models_ws.rows = models_ws.rows[:-3] + [["Моя заметка"]]
+        assert writer.ensure_models() == 3 and ["Моя заметка"] in models_ws.rows
+
+        # Dictionary version change re-classifies active items, manual labels stay.
+        state = store.load_state()
+        state["models_version"] = 1
+        store.save_state(state)
+        item = tick.new_item(rec(1031, "Kamera analog", 30.0), "2026-10-17 07:37", "2026-10-17 07:22", [])
+        item["title"] = "Vintage Zenit TTL Spiegelreflexkamera"  # as if the dictionary was older
+        store.save(item)
+        r7 = tick.run_tick(store, FakeClient(pages), labels={1020: "olympus om1n"}, now="2026-10-17 07:52")
+        a = store.load_active()
+        assert r7["models_updated"] and a[1031]["model"] == "Zenit TTL" and a[1031]["group"] == "list"
+        assert a[1020]["model_source"] == "manual"
         print("log:", tick.log_line(r4["run"]))
     print("tick tests passed")
 

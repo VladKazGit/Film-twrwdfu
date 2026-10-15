@@ -7,6 +7,8 @@ from . import env, models
 
 LIST_SHEET = "Список"
 REST_SHEET = "Остальные"
+CHEAP_SHEET = "До 20 €"
+CHEAP_MAX_PRICE = 20.0
 RUNS_SHEET = "Запуски"
 SUMMARY_SHEET = "Сводка"
 MODELS_SHEET = "Модели"
@@ -71,13 +73,18 @@ class SheetWriter:
         self._get(RUNS_SHEET, RUNS_HEADER).append_row(row, value_input_option="RAW")
 
     def ensure_models(self):
-        """Fill 'Модели' once; afterwards the sheet belongs to the user."""
-        if MODELS_SHEET in self._sheets:
-            return False
-        rows = [MODELS_HEADER] + [list(r) for r in models.list_models()]
-        self._get(MODELS_SHEET, MODELS_HEADER)
-        self.replace(MODELS_SHEET, rows)
-        return True
+        """Fill 'Модели' once; later only append models it lacks (the sheet belongs to the user)."""
+        rows = [list(r) for r in models.list_models()]
+        if MODELS_SHEET not in self._sheets:
+            self._get(MODELS_SHEET, MODELS_HEADER)
+            self.replace(MODELS_SHEET, [MODELS_HEADER] + rows)
+            return len(rows)
+        ws = self._sheets[MODELS_SHEET]
+        present = {value.strip() for value in ws.col_values(1)}
+        missing = [r for r in rows if r[0] not in present]
+        if missing:
+            ws.append_rows(missing, value_input_option="RAW")
+        return len(missing)
 
     def manual_labels(self):
         """{item id: model text} from 'Ручная разметка' (created empty if missing)."""

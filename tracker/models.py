@@ -142,8 +142,15 @@ MODELS = [
     ("Zenit", "Zenit B", MECH, S35, ["^b", "^v"], None),
     ("Zenit", "Zenit EM", MECH, S35, ["^em"], None),
     ("Zenit", "Zenit ET", MECH, S35, ["^et"], None),
+    ("Zenit", "Zenit TTL", MECH, S35, ["^ttl"], None),
+    ("Zenit", "Zenit 10", MECH, S35, ["^10"], None),
     ("Zenit", "Zenit 11", MECH, S35, ["^11"], None),
-    ("Zenit", "Zenit 12SD", MECH, S35, ["^12 sd", "^12 xp"], None),
+    ("Zenit", "Zenit 12SD", MECH, S35, ["^12 sd", "^12 cd"], None),
+    ("Zenit", "Zenit 12XP", MECH, S35, ["^12 xp"], None),
+    ("Zenit", "Zenit 122", MECH, S35, ["^122"], r"k(?![a-z0-9])"),
+    ("Zenit", "Zenit 4", MECH, S35, ["^4"], None),
+    ("Zenit", "Zenit 5", MECH, S35, ["^5"], None),
+    ("Zenit", "Zenit 6", MECH, S35, ["^6"], None),
     ("FED", "FED 2", MECH, S35, ["^2"], None),
     ("FED", "FED 3", MECH, S35, ["^3"], None),
     ("FED", "FED 4", MECH, S35, ["^4"], None),
@@ -226,11 +233,16 @@ MODELS = [
     ("Praktica", "Praktica BC1", ELEC, S35, ["bc 1"], None),
     ("Kiev", "Kiev 10", ELEC, S35, ["^10"], None),
     ("Kiev", "Kiev 15 Tee", ELEC, S35, ["^15", "^15 tee"], None),
+    ("Zenit", "Zenit 16", ELEC, S35, ["^16"], None),
     ("Zenit", "Zenit 19", ELEC, S35, ["^19"], None),
     ("Zenit", "Zenit Automat", ELEC, S35, ["^avtomat", "^automat"], None),
     ("Zenit", "Zenit AM", ELEC, S35, ["^am"], None),
     ("Zenit", "Zenit APK", ELEC, S35, ["^apk"], None),
+    ("Zenit", "Zenit KM", ELEC, S35, ["^km"], None),
 ]
+
+# Bump when MODELS changes: active items are re-classified on the next tick.
+VERSION = 2
 
 # ---------------------------------------------------------------- normalization
 

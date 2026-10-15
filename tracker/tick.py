@@ -187,6 +187,19 @@ def run_tick(store, client, labels=None, now=None):
             set_model(item, model, "manual")
             changed.add(item_id)
 
+    # The model dictionary changed: re-classify active items (manual labels stay).
+    if state.get("models_version") != models.VERSION:
+        stats["models_version_changed"] = 1
+        for item in active.values():
+            if item.get("model_source") == "manual":
+                continue
+            cls = models.classify(item["title"], item.get("description"), item.get("vinted_brand"))
+            if cls["model"] != item.get("model"):
+                set_model(item, cls["model"], cls["model_source"])
+                changed.add(item["id"])
+                stats["reclassified"] += 1
+        state["models_version"] = models.VERSION
+
     # ---- catalog
     full_scan = first_run or clock.minutes_between(state.get("last_full_scan_at") or "2000-01-01 00:00", now) >= FULL_SCAN_EVERY_MIN
     seen, last_page, pages_read = {}, [], 0
@@ -326,6 +339,7 @@ def _finish(store, state, now, started, client, stats, errors, full_scan, pages,
         "unknown": stats["unknown"], "closed_3h": stats["closed_3h"], "closed_30d": stats["closed_30d"],
         "descriptions": stats["descriptions"], "description_to_list": stats["description_to_list"],
         "deferred": stats["deferred"], "check_errors": stats["check_errors"],
+        "reclassified": stats["reclassified"],
         "rest_enabled": rest_enabled, "errors": [env.redact(e) for e in errors],
     }
     store.save_state(state)
@@ -334,7 +348,8 @@ def _finish(store, state, now, started, client, stats, errors, full_scan, pages,
     summary = report.summarize(all_items, now)
     if daily:
         store.write_exports(all_items, summary, report.readme(summary))
-    return {"run": run, "fatal": fatal, "daily": daily, "items": all_items, "summary": summary}
+    return {"run": run, "fatal": fatal, "daily": daily, "items": all_items, "summary": summary,
+            "models_updated": bool(stats["models_version_changed"])}
 
 
 def log_line(run):
@@ -346,6 +361,7 @@ def log_line(run):
             f" | closed 3h {run['closed_3h']}, 30d {run['closed_30d']}"
             f" | descriptions {run['descriptions']} (-> list {run['description_to_list']})"
             f" | deferred {run['deferred']}, check errors {run['check_errors']}"
+            f"{' | reclassified ' + str(run['reclassified']) if run.get('reclassified') else ''}"
             f"{'' if run['rest_enabled'] else ' | rest disabled today'}"
             f" | errors: {'; '.join(run['errors']) or 'none'}")
 
@@ -364,12 +380,15 @@ def write_sheets(writer, result, state_flags):
 
     items = result["items"]
     writer.replace(sheets.LIST_SHEET, report.item_rows([i for i in items if i.get("group") == "list"]))
+    writer.replace(sheets.CHEAP_SHEET,
+                   report.item_rows(report.cheap_cameras(items, sheets.CHEAP_MAX_PRICE), with_group=True))
     writer.replace(sheets.SUMMARY_SHEET, report.summary_rows(result["summary"]))
     if not state_flags.get("runs_header"):
         writer.ensure_runs_header()
     writer.append_run(runs_row(result["run"]))
     if result["daily"]:
         writer.replace(sheets.REST_SHEET, report.item_rows([i for i in items if i.get("group") == "rest"]))
+    if result["daily"] or result.get("models_updated"):
         writer.ensure_models()
 
 

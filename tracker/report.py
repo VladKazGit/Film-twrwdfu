@@ -51,9 +51,26 @@ def item_row(item):
     ]
 
 
-def item_rows(items):
+def item_rows(items, with_group=False):
     ordered = sorted(items, key=lambda i: (i.get("first_seen") or "", i["id"]), reverse=True)
+    if with_group:
+        group = {"list": "Список", "rest": "Остальные"}
+        return [ITEM_HEADER + ["Группа"]] + [item_row(i) + [group.get(i.get("group"), "")] for i in ordered]
     return [ITEM_HEADER] + [item_row(i) for i in ordered]
+
+
+def current_price(item):
+    if item.get("price_final") is not None:
+        return item["price_final"]
+    history = item.get("price_history") or []
+    return history[-1]["price"] if history else item.get("price_start")
+
+
+def cheap_cameras(items, max_price):
+    """Cameras (not flagged accessory/digital) whose current or final price is below max_price."""
+    return [i for i in items
+            if not set(i.get("flags") or []) & EXCLUDED_FLAGS
+            and current_price(i) is not None and current_price(i) < max_price]
 
 
 def _num(value):
