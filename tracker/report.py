@@ -97,10 +97,10 @@ def current_price(item):
 
 
 def cheap_cameras(items, max_price):
-    """Cameras (not flagged accessory/digital) whose current or final price is below max_price."""
+    """Cameras (not flagged accessory/digital) whose current or final price is max_price or less."""
     return [i for i in items
             if not set(i.get("flags") or []) & EXCLUDED_FLAGS
-            and current_price(i) is not None and current_price(i) < max_price]
+            and current_price(i) is not None and current_price(i) <= max_price]
 
 
 def _num(value):
