@@ -253,7 +253,14 @@ def run_tick(store, client, labels=None, now=None):
                 changed.add(rec_id)
                 stats[f"new_{item['group']}"] += 1
         elif rec_id not in closed:
+            # An old listing pushed back to the top. List cameras are tracked
+            # from the bump on: it happened between the previous tick and now.
             stats["bumped"] += 1
+            item = new_item(rec, now, listed_after, ["bumped"] + (["night"] if first_of_day else []))
+            if item["group"] == "list" and not first_run:
+                active[rec_id] = item
+                changed.add(rec_id)
+                stats["bumped_list"] += 1
     state["max_seen_id"] = max([max_seen, *seen])
 
     # ---- item page checks, in priority order within the request budget
@@ -348,6 +355,7 @@ def _finish(store, state, now, started, client, stats, errors, full_scan, pages,
         "at": now, "full_scan": full_scan, "pages": pages, "requests": client.requests_made,
         "mb": round(client.bytes_received / 1e6, 1), "seconds": round(time.monotonic() - started),
         "new_list": stats["new_list"], "new_rest": stats["new_rest"], "bumped": stats["bumped"],
+        "bumped_list": stats["bumped_list"],
         "checks": stats["checks"], "sold_list": stats["sold_list"], "sold_rest": stats["sold_rest"],
         "deleted": stats["deleted"], "reserved_hidden": stats["reserved"] + stats["hidden"],
         "unknown": stats["unknown"], "closed_3h": stats["closed_3h"], "closed_30d": stats["closed_30d"],
@@ -369,7 +377,8 @@ def _finish(store, state, now, started, client, stats, errors, full_scan, pages,
 def log_line(run):
     return (f"tick {run['at'][11:]} | pages {run['pages']}{' (full)' if run['full_scan'] else ''}"
             f" | requests {run['requests']} ({run['mb']} MB, {run['seconds']} s)"
-            f" | new: list {run['new_list']}, rest {run['new_rest']} | bumped {run['bumped']}"
+            f" | new: list {run['new_list']}, rest {run['new_rest']}"
+            f" | bumped {run['bumped']} (list tracked {run.get('bumped_list', 0)})"
             f" | checks {run['checks']}: sold list {run['sold_list']}, rest {run['sold_rest']},"
             f" deleted {run['deleted']}, reserved/hidden {run['reserved_hidden']}, unknown {run['unknown']}"
             f" | closed 3h {run['closed_3h']}, 30d {run['closed_30d']}"

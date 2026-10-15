@@ -1,7 +1,7 @@
 """Tick logic on a fake Vinted and a fake spreadsheet. Run: python -m tests.test_tick"""
 import tempfile
 
-from tracker import tick
+from tracker import report, tick
 from tracker.store import DataStore
 
 
@@ -93,20 +93,23 @@ def main():
 
         # Tick 2: two new items; the list camera vanished and is sold.
         pages = {1: [rec(1012, "Kamera Canon", 40.0), rec(1011, "Nikon FM2 body", 150.0),
-                     rec(1009, "Polaroid Kamera", 10.0), rec(500, "Bumped old", 30.0)] + older(1007), 2: older(980)}
+                     rec(1009, "Polaroid Kamera", 10.0), rec(500, "Bumped old", 30.0),
+                     rec(400, "Reflex argentique Zenit 12XP bon état", 10.0)] + older(1007), 2: older(980)}
         client = FakeClient(pages, {1010: {"status": "sold", "price": 45.0},
                                     1012: {"description": "Canon AE-1 Program mit 50mm Objektiv"}})
         r2 = tick.run_tick(store, client, now="2026-10-16 07:22")
         a, c = store.load_active(), store.load_closed()
-        assert r2["run"]["new_list"] == 1 and r2["run"]["new_rest"] == 1 and r2["run"]["bumped"] == 1, r2["run"]
+        assert r2["run"]["new_list"] == 1 and r2["run"]["new_rest"] == 1 and r2["run"]["bumped"] == 2, r2["run"]
+        assert r2["run"]["bumped_list"] == 1 and a[400]["flags"] == ["bumped"] and a[400]["model"] == "Zenit 12XP"
+        assert 500 not in a, "bumped non-list listings are not tracked"
         assert c[1010]["status"] == "sold" and c[1010]["time_to_sell_max"] is None, "preexisting: no max"
         assert a[1012]["group"] == "list" and a[1012]["model"] == "Canon AE-1 Program", a[1012]["model"]
         assert a[1012]["model_source"] == "description" and a[1012]["kit"] == "with_lens"
         assert a[1011]["listed_after"] == "2026-10-16 07:07"
 
         # Tick 3: FM2 vanished -> reserved.
-        pages[1] = [p for p in pages[1] if p["id"] != 1011]
-        client = FakeClient(pages, {1011: {"status": "reserved"}})
+        pages[1] = [p for p in pages[1] if p["id"] not in (1011, 400)]
+        client = FakeClient(pages, {1011: {"status": "reserved"}, 400: {"status": "sold", "price": 10.0}})
         tick.run_tick(store, client, now="2026-10-16 07:37")
         assert store.load_active()[1011]["status"] == "reserved"
 
@@ -152,23 +155,24 @@ def main():
         assert "Остальные" in ss.sheets
         fast = ss.sheets["Быстрые продажи"].rows
         assert fast[0][-2:] == ["Группа", "Уверенность"], fast[0]
-        assert [r[0] for r in fast[1:]] == [1011] and fast[1][-1] == "возможно", "reserved fast, sold 3 h later"
+        assert [r[0] for r in fast[1:]] == [1011, 400] and fast[1][-1] == "возможно", "reserved fast, sold 3 h later"
+        assert fast[2][-1] == "точно" and "bumped" in fast[2][report.ITEM_HEADER.index("Флаги")], "bumped, sold in 15 min"
         assert all(r[0] != 1010 for r in fast[1:]), "preexisting sale is not fast"
         cheap = ss.sheets["До 20 €"].rows
-        assert cheap[0][-1] == "Группа" and [r[0] for r in cheap[1:]] == [1021], cheap[1:]
+        assert cheap[0][-1] == "Группа" and [r[0] for r in cheap[1:]] == [1021, 400], cheap[1:]
         # 'До 20 €' follows 'Модели': the user deletes Zenit E, it leaves 'До 20 €' and is not re-added.
         models_ws = ss.sheets["Модели"]
         models_ws.rows = [r for r in models_ws.rows if r[0] != "Zenit E"]
         state_flags = {"runs_header": True, "models_offered": updates["models_offered"]}
         assert tick.write_sheets(writer, r5, state_flags) == {}
-        assert [r[0] for r in ss.sheets["До 20 €"].rows[1:]] == [] and ["Zenit E"] not in [r[:1] for r in models_ws.rows]
+        assert [r[0] for r in ss.sheets["До 20 €"].rows[1:]] == [400] and ["Zenit E"] not in [r[:1] for r in models_ws.rows]
         # A model new to the dictionary is offered once; spelling in the sheet does not matter.
         models_ws.rows.append(["зенит-е"])
         offered = [m for m in updates["models_offered"] if m != "Zenit KM"]
         models_ws.rows = [r for r in models_ws.rows if r[0] != "Zenit KM"]
         upd = tick.write_sheets(writer, r5, {"runs_header": True, "models_offered": offered})
         assert "Zenit KM" in upd["models_offered"] and models_ws.rows[-1][0] == "Zenit KM"
-        assert [r[0] for r in ss.sheets["До 20 €"].rows[1:]] == [1021], "Cyrillic 'зенит-е' matches Zenit E"
+        assert [r[0] for r in ss.sheets["До 20 €"].rows[1:]] == [1021, 400], "Cyrillic 'зенит-е' matches Zenit E"
 
         # Dictionary version change re-classifies active items, manual labels stay.
         state = store.load_state()

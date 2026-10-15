@@ -30,7 +30,7 @@ ITEM_HEADER = [
 def bucket(item):
     """Speed bucket of a sold item, or None if it has no usable estimate."""
     flags = set(item.get("flags") or [])
-    if item.get("status") != "sold" or item.get("time_to_sell_max") is None or flags & {"preexisting", "night"}:
+    if item.get("status") != "sold" or item.get("time_to_sell_max") is None or flags & {"preexisting", "night", "bumped"}:
         return None
     for limit, label in BUCKETS:
         if limit is None or item["time_to_sell_max"] <= limit:
@@ -52,6 +52,11 @@ def fast_confidence(item):
     if item.get("time_to_sell_min") is not None and item["time_to_sell_min"] < FAST_MINUTES:
         return "возможно"
     return None
+
+
+def _maybe_fast(item):
+    """'возможно < 30 мин' for the summary, which counts from listing (bumped items count from the bump)."""
+    return fast_confidence(item) == "возможно" and "bumped" not in (item.get("flags") or [])
 
 
 def fast_rows(items):
@@ -120,9 +125,10 @@ def summarize(items, now):
             "unsold_30d": status["unsold_30d"],
             "preexisting": flags["preexisting"],
             "night": flags["night"],
+            "bumped": flags["bumped"],
             "buckets": {label: sum(bucket(i) == label for i in group) for _, label in BUCKETS},
             "sold_without_estimate": sum(i.get("status") == "sold" and bucket(i) is None for i in group),
-            "fast_maybe": sum(fast_confidence(i) == "возможно" for i in group),
+            "fast_maybe": sum(_maybe_fast(i) for i in group),
         }
     per_model = {}
     for item in groups["list"]:
@@ -137,7 +143,7 @@ def summarize(items, now):
                 stats["times"].append(item["time_to_sell_max"])
             if bucket(item) == BUCKETS[0][1]:
                 stats["fast"] += 1
-            elif fast_confidence(item) == "возможно":
+            elif _maybe_fast(item):
                 stats["maybe"] += 1
     models = [
         {"model": model, "seen": s["seen"], "sold": s["sold"], "sold_under_30": s["fast"], "maybe_under_30": s["maybe"],
@@ -153,6 +159,7 @@ TOTAL_ROWS = [
     ("tracked", "Отслежено всего"), ("active", "Сейчас активны (вкл. резерв/скрытые)"), ("sold", "Продано"),
     ("deleted", "Удалено"), ("unsold_3h", "Не продано за 3 ч"), ("unsold_30d", "Не продано за 30 дн"),
     ("preexisting", "preexisting (были до старта)"), ("night", "night (выставлены ночью)"),
+    ("bumped", "bumped (поднятые старые объявления)"),
 ]
 
 
@@ -166,7 +173,7 @@ def summary_rows(summary):
     rows += [[], ["Время продажи (верхняя оценка)", "Список", "Остальные"]]
     rows += [[label, lst["buckets"][label], rest["buckets"][label]] for _, label in BUCKETS]
     rows += [["Возможно < 30 мин (по нижней оценке)", lst["fast_maybe"], rest["fast_maybe"]]]
-    rows += [["Продано без оценки (preexisting/night)", lst["sold_without_estimate"], rest["sold_without_estimate"]]]
+    rows += [["Продано без оценки (preexisting/night/bumped)", lst["sold_without_estimate"], rest["sold_without_estimate"]]]
     rows += [[], ["Модель", "Появилось", "Продано", "Продано < 30 мин", "Возможно < 30 мин",
                   "Медиана макс. времени продажи, мин", "Сохранений в среднем"]]
     rows += [[m["model"], m["seen"], m["sold"], m["sold_under_30"], m["maybe_under_30"], _num(m["median_max_minutes"]),
