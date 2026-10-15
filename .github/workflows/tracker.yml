@@ -1,21 +1,33 @@
 name: tracker
 
-# Every 15 minutes, 05:00-22:59 UTC; the script itself keeps to the
-# 07:00-00:00 Europe/Berlin window (summer and winter time).
-# Scheduled runs only work while the repository variable TRACKER_ENABLED is
-# "true" (Settings -> Secrets and variables -> Actions -> Variables).
+# A self-sustaining chain: each run ticks every 15 minutes (:07, :22, :37, :52
+# Berlin, window 07:00-00:00) for up to 5.5 hours, then starts the next run.
+# GitHub's cron is only a backup that restarts the chain if it broke.
+#
+# Start:  Actions -> tracker -> Run workflow (ticks right away, then chains).
+# Stop:   set the repository variable TRACKER_ENABLED to "false" (the chain
+#         ends after the current run), or cancel the running run (ends now).
 on:
   schedule:
-    - cron: "7,22,37,52 5-22 * * *"
+    - cron: "7 5-21/2 * * *"
   workflow_dispatch:
     inputs:
+      once:
+        description: "Only one tick (no 5.5-hour loop, no chain)"
+        type: boolean
+        default: false
       force:
-        description: "Run even outside the 07:00-00:00 Berlin window"
+        description: "First tick runs even outside the 07:00-00:00 Berlin window"
+        type: boolean
+        default: false
+      chained:
+        description: "Started by the previous run (internal)"
         type: boolean
         default: false
 
 permissions:
   contents: read
+  actions: write  # start the next run
 
 concurrency:
   group: tracker
@@ -25,7 +37,7 @@ jobs:
   tick:
     if: github.event_name == 'workflow_dispatch' || vars.TRACKER_ENABLED == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 14
+    timeout-minutes: 355
     steps:
       - uses: actions/checkout@v5
 
@@ -37,10 +49,21 @@ jobs:
       - name: Install dependencies
         run: pip install -q -r requirements.txt
 
-      - name: Tick
+      - name: Ticks
         env:
           GOOGLE_SA_KEY: ${{ secrets.GOOGLE_SA_KEY }}
           SHEET_ID: ${{ secrets.SHEET_ID }}
           DATA_TOKEN: ${{ secrets.DATA_TOKEN }}
           DATA_REPO: ${{ secrets.DATA_REPO }}
-        run: python -m tracker.tick ${{ inputs.force && '--force' || '' }}
+        run: |
+          if [ "${{ inputs.once }}" = "true" ]; then
+            python -m tracker.tick ${{ inputs.force && '--force' || '' }}
+          else
+            python -m tracker.loop ${{ (github.event_name == 'workflow_dispatch' && !inputs.chained) && '--tick-now' || '' }} ${{ inputs.force && '--force' || '' }}
+          fi
+
+      - name: Start the next run
+        if: ${{ !cancelled() && !inputs.once && vars.TRACKER_ENABLED == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run tracker.yml --repo "${{ github.repository }}" --ref "${{ github.ref_name }}" -f chained=true
