@@ -12,10 +12,6 @@ on:
     - cron: "7 5-21/2 * * *"
   workflow_dispatch:
     inputs:
-      once:
-        description: "Only one tick (no 5.5-hour loop, no chain)"
-        type: boolean
-        default: false
       force:
         description: "First tick runs even outside the 07:00-00:00 Berlin window"
         type: boolean
@@ -56,14 +52,11 @@ jobs:
           DATA_TOKEN: ${{ secrets.DATA_TOKEN }}
           DATA_REPO: ${{ secrets.DATA_REPO }}
         run: |
-          if [ "${{ inputs.once }}" = "true" ]; then
-            python -m tracker.tick ${{ inputs.force && '--force' || '' }}
-          else
-            python -m tracker.loop ${{ (github.event_name == 'workflow_dispatch' && !inputs.chained) && '--tick-now' || '' }} ${{ inputs.force && '--force' || '' }}
-          fi
+          echo "settings: chain ${{ vars.TRACKER_ENABLED == 'true' && 'on' || 'OFF (TRACKER_ENABLED is not true)' }}, event ${{ github.event_name }}, chained ${{ inputs.chained && 'yes' || 'no' }}"
+          python -m tracker.loop ${{ (github.event_name == 'workflow_dispatch' && !inputs.chained) && '--tick-now' || '' }} ${{ inputs.force && '--force' || '' }}
 
       - name: Start the next run
-        if: ${{ !cancelled() && !inputs.once && vars.TRACKER_ENABLED == 'true' }}
+        if: ${{ !cancelled() && vars.TRACKER_ENABLED == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run tracker.yml --repo "${{ github.repository }}" --ref "${{ github.ref_name }}" -f chained=true

@@ -48,6 +48,7 @@ def run_loop(now_fn, sleep_fn, tick_fn, tick_now=False, budget_min=BUDGET_MIN, l
     # Real minutes, not wall-clock: the DST night must not stretch the run past the job limit.
     deadline = (start.astimezone(timezone.utc) + timedelta(minutes=budget_min)).astimezone(start.tzinfo)
     failures, ticked = 0, False
+    log(f"loop: started, hands over by {deadline:%Y-%m-%d %H:%M} (Berlin)")
     if tick_now:
         failures += 0 if tick_fn() else 1
         ticked = True
