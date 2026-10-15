@@ -92,6 +92,23 @@ def _text(value):
     return str(value).strip()
 
 
+def _resolve(payload, value):
+    """Long strings live in separate text rows ('\\nf9:T786,<text>'); '$f9' points there.
+
+    The hex length counts UTF-8 bytes.
+    """
+    ref = re.fullmatch(r"\$([0-9a-f]+)", value) if isinstance(value, str) else None
+    if not ref:
+        return value
+    row = (re.search(rf"(?:^|\n){ref.group(1)}:T([0-9a-f]+),", payload)
+           or re.search(rf"{ref.group(1)}:T([0-9a-f]+),", payload))
+    if not row:
+        return None
+    size = int(row.group(1), 16)
+    text = payload[row.end():row.end() + size]  # chars >= bytes, trim below
+    return text.encode("utf-8")[:size].decode("utf-8", "ignore")
+
+
 def _price(value):
     if isinstance(value, dict):
         value = value.get("amount")
@@ -118,12 +135,16 @@ def parse_catalog(html):
         seen.add(item_id)
         box = raw.get("itemBox") or {}
         url = raw.get("url") or f"/items/{item_id}"
+        title = _text(raw.get("title")) or ""
+        brand = _text(box.get("firstLine"))
+        if brand == title:
+            brand = None  # items without a brand show the title in firstLine
         items.append({
             "id": item_id,
-            "title": _text(raw.get("title")) or "",
+            "title": title,
             "url": url if url.startswith("http") else BASE_URL + url,
             "price": _price(raw.get("price")),
-            "brand": _text(box.get("firstLine")),
+            "brand": brand,
             "condition": _text(box.get("secondLine")),
             "seller_id": (raw.get("user") or {}).get("id"),
             "promoted": bool(raw.get("isPromoted")),
@@ -192,8 +213,8 @@ def parse_item(html, status_code, final_url, item_id):
     ld = _json_ld_product(html)
 
     result.update(
-        title=_text(state.get("title")),
-        description=_text((plugins.get("description") or {}).get("description")),
+        title=_text(_resolve(payload, state.get("title"))),
+        description=_text(_resolve(payload, (plugins.get("description") or {}).get("description"))),
         price=_price(state.get("price")),
         brand=_text(attributes.get("brand")),
         condition=_text(attributes.get("status")),

@@ -1,0 +1,143 @@
+"""Model recognition rules from CLAUDE.md. Run: python -m tests.test_models"""
+from tracker.models import classify
+
+CASES = [
+    # (title, vinted brand, expected model)
+    ("Nikon F Photomic analog", None, "Nikon F"),
+    ("Nikon F55 Spiegelreflexkamera", None, None),
+    ("Nikon F60 mit 28-80mm", None, None),
+    ("Nikon F-301 Kamera", None, None),
+    ("Nikon F 801s", None, None),
+    ("Nikon F80 body", None, None),
+    ("Nikon F 50mm f/1.4 Kamera", None, "Nikon F"),
+    ("Nikkor 50mm f2 für Nikon F Mount", None, None),
+    ("Nikon F2 Photomic", None, "Nikon F2"),
+    ("Nikon FM2n", None, "Nikon FM2n"),
+    ("Nikon FM2 N", None, "Nikon FM2n"),
+    ("Nikon FM10", None, None),
+    ("Nikon FM 10 analog", None, None),
+    ("Nikon FG-20", None, None),
+    ("Pentax KX Spiegelreflex", None, "Pentax KX"),
+    ("Pentax K-x digital", None, None),
+    ("Pentax KM analog", None, "Pentax KM"),
+    ("Pentax K-m 10MP", None, None),
+    ("Pentax K1000 SE", None, "Pentax K1000"),
+    ("Pentax ME Super", None, "Pentax ME Super"),
+    ("Pentax ME-F", None, None),
+    ("Pentax 67 mit 105mm", None, "Pentax 67"),
+    ("Pentax 67II", None, "Pentax 67II"),
+    ("Pentax 67 II body", None, "Pentax 67II"),
+    ("Asahi Pentax 6x7", None, "Pentax 67"),
+    ("Canon EF Spiegelreflexkamera", None, "Canon EF"),
+    ("Canon EF 50mm 1.8 Objektiv", None, None),
+    ("Canon EF-S 18-55", None, None),
+    ("Canon 7 Messsucher", None, "Canon 7"),
+    ("Canon 7D Gehäuse", None, None),
+    ("Canon EOS 7 analog", None, None),
+    ("Canon P rangefinder", None, "Canon P"),
+    ("Canon Prima Zoom", None, None),
+    ("Canon PowerShot A520", None, None),
+    ("Canon AE-1 Program", None, "Canon AE-1 Program"),
+    ("Canon AE1P", None, "Canon AE-1 Program"),
+    ("Canon AE-1 + FD 50mm f1.8", None, "Canon AE-1"),
+    ("Canon FD 50mm f1.4", None, None),
+    ("Canon New F-1", None, "Canon New F-1"),
+    ("Canon F-1n", None, "Canon F-1n"),
+    ("Olympus OM-1", None, "Olympus OM-1"),
+    ("Olympus OM10", None, "Olympus OM-10"),
+    ("Olympus OM-4", None, "Olympus OM-4"),
+    ("Olympus OM 40 Program", None, "Olympus OM-40"),
+    ("Olympus OM-2 Spot Program", None, "Olympus OM-2S"),
+    ("Hasselblad 500C", None, "Hasselblad 500C"),
+    ("Hasselblad 500 C/M", None, "Hasselblad 500C/M"),
+    ("Hasselblad 500CM", None, "Hasselblad 500C/M"),
+    ("Yashica Mat-124", None, "Yashica Mat-124"),
+    ("Yashica Mat 124 G", None, "Yashica Mat-124G"),
+    ("Yashica-Mat 124G", None, "Yashica Mat-124G"),
+    ("Yashica FX-3 Super", None, None),
+    ("Yashica FX-3 Super 2000", None, "Yashica FX-3 Super 2000"),
+    ("Asahi Pentax Spotmatic", None, "Pentax Spotmatic"),
+    ("Pentax Spotmatic F", None, "Pentax Spotmatic F"),
+    ("Pentax Spotmatic II", None, None),
+    ("Minolta SR-7", None, "Minolta SR-7"),
+    ("Minolta SR-T 101", None, "Minolta SR-T 101"),
+    ("Minolta SRT101", None, "Minolta SR-T 101"),
+    ("Minolta SR-T 303", None, None),
+    ("Praktica Super TL1000", None, None),
+    ("Praktica Super TL 1000", None, None),
+    ("Praktica Super TL", None, "Praktica Super TL"),
+    ("Praktica MTL5B", None, "Praktica MTL 5B"),
+    ("Praktica MTL 50", None, None),
+    ("Praktica LTL 3", None, None),
+    ("Praktica L2", None, None),
+    ("Зенит-Е", None, "Zenit E"),
+    ("Zenit 12XP", None, "Zenit 12SD"),
+    ("Зенит 12сд", None, "Zenit 12SD"),
+    ("Zenith EM Olympic", None, "Zenit EM"),
+    ("ФЭД-5В", None, "FED 5B"),
+    ("FED 2", None, "FED 2"),
+    ("Зоркий-4К", None, "Zorki 4K"),
+    ("Zorki 4", None, "Zorki 4"),
+    ("Киев-4АМ", None, "Kiev 4AM"),
+    ("Kiew 88", None, "Kiev 88"),
+    ("Kiev 88CM", None, None),
+    ("Leica M3", None, "Leica M3"),
+    ("Leica M4-2", None, "Leica M4-2"),
+    ("M42 Adapter für Leica", None, None),
+    ("Leica Summicron-M 2/50", None, None),
+    ("Leicaflex SL2", None, "Leicaflex SL2"),
+    ("Leica SL2 Vollformat", None, None),
+    ("Rolleiflex 2.8F Planar", None, "Rolleiflex 2.8F"),
+    ("Rollei SL35 E", None, None),
+    ("Mamiya M645 1000S", None, None),
+    ("Mamiya 645 Pro", None, "Mamiya 645"),
+    ("Mamiya RB67 Pro S", None, "Mamiya RB67"),
+    ("Contax RTS II", None, "Contax RTS II"),
+    ("Contax 139 Quartz", None, "Contax 139 Quartz"),
+    ("Spiegelreflexkamera FM2", None, "Nikon FM2"),
+    ("Kamera FE2 analog", "Nikon", "Nikon FE2"),
+]
+
+# (title, expected flags, expected kit)
+FLAG_CASES = [
+    ("Leica data back R4 DB 14", ["accessory?"], None),
+    ("Nikon F3 accessoires", ["accessory?"], None),
+    ("Appareil photo Olympus OM10, avec accessoires", [], "extras"),
+    ("Canon winder A per Canon a1/ae1/at1/av1", ["accessory?"], None),
+    ("Vintage Nikon F WaistLevel Finder Original Leather Case", ["accessory?"], None),
+    ("Flash Agfa", ["accessory?"], None),
+    ("Fototasche", ["accessory?"], None),
+    ("Rare Praktica Camera Strap - Vintage", ["accessory?"], None),
+    ("Flash externe Braun 170BC pour appareil photo argentique", ["accessory?"], None),
+    ("Konica Auto S2 Con borsa", [], "extras"),
+    ("Canon EOS 300 Analogica + Obiettivo EF 28-80mm", [], "with_lens"),
+    ("Film tested! - Minolta F25 35mm film camera", [], None),
+    ("Konica Big Mini 35mm Filmkamera Tasche Getestet", [], "extras"),
+    ("Canon IXUS (elph) vintage 1996", [], None),
+    ("Appareil photo numérique vintage", ["digital?"], None),
+    ("Nikon Z fc + Nikkor Z DX 16-50mm + SD 128GB", ["digital?"], None),
+    ("Canons FTb mit Blitz und Weitwinkel linse", [], "with_lens"),
+    ("appareil photo canon AE-1 + canon 35-105 3.5-4.5", [], "with_lens"),
+    ("Pentax MX con due ottiche e duplicatore.", [], "with_lens"),
+    ("Olympus Om4-Ti (solo corpo)", [], "body"),
+    ("Nikon FM2 Gehäuse ohne Objektiv", [], "body"),
+]
+
+
+def main():
+    bad = 0
+    for title, flags, kit in FLAG_CASES:
+        got = classify(title)
+        if sorted(got["flags"]) != sorted(flags) or (kit and got["kit"] != kit):
+            bad += 1
+            print(f"FAIL: {title!r}: expected {flags} {kit}, got {got['flags']} {got['kit']}")
+    for title, brand, expected in CASES:
+        got = classify(title, vinted_brand=brand)["model"]
+        if got != expected:
+            bad += 1
+            print(f"FAIL: {title!r}: expected {expected}, got {got}")
+    total = len(CASES) + len(FLAG_CASES)
+    print(f"{total - bad}/{total} passed")
+
+if __name__ == "__main__":
+    main()
