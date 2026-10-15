@@ -382,6 +382,7 @@ def write_sheets(writer, result, state_flags):
     writer.replace(sheets.LIST_SHEET, report.item_rows([i for i in items if i.get("group") == "list"]))
     writer.replace(sheets.CHEAP_SHEET,
                    report.item_rows(report.cheap_cameras(items, sheets.CHEAP_MAX_PRICE), with_group=True))
+    writer.replace(sheets.FAST_SHEET, report.fast_rows(items))
     writer.replace(sheets.SUMMARY_SHEET, report.summary_rows(result["summary"]))
     if not state_flags.get("runs_header"):
         writer.ensure_runs_header()

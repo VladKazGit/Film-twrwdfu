@@ -4,7 +4,9 @@ from collections import Counter
 
 # Sale time buckets by the upper estimate (time_to_sell_max), minutes.
 BUCKETS = [(30, "< 30 мин"), (360, "30 мин – 6 ч"), (1440, "6–24 ч"), (10080, "1–7 дн"), (None, "> 7 дн")]
+FAST_MINUTES = 30
 EXCLUDED_FLAGS = {"accessory?", "digital?"}
+GROUP_RU = {"list": "Список", "rest": "Остальные"}
 
 STATUS_RU = {
     "active": "активен", "reserved": "зарезервирован", "hidden": "скрыт", "sold": "продан",
@@ -36,6 +38,30 @@ def bucket(item):
     return None
 
 
+def fast_confidence(item):
+    """'точно' / 'возможно' if a sold camera may have sold within 30 minutes, else None.
+
+    'точно': upper estimate <= 30 min. 'возможно': lower estimate < 30 min
+    (late GitHub runs widen the upper estimate).
+    """
+    flags = set(item.get("flags") or [])
+    if item.get("status") != "sold" or flags & (EXCLUDED_FLAGS | {"preexisting", "night"}):
+        return None
+    if item.get("time_to_sell_max") is not None and item["time_to_sell_max"] <= FAST_MINUTES:
+        return "точно"
+    if item.get("time_to_sell_min") is not None and item["time_to_sell_min"] < FAST_MINUTES:
+        return "возможно"
+    return None
+
+
+def fast_rows(items):
+    """'Быстрые продажи': sold cameras that may have sold within 30 minutes, newest sale first."""
+    fast = sorted((i for i in items if fast_confidence(i)),
+                  key=lambda i: (i.get("sold_detected_at") or "", i["id"]), reverse=True)
+    header = ITEM_HEADER + ["Группа", "Уверенность"]
+    return [header] + [item_row(i) + [GROUP_RU.get(i.get("group"), ""), fast_confidence(i)] for i in fast]
+
+
 def item_row(item):
     return [
         item["id"], item.get("model") or "", item.get("title") or "",
@@ -54,8 +80,7 @@ def item_row(item):
 def item_rows(items, with_group=False):
     ordered = sorted(items, key=lambda i: (i.get("first_seen") or "", i["id"]), reverse=True)
     if with_group:
-        group = {"list": "Список", "rest": "Остальные"}
-        return [ITEM_HEADER + ["Группа"]] + [item_row(i) + [group.get(i.get("group"), "")] for i in ordered]
+        return [ITEM_HEADER + ["Группа"]] + [item_row(i) + [GROUP_RU.get(i.get("group"), "")] for i in ordered]
     return [ITEM_HEADER] + [item_row(i) for i in ordered]
 
 
@@ -97,10 +122,11 @@ def summarize(items, now):
             "night": flags["night"],
             "buckets": {label: sum(bucket(i) == label for i in group) for _, label in BUCKETS},
             "sold_without_estimate": sum(i.get("status") == "sold" and bucket(i) is None for i in group),
+            "fast_maybe": sum(fast_confidence(i) == "возможно" for i in group),
         }
     per_model = {}
     for item in groups["list"]:
-        stats = per_model.setdefault(item["model"], {"seen": 0, "sold": 0, "fast": 0, "times": []})
+        stats = per_model.setdefault(item["model"], {"seen": 0, "sold": 0, "fast": 0, "maybe": 0, "times": []})
         stats["seen"] += 1
         if item.get("status") == "sold":
             stats["sold"] += 1
@@ -108,12 +134,14 @@ def summarize(items, now):
                 stats["times"].append(item["time_to_sell_max"])
             if bucket(item) == BUCKETS[0][1]:
                 stats["fast"] += 1
+            elif fast_confidence(item) == "возможно":
+                stats["maybe"] += 1
     models = [
-        {"model": model, "seen": s["seen"], "sold": s["sold"], "sold_under_30": s["fast"],
+        {"model": model, "seen": s["seen"], "sold": s["sold"], "sold_under_30": s["fast"], "maybe_under_30": s["maybe"],
          "median_max_minutes": statistics.median(s["times"]) if s["times"] else None}
         for model, s in per_model.items()
     ]
-    models.sort(key=lambda m: (-m["sold_under_30"], -m["sold"], -m["seen"], m["model"]))
+    models.sort(key=lambda m: (-m["sold_under_30"], -m["maybe_under_30"], -m["sold"], -m["seen"], m["model"]))
     return {"updated": now, "excluded_flagged": len(items) - len(counted), "groups": totals, "models": models}
 
 
@@ -133,9 +161,11 @@ def summary_rows(summary):
     rows += [[label, lst[key], rest[key]] for key, label in TOTAL_ROWS]
     rows += [[], ["Время продажи (верхняя оценка)", "Список", "Остальные"]]
     rows += [[label, lst["buckets"][label], rest["buckets"][label]] for _, label in BUCKETS]
+    rows += [["Возможно < 30 мин (по нижней оценке)", lst["fast_maybe"], rest["fast_maybe"]]]
     rows += [["Продано без оценки (preexisting/night)", lst["sold_without_estimate"], rest["sold_without_estimate"]]]
-    rows += [[], ["Модель", "Появилось", "Продано", "Продано < 30 мин", "Медиана макс. времени продажи, мин"]]
-    rows += [[m["model"], m["seen"], m["sold"], m["sold_under_30"], _num(m["median_max_minutes"])]
+    rows += [[], ["Модель", "Появилось", "Продано", "Продано < 30 мин", "Возможно < 30 мин",
+                  "Медиана макс. времени продажи, мин"]]
+    rows += [[m["model"], m["seen"], m["sold"], m["sold_under_30"], m["maybe_under_30"], _num(m["median_max_minutes"])]
              for m in summary["models"]]
     width = max(len(r) for r in rows)
     return [r + [""] * (width - len(r)) for r in rows]

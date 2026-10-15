@@ -148,6 +148,10 @@ def main():
         assert ss.sheets["Модели"].rows[0] == sheets.MODELS_HEADER and len(ss.sheets["Модели"].rows) > 150
         assert ss.sheets["Сводка"].rows[0][0] == "Обновлено"
         assert "Остальные" in ss.sheets
+        fast = ss.sheets["Быстрые продажи"].rows
+        assert fast[0][-2:] == ["Группа", "Уверенность"], fast[0]
+        assert [r[0] for r in fast[1:]] == [1011] and fast[1][-1] == "возможно", "reserved fast, sold 3 h later"
+        assert all(r[0] != 1010 for r in fast[1:]), "preexisting sale is not fast"
         cheap = ss.sheets["До 20 €"].rows
         assert cheap[0][-1] == "Группа" and any(r[0] == 1009 for r in cheap[1:]), "10 EUR item in 'До 20 €'"
         assert not any(r[0] == 1010 for r in cheap[1:]), "45 EUR item not in 'До 20 €'"
