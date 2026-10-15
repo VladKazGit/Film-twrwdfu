@@ -198,15 +198,18 @@ def run_tick(store, client, labels=None, now=None):
             set_model(item, model, "manual")
             changed.add(item_id)
 
-    # The model dictionary changed: re-classify active items (manual labels stay).
+    # The model dictionary changed: re-classify all items (manual labels stay);
+    # closed ones move between 'Список' and the rest too.
     if state.get("models_version") != models.VERSION:
         stats["models_version_changed"] = 1
-        for item in active.values():
+        for item in [*active.values(), *closed.values()]:
             if item.get("model_source") == "manual":
                 continue
             cls = models.classify(item["title"], item.get("description"), item.get("vinted_brand"))
             if cls["model"] != item.get("model"):
                 set_model(item, cls["model"], cls["model_source"])
+                if item.get("closed_at"):
+                    item["group"] = "list" if item["in_list"] else "rest"
                 changed.add(item["id"])
                 stats["reclassified"] += 1
         state["models_version"] = models.VERSION

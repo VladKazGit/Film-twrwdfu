@@ -173,7 +173,8 @@ MODELS = [
     ("Canon", "Canon AV-1", ELEC, S35, ["av 1"], None),
     ("Canon", "Canon AL-1", ELEC, S35, ["al 1"], None),
     ("Canon", "Canon T90", ELEC, S35, ["t 90"], None),
-    ("Canon", "Canon EF", ELEC, S35, ["^ef"], r"\d|s(?![a-z])|m(?![a-z])"),
+    ("Canon", "Canon EF", ELEC, S35, ["^ef"],
+     r"\d|s(?![a-z])|m(?![a-z])|objektiv|obiettiv|objectif|lens|zoom|usm|optik"),
     ("Canon", "Canon New F-1", ELEC, S35, ["new f 1"], None),
     ("Nikon", "Nikon F3", ELEC, S35, ["^f3", "^f3 hp", "^f3 t", "^f3 p"], None),
     ("Nikon", "Nikon F4", ELEC, S35, ["^f4", "^f4 s", "^f4 e"], None),
@@ -242,7 +243,16 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 2
+VERSION = 3
+
+# Models that must not match when the text also contains this pattern.
+MODEL_EXCLUDE = {
+    "Canon EF": re.compile(r"\beos\b"),  # 'Canon EF' there is the EOS lens mount, not the 1973 camera
+}
+# A title naming one of these series is a known non-list camera: do not look
+# for a list model in its description ('Canon EOS 5000 ... Canon EF Objektiv').
+NON_LIST_SERIES = re.compile(
+    r"\beos\b|dynax|maxxum|\briva\b|espio|\bprima\b|sure ?shot|autoboy|\bmju\b|superzoom|zoomate|nikonos")
 
 # ---------------------------------------------------------------- normalization
 
@@ -343,9 +353,10 @@ def find_models(text, extra_brands=()):
     """
     norm = normalize(text)
     present = set(brands_in(norm)) | set(extra_brands)
+    excluded = {model for model, rx in MODEL_EXCLUDE.items() if rx.search(norm)}
     found = []
     for alias in _ALIASES:
-        if alias.needs_brand and alias.brand not in present:
+        if (alias.needs_brand and alias.brand not in present) or alias.model in excluded:
             continue
         found += [(m.start(), m.end(), alias.core_len, alias.model) for m in alias.rx.finditer(norm)]
     kept = []
@@ -483,7 +494,7 @@ def classify(title, description=None, vinted_brand=None):
     if hits:
         span, model = hits[0][:2], hits[0][2]
         source = "title"
-    elif description:
+    elif description and not NON_LIST_SERIES.search(normalize(title)):
         hits = find_models(description, extra + brands_in(title)[:1])
         if hits:
             model, source = hits[0][2], "description"

@@ -106,6 +106,9 @@ CASES = [
     ("Mamiya RB67 Pro S", None, "Mamiya RB67"),
     ("Contax RTS II", None, "Contax RTS II"),
     ("Contax 139 Quartz", None, "Contax 139 Quartz"),
+    ("Canon EF Objektiv 50mm", None, None),
+    ("Canon EF mit FD 50mm", None, "Canon EF"),
+    ("Canon EOS 5000 + Canon EF Zoom", None, None),
     ("Spiegelreflexkamera FM2", None, "Nikon FM2"),
     ("Kamera FE2 analog", "Nikon", "Nikon FE2"),
 ]
@@ -136,8 +139,22 @@ FLAG_CASES = [
 ]
 
 
+# (title, description, expected model): description search rules
+DESC_CASES = [
+    ("Canon EOS 5000", "Canon EF Objektiv 35-80 dabei", None),
+    ("Canon EOS 5000", "Gehäuse wie Canon AE-1", None),
+    ("Appareil photo Canon", "Canon AE-1 Program avec objectif", "Canon AE-1 Program"),
+    ("Kamera Canon", "Canon EF Spiegelreflexkamera von 1976", "Canon EF"),
+]
+
+
 def main():
     bad = 0
+    for title, desc, expected in DESC_CASES:
+        got = classify(title, desc)["model"]
+        if got != expected:
+            bad += 1
+            print(f"FAIL: {title!r} + desc {desc!r}: expected {expected}, got {got}")
     for title, flags, kit in FLAG_CASES:
         got = classify(title)
         if sorted(got["flags"]) != sorted(flags) or (kit and got["kit"] != kit):
@@ -148,7 +165,7 @@ def main():
         if got != expected:
             bad += 1
             print(f"FAIL: {title!r}: expected {expected}, got {got}")
-    total = len(CASES) + len(FLAG_CASES)
+    total = len(CASES) + len(FLAG_CASES) + len(DESC_CASES)
     print(f"{total - bad}/{total} passed")
 
 if __name__ == "__main__":

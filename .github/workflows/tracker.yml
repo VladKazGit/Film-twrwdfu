@@ -5,8 +5,9 @@ name: tracker
 # GitHub's cron is only a backup that restarts the chain if it broke.
 #
 # Start:  Actions -> tracker -> Run workflow (ticks right away, then chains).
-# Stop:   set the repository variable TRACKER_ENABLED to "false" (the chain
-#         ends after the current run), or cancel the running run (ends now).
+# Stop:   Actions -> tracker -> "..." -> Disable workflow (the chain ends after
+#         the current run), and cancel the running run to stop right away.
+# TRACKER_ENABLED=true (repository variable) only lets the backup cron start.
 on:
   schedule:
     - cron: "7 5-21/2 * * *"
@@ -52,11 +53,11 @@ jobs:
           DATA_TOKEN: ${{ secrets.DATA_TOKEN }}
           DATA_REPO: ${{ secrets.DATA_REPO }}
         run: |
-          echo "settings: chain ${{ vars.TRACKER_ENABLED == 'true' && 'on' || 'OFF (TRACKER_ENABLED is not true)' }}, event ${{ github.event_name }}, chained ${{ inputs.chained && 'yes' || 'no' }}"
-          python -m tracker.loop ${{ (github.event_name == 'workflow_dispatch' && !inputs.chained) && '--tick-now' || '' }} ${{ inputs.force && '--force' || '' }}
+          echo "settings: backup cron ${{ vars.TRACKER_ENABLED == 'true' && 'on' || 'off (TRACKER_ENABLED is not true)' }}, event ${{ github.event_name }}, chained ${{ inputs.chained && 'yes' || 'no' }}"
+          python -u -m tracker.loop ${{ (github.event_name == 'workflow_dispatch' && !inputs.chained) && '--tick-now' || '' }} ${{ inputs.force && '--force' || '' }}
 
       - name: Start the next run
-        if: ${{ !cancelled() && vars.TRACKER_ENABLED == 'true' }}
+        if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run tracker.yml --repo "${{ github.repository }}" --ref "${{ github.ref_name }}" -f chained=true
