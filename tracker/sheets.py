@@ -24,6 +24,11 @@ MANUAL_HEADER = ["id (или ссылка)", "Модель", "Комментар
 MODELS_HEADER = ["Модель", "Бренд", "Тип", "Формат", "Регион"]
 
 
+def model_key(name):
+    """Comparable model name: 'Zenit-E', 'zenit e' and 'Зенит Е' are the same."""
+    return re.sub(r"[^a-z0-9]", "", models.normalize(name or ""))
+
+
 def open_spreadsheet():
     client = gspread.service_account_from_dict(env.google_sa_info())
     return client.open_by_key(env.sheet_id())
@@ -73,19 +78,26 @@ class SheetWriter:
     def append_run(self, row):
         self._get(RUNS_SHEET, RUNS_HEADER).append_row(row, value_input_option="RAW")
 
-    def ensure_models(self):
-        """Fill 'Модели' once; later only append models it lacks (the sheet belongs to the user)."""
+    def sync_models(self, offered):
+        """'Модели' belongs to the user and filters 'До 20 €'.
+
+        Creates it if missing; otherwise appends only dictionary models never
+        offered before, so models the user deleted stay deleted.
+        Returns (dictionary models now offered, keys of the models in the sheet).
+        """
         rows = [list(r) for r in models.list_models()]
+        names = [r[0] for r in rows]
         if MODELS_SHEET not in self._sheets:
             self._get(MODELS_SHEET, MODELS_HEADER)
             self.replace(MODELS_SHEET, [MODELS_HEADER] + rows)
-            return len(rows)
+            return names, {model_key(n) for n in names}
         ws = self._sheets[MODELS_SHEET]
-        present = {value.strip() for value in ws.col_values(1)}
-        missing = [r for r in rows if r[0] not in present]
-        if missing:
-            ws.append_rows(missing, value_input_option="RAW")
-        return len(missing)
+        keys = {model_key(v) for v in ws.col_values(1)[1:] if v.strip()}
+        new = [r for r in rows if r[0] not in offered and model_key(r[0]) not in keys]
+        if new:
+            ws.append_rows(new, value_input_option="RAW")
+            keys |= {model_key(r[0]) for r in new}
+        return names, keys
 
     def manual_labels(self):
         """{item id: model text} from 'Ручная разметка' (created empty if missing)."""

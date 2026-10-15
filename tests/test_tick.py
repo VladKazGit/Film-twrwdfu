@@ -121,7 +121,7 @@ def main():
         assert c[1009]["status"] == "unsold_3h"
 
         # Tick 5: next morning -> full scan, new items flagged night, daily exports.
-        pages[1] = [rec(1020, "Olympus OM-1 analog", 120.0)] + pages[1]
+        pages[1] = [rec(1020, "Olympus OM-1 analog", 120.0), rec(1021, "Zenit-E Kamera", 15.0)] + pages[1]
         r5 = tick.run_tick(store, FakeClient(pages), now="2026-10-17 07:07")
         a = store.load_active()
         assert r5["run"]["full_scan"] and r5["daily"] and "night" in a[1020]["flags"]
@@ -142,7 +142,8 @@ def main():
         # Sheets: headers, runs row under a pre-existing test row, list and summary sheets.
         ss = FakeSpreadsheet()
         writer = sheets.SheetWriter(ss)
-        tick.write_sheets(writer, r5, {})
+        updates = tick.write_sheets(writer, r5, {})
+        assert updates["runs_header"] and "Zenit E" in updates["models_offered"]
         runs = ss.sheets["Запуски"].rows
         assert runs[0] == sheets.RUNS_HEADER and runs[1][1] == "check-setup" and len(runs) == 3
         assert ss.sheets["Список"].rows[0][0] == "id" and len(ss.sheets["Список"].rows) >= 4
@@ -154,12 +155,20 @@ def main():
         assert [r[0] for r in fast[1:]] == [1011] and fast[1][-1] == "возможно", "reserved fast, sold 3 h later"
         assert all(r[0] != 1010 for r in fast[1:]), "preexisting sale is not fast"
         cheap = ss.sheets["До 20 €"].rows
-        assert cheap[0][-1] == "Группа" and any(r[0] == 1009 for r in cheap[1:]), "10 EUR item in 'До 20 €'"
-        assert not any(r[0] == 1010 for r in cheap[1:]), "45 EUR item not in 'До 20 €'"
-        # 'Модели' exists and was edited by the user: only missing models are appended.
+        assert cheap[0][-1] == "Группа" and [r[0] for r in cheap[1:]] == [1021], cheap[1:]
+        # 'До 20 €' follows 'Модели': the user deletes Zenit E, it leaves 'До 20 €' and is not re-added.
         models_ws = ss.sheets["Модели"]
-        models_ws.rows = models_ws.rows[:-3] + [["Моя заметка"]]
-        assert writer.ensure_models() == 3 and ["Моя заметка"] in models_ws.rows
+        models_ws.rows = [r for r in models_ws.rows if r[0] != "Zenit E"]
+        state_flags = {"runs_header": True, "models_offered": updates["models_offered"]}
+        assert tick.write_sheets(writer, r5, state_flags) == {}
+        assert [r[0] for r in ss.sheets["До 20 €"].rows[1:]] == [] and ["Zenit E"] not in [r[:1] for r in models_ws.rows]
+        # A model new to the dictionary is offered once; spelling in the sheet does not matter.
+        models_ws.rows.append(["зенит-е"])
+        offered = [m for m in updates["models_offered"] if m != "Zenit KM"]
+        models_ws.rows = [r for r in models_ws.rows if r[0] != "Zenit KM"]
+        upd = tick.write_sheets(writer, r5, {"runs_header": True, "models_offered": offered})
+        assert "Zenit KM" in upd["models_offered"] and models_ws.rows[-1][0] == "Zenit KM"
+        assert [r[0] for r in ss.sheets["До 20 €"].rows[1:]] == [1021], "Cyrillic 'зенит-е' matches Zenit E"
 
         # Dictionary version change re-classifies active items, manual labels stay.
         state = store.load_state()

@@ -387,21 +387,32 @@ def runs_row(run):
 # ---------------------------------------------------------------- sheets and entry point
 
 def write_sheets(writer, result, state_flags):
+    """Write all sheets. Returns state keys to remember (runs header, offered models)."""
     from . import sheets
 
+    updates = {}
     items = result["items"]
+    offered = state_flags.get("models_offered")
+    if offered is None:  # the sheet was filled before offers were tracked
+        offered = sorted(models.MODEL_INFO)
+        updates["models_offered"] = offered
+    names, allowed = writer.sync_models(set(offered))
+    if set(names) - set(offered):
+        updates["models_offered"] = sorted(set(offered) | set(names))
+
     writer.replace(sheets.LIST_SHEET, report.item_rows([i for i in items if i.get("group") == "list"]))
-    writer.replace(sheets.CHEAP_SHEET,
-                   report.item_rows(report.cheap_cameras(items, sheets.CHEAP_MAX_PRICE), with_group=True))
+    cheap = [i for i in report.cheap_cameras(items, sheets.CHEAP_MAX_PRICE)
+             if i.get("model") and sheets.model_key(i["model"]) in allowed]
+    writer.replace(sheets.CHEAP_SHEET, report.item_rows(cheap, with_group=True))
     writer.replace(sheets.FAST_SHEET, report.fast_rows(items))
     writer.replace(sheets.SUMMARY_SHEET, report.summary_rows(result["summary"]))
     if not state_flags.get("runs_header"):
         writer.ensure_runs_header()
+        updates["runs_header"] = True
     writer.append_run(runs_row(result["run"]))
     if result["daily"]:
         writer.replace(sheets.REST_SHEET, report.item_rows([i for i in items if i.get("group") == "rest"]))
-    if result["daily"] or result.get("models_updated"):
-        writer.ensure_models()
+    return updates
 
 
 def main():
@@ -447,13 +458,13 @@ def _main(args):
             datarepo.commit_and_push(root, f"tick {result['run']['at']}")
         if writer:
             try:
-                write_sheets(writer, result, state_flags)
-                if not state_flags.get("runs_header"):
+                updates = write_sheets(writer, result, state_flags)
+                if updates:
                     state = store.load_state()
-                    state["runs_header"] = True
+                    state.update(updates)
                     store.save_state(state)
                     if not args.local:
-                        datarepo.commit_and_push(root, "sheets header ready")
+                        datarepo.commit_and_push(root, "sheets state")
             except Exception as exc:
                 print(f"sheets write failed: {type(exc).__name__}: {env.redact(exc)}")
                 code = 1
