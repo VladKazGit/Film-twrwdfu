@@ -91,6 +91,9 @@ Cron (каждые 2 ч) — только запасной перезапуск 
 - ложные совпадения: «Nikon F» ≠ F55/F60/F-301/F80…; Pentax KX ≠ цифровая K-x; Pentax KM ≠ цифровая K-m; Canon EF (камера) ≠ объективы «EF 50mm»; «Canon 7» ≠ цифровая 7D / EOS 7; «Canon P» ≠ Prima / PowerShot; OM-1 ≠ OM-10, OM-4 ≠ OM-40; Pentax 67 ≠ 67II; Hasselblad 500C ≠ 500C/M; Yashica Mat-124 ≠ Mat-124G; Spotmatic ≠ Spotmatic F; Minolta SR-7 ≠ SR-T
 - аксессуары (winder, Zubehör, accessoires, Tasche/Objektiv only…) без признаков камеры → флаг `accessory?`; печатная продукция (каталоги, проспекты, брошюры, книги) — тоже `accessory?`; цифровые (Dimage, digital, Megapixel…) → `digital?`
 - если заголовок помечен `accessory?`/`digital?`, модель в описании не ищется
+- инструкции (Anleitung, notice, manual, libretto…) без признаков тушки/комплекта и без «с/mit/+» → `accessory?`; объективы: zoom, Vivitar, Tamron, Sigma, Tokina… и «для/per/für» перед моделью → `accessory?`
+- описание, которое *начинается* со слова-аксессуара (brochure, manual, Objektiv…) и не называет камеру, → `accessory?`; описание новых камер из списка загружается сразу
+- объявления с `accessory?`/`digital?` не входят в «Список» (группа «Остальные»), даже если в заголовке есть модель; ручная разметка снимает флаг
 - **Praktica Super TL1000 — НЕ в списке**
 
 ## Список камер

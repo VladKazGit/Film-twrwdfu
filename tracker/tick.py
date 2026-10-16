@@ -86,7 +86,7 @@ def new_item(rec, now, listed_after, extra_flags):
         "model": cls["model"],
         "model_source": cls["model_source"],
         "in_list": cls["in_list"],
-        "group": "list" if cls["in_list"] else "rest",
+        "group": "list" if cls["in_list"] and not SIGNAL_FLAGS & set(cls["flags"]) else "rest",
         "mech_type": cls["mech_type"],
         "region": cls["region"],
         "format": cls["format"],
@@ -150,6 +150,20 @@ def close(item, status, now, price=None):
         item["days_to_sell"] = report.days_to_sell(item)
 
 
+def group_of(item):
+    """'list' for list cameras; accessories and digital cameras go to the rest even with a model."""
+    return "list" if item.get("in_list") and not SIGNAL_FLAGS & set(item.get("flags") or []) else "rest"
+
+
+def _refresh_signal_flags(item):
+    """Accessory/digital flags again, now with the description (manual labels stay)."""
+    if item.get("model_source") == "manual":
+        return
+    cls = models.classify(item["title"], item.get("description"), item.get("vinted_brand"))
+    item["flags"] = [f for f in item["flags"] if f not in SIGNAL_FLAGS] + sorted(SIGNAL_FLAGS & set(cls["flags"]))
+    item["group"] = group_of(item)
+
+
 def set_model(item, model, source):
     """Apply a model (from description or manual labeling) and move the item to its group."""
     info = models.MODEL_INFO.get(model)
@@ -159,7 +173,7 @@ def set_model(item, model, source):
     if info:
         item.update(brand=info["brand"], mech_type=info["mech_type"], format=info["format"], region=info["region"])
     if not item.get("closed_at"):
-        item["group"] = "list" if info else "rest"
+        item["group"] = group_of(item)
 
 
 def apply_page(item, page, now):
@@ -170,6 +184,7 @@ def apply_page(item, page, now):
     _set_favourites(item, page.get("favourites"), now)
     if page["description"] and not item.get("description"):
         item["description"] = page["description"]
+        _refresh_signal_flags(item)
         kit, details = models.kit_of(f"{item['title']} {page['description']}")
         item["kit"], item["kit_details"] = kit, details
     status = page["status"]
@@ -204,10 +219,17 @@ def recheck_minutes(item, now):
 
 
 def wants_description(item):
-    """Rest items whose title names only a list brand: the description may name the model."""
-    return (item["group"] == "rest" and not item["description_checked"] and item["model"] is None
-            and "preexisting" not in item["flags"] and not SIGNAL_FLAGS & set(item["flags"])
-            and (item["brand"] in LIST_BRANDS or set(models.brands_in(item.get("vinted_brand") or "")) & LIST_BRANDS))
+    """Fetch the description early: for new list cameras (manuals and brochures hide there,
+    and it fills the kit), and for rest items whose title names only a list brand."""
+    if item.get("description_checked") or item.get("description"):
+        return False
+    flags = set(item["flags"])
+    if "preexisting" in flags or SIGNAL_FLAGS & flags:
+        return False
+    if item["group"] == "list":
+        return True
+    return item["model"] is None and (
+        item["brand"] in LIST_BRANDS or bool(set(models.brands_in(item.get("vinted_brand") or "")) & LIST_BRANDS))
 
 
 def check_priority(item, now, vanished):
@@ -350,7 +372,10 @@ def run_tick(store, client, labels=None, now=None):
             continue
         model = models.canonical_model(text) or text
         if item.get("model") != model or item.get("model_source") != "manual":
+            item["flags"] = [f for f in item["flags"] if f not in SIGNAL_FLAGS]  # labelled: it is a camera
             set_model(item, model, "manual")
+            if item.get("closed_at"):
+                item["group"] = group_of(item)
             changed.add(item_id)
 
     # The model dictionary changed: re-classify all items (manual labels stay);
@@ -367,7 +392,7 @@ def run_tick(store, client, labels=None, now=None):
                 item["flags"] = flags
                 set_model(item, cls["model"], cls["model_source"])
                 if item.get("closed_at"):
-                    item["group"] = "list" if item["in_list"] else "rest"
+                    item["group"] = group_of(item)
                 changed.add(item["id"])
                 stats["reclassified"] += 1
         state["models_version"] = models.VERSION

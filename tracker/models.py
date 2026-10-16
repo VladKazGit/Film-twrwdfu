@@ -78,7 +78,7 @@ MODELS = [
     ("Nikon", "Nikkormat FTn", MECH, S35, ["nikkormat ftn!", "ftn"], None),
     ("Canon", "Canon F-1", MECH, S35, ["^f 1"], None),
     ("Canon", "Canon F-1n", MECH, S35, ["^f 1 n"], None),
-    ("Canon", "Canon FTb", MECH, S35, ["ftb", "ftb n", "ftb ql"], None),
+    ("Canon", "Canon FTb", MECH, S35, ["ft b", "ft b n", "ft b ql"], None),
     ("Canon", "Canon FT QL", MECH, S35, ["ft ql", "^ft"], None),
     ("Canon", "Canon Pellix", MECH, S35, ["pellix!"], None),
     ("Canon", "Canon P", MECH, S35, ["^p"], None),
@@ -243,7 +243,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 4
+VERSION = 6
 
 # Models that must not match when the text also contains this pattern.
 MODEL_EXCLUDE = {
@@ -375,7 +375,8 @@ _CAMERA_WORDS = re.compile(
 _ACCESSORY_WORDS = re.compile(
     r"tasche|\bbag\b|\bcase\b|\betui|\bsac\b|\bborsa|hulle|gurt\b|\bstrap|sangle|tracolla"
     r"|objektiv|\blens(?:es)?\b|obiettiv|objectif|\blente\b|blitz|\bflash|speedlite"
-    r"|winder|motor ?drive|anleitung|\bmanual|handbuch|mode d.emploi|istruzioni|handleiding"
+    r"|winder|motor ?drive|anleitung|(?<!fully )(?<!full )\bmanual\b(?!\s*(?:focus|fokus|camera|kamera|slr|exposure|mode))"
+    r"|handbuch|mode d.emploi|istruzioni|handleiding"
     r"|zubehor|accessoire|accessori|toebehoren|\bfilter|deckel|\bprism|mattscheibe|focusing screen"
     r"|\badapter|batterie|\bbattery|\bgriff\b|\bgrip\b|stativ|tripod|treppiede|belichtungsmesser"
     r"|light ?meter|posemetre|esposimetro|ruckteil|\bfilm ?back|magazin\b|gegenlichtblende"
@@ -383,6 +384,22 @@ _ACCESSORY_WORDS = re.compile(
     r"|\bback\b|data ?back|finder|(?<!mess)sucher\b|\bviseur|\bmirino|waist ?level|lichtschacht"
     r"|zubehor\b|acc?es+oires?\b|accessori[oe]?\b|accessor(?:y|ies)\b|toebehoren\b"
     r"|katalog|catalog|cataloghi|catalogue|depliant|prospekt|brochure|broschure|\bbuch\b|\bbook\b|\blibro\b|\blivre\b|\bposter\b|zeitschrift|rivista|\bflyer")
+# Lens makers and zoom: 'Zoom Vivitar 70/210 per Nikon F' is a lens.
+_LENS_WORDS = re.compile(r"\bzoom\b|vivitar|tamron|\bsigma\b|tokina|soligor|hanimex")
+# Manuals. 'manual' next to camera words means a manual camera ('fully manual SLR').
+_MANUAL = re.compile(
+    r"(?:bedienungs)?anleitung|gebrauchsanweisung|handbuch|\bnotice\b|mode d.emploi|istruzioni|\blibretto"
+    r"|handleiding|(?<!fully )(?<!full )\bmanual\b(?!\s*(?:focus|fokus|camera|kamera|slr|exposure|mode))")
+# Words that say the listing is a camera body or kit, not just its manual.
+_KIT_WORDS = re.compile(r"\bbody\b|gehause|boitier|\bcorpo\b|objektiv|\blens|obiettiv|objectif|\bkit\b|\bset\b|\bnur\b")
+# A description that starts with one of these (and names no camera) is about an accessory.
+_LEAD_FILLER = re.compile(
+    r"^(?:\W|(?:vendo|verkaufe|verkauf|je vends|vends|selling|sell|for sale|zu verkaufen|original[e]?|neu|new|nuov[oa]"
+    r"|top|sehr|gut|guter|ottim[oa]|bon|bonne|tres|very|good|perfekt|perfetto|parfait)\b)+")
+_LEAD_ACCESSORY = re.compile(
+    r"(?:brochure|broschure|prospekt|depliant|catalog|katalog|cataloghi|catalogue|manual|manuale|manuel|notice"
+    r"|libretto|(?:bedienungs)?anleitung|istruzioni|handbuch|objektiv|obiettivo|objectif|lens|zoom|tasche|borsa"
+    r"|etui|blitz|flash|winder|sucher|viseur|mirino)")
 # Words that make a listing an accessory unless a "with" word comes before them.
 # Printed matter (catalogues, brochures, books) counts too.
 _STRONG_ACCESSORY = re.compile(
@@ -443,6 +460,13 @@ def _is_accessory(norm, model_span):
     strong = _STRONG_ACCESSORY.search(norm)
     if strong and not _WITH_WORDS.search(norm[:strong.start()]):
         return True  # "Nikon F3 accessoires", "Film Back - Camera Accessory"
+    manual = _MANUAL.search(norm)
+    if manual and not _WITH_WORDS.search(norm[:manual.start()]) and not _KIT_WORDS.search(norm):
+        return True  # "Notice appareil photo Nikon FE2", "Mamiya M645 ... multi language manual"
+    if model_span is not None:
+        head = norm[:model_span[0]]
+        if (_LENS_WORDS.search(head) or _FOR_WORDS.search(head)) and not _CAMERA_WORDS.search(head):
+            return True  # "Zoom Vivitar 70/210 per Nikon F"
     acc = _ACCESSORY_WORDS.search(norm)
     if not acc:
         return False
@@ -463,6 +487,13 @@ def _is_accessory(norm, model_span):
     acc = _ACCESSORY_WORDS.search(tail)
     # "Nikon F Waist Level Finder ... Case": accessory words, no camera, no "with".
     return bool(acc) and not _WITH_WORDS.search(tail[:acc.start()]) and not _CAMERA_WORDS.search(norm)
+
+
+def lead_is_accessory(description):
+    """The description starts with an accessory word (brochure, manual, lens...) and names no camera."""
+    norm = normalize(description)[:160]
+    lead = _LEAD_FILLER.sub("", norm)
+    return bool(_LEAD_ACCESSORY.match(lead)) and not _CAMERA_WORDS.search(norm[:80])
 
 
 def flags_of(title, model_span=None):
@@ -498,6 +529,10 @@ def classify(title, description=None, vinted_brand=None):
         span, model = hits[0][:2], hits[0][2]
         source = "title"
     title_flags = flags_of(title, span)
+    # 'Yashica Mat-124g' at 3 EUR whose description starts 'brochure originale ...'.
+    if (description and "accessory?" not in title_flags and not _CAMERA_WORDS.search(normalize(title))
+            and lead_is_accessory(description)):
+        title_flags = title_flags + ["accessory?"]
     # An accessory/digital title does not get a camera model from its description
     # ('Lotto depliant e cataloghi Leica' -> description mentions an M3).
     if model is None and description and not NON_LIST_SERIES.search(normalize(title)) \

@@ -43,6 +43,10 @@ CASES = [
     ("Canon FD 50mm f1.4", None, None),
     ("Canon New F-1", None, "Canon New F-1"),
     ("Canon F-1n", None, "Canon F-1n"),
+    ("Canon FT-b QL", None, "Canon FTb"),
+    ("Canon FT b", None, "Canon FTb"),
+    ("Canon FTbN", None, "Canon FTb"),
+    ("Canon FT QL", None, "Canon FT QL"),
     ("Olympus OM-1", None, "Olympus OM-1"),
     ("Olympus OM10", None, "Olympus OM-10"),
     ("Olympus OM-4", None, "Olympus OM-4"),
@@ -130,6 +134,14 @@ FLAG_CASES = [
     ("Konica Big Mini 35mm Filmkamera Tasche Getestet", [], "extras"),
     ("Canon IXUS (elph) vintage 1996", [], None),
     ("Lotto depliant e cataloghi vintage Leica anni 50 rari in italiano", ["accessory?"], None),
+    ("Notice appareil photo Nikon FE2", ["accessory?"], None),
+    ("Mamiya M645 camera PD prism finder S original multi language manual", ["accessory?"], None),
+    ("Zoom Vivitar 70/210 per Nikon F", ["accessory?"], None),
+    ("Nikon FM2 Body, Anleitung", [], None),
+    ("Canon AE-1 mit Bedienungsanleitung", [], None),
+    ("Pentax K1000 fully manual SLR", [], None),
+    ("Manual SLR camera Praktica MTL 5", [], None),
+    ("Kamera für Anfänger Canon AE-1", [], None),
     ("Leica M3 Katalog 1958", ["accessory?"], None),
     ("Canon AE-1 mit Anleitung und Prospekt", [], None),
     ("Appareil photo numérique vintage", ["digital?"], None),
@@ -149,11 +161,27 @@ DESC_CASES = [
     ("Appareil photo Canon", "Canon AE-1 Program avec objectif", "Canon AE-1 Program"),
     ("Kamera Canon", "Canon EF Spiegelreflexkamera von 1976", "Canon EF"),
     ("Lotto depliant e cataloghi vintage Leica anni 50", "Leica M3, Leicaflex SL, IIIf", None),
+    ("Yashica Mat-124g", "Kamera in gutem Zustand, Objektiv sauber", "Yashica Mat-124G"),
+]
+
+
+# (title, description, expected flags): an accessory told by how the description starts
+DESC_FLAG_CASES = [
+    ("Yashica Mat-124g", "brochure originale in ottime condizioni", ["accessory?"]),
+    ("Yashica Mat-124g", "Original Bedienungsanleitung, deutsch, 40 Seiten", ["accessory?"]),
+    ("Yashica Mat-124g", "Kamera in gutem Zustand, mit Anleitung", []),
+    ("Yashica Mat-124g", "Objektiv sauber, Kamera funktioniert", []),
+    ("Yashica Mat-124g Kamera", "brochure dabei", []),
 ]
 
 
 def main():
     bad = 0
+    for title, desc, flags in DESC_FLAG_CASES:
+        got = classify(title, desc)["flags"]
+        if got != flags:
+            bad += 1
+            print(f"FAIL: {title!r} + desc {desc!r}: expected {flags}, got {got}")
     for title, desc, expected in DESC_CASES:
         got = classify(title, desc)["model"]
         if got != expected:
@@ -169,7 +197,7 @@ def main():
         if got != expected:
             bad += 1
             print(f"FAIL: {title!r}: expected {expected}, got {got}")
-    total = len(CASES) + len(FLAG_CASES) + len(DESC_CASES)
+    total = len(CASES) + len(FLAG_CASES) + len(DESC_CASES) + len(DESC_FLAG_CASES)
     print(f"{total - bad}/{total} passed")
 
 if __name__ == "__main__":

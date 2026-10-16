@@ -347,6 +347,15 @@ def main():
     assert not report.is_new({"first_seen": "2026-10-16 20:00", "flags": ["preexisting"]}, "2026-10-16 09:00", True)
     assert not report.is_new({"first_seen": "2026-10-16 08:00", "flags": []}, "2026-10-16 09:00")
 
+    # Accessories with a model stay out of 'Список'; a manual found by its description leaves it.
+    lens = tick.new_item(rec(9_833_721_448, "Zoom Vivitar 70/210 per Nikon F", 19.0), "2026-10-16 12:00", None, [])
+    assert lens["model"] == "Nikon F" and lens["group"] == "rest" and "accessory?" in lens["flags"]
+    yashica = tick.new_item(rec(9_729_396_918, "Yashica Mat-124g", 3.0), "2026-10-16 12:00", "2026-10-16 11:45", [])
+    assert yashica["group"] == "list" and tick.wants_description(yashica)
+    tick.apply_page(yashica, {"status": "active", "price": 3.0, "description": "brochure originale in ottime condizioni",
+                              "favourites": 0}, "2026-10-16 12:15")
+    assert yashica["group"] == "rest" and "accessory?" in yashica["flags"]
+
     # 'Продали за': days for new listings, Vinted's date for old ones, months past 30 days.
     assert [report.format_days(d) for d in (None, 0.4, 1, 3.9, 5, 21, 30, 45, 62, 150)] == [
         "", "меньше дня", "1 день", "3 дня", "5 дней", "21 день", "30 дней", "2 месяца", "2 месяца", "5 месяцев"]
