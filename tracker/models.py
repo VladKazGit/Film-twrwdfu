@@ -83,6 +83,11 @@ MODELS = [
     ("Canon", "Canon Pellix", MECH, S35, ["pellix!"], None),
     ("Canon", "Canon P", MECH, S35, ["^p"], None),
     ("Canon", "Canon 7", MECH, S35, ["^7"], r"d(?![a-z])"),
+    ("Canon", "Canon FX", MECH, S35, ["^fx"], None),
+    ("Canon", "Canon FP", MECH, S35, ["^fp"], None),
+    ("Canon", "Canon TL", MECH, S35, ["^tl", "^tl ql"], None),
+    ("Canon", "Canon TLb", MECH, S35, ["tl b", "^tl b"], None),
+    ("Canon", "Canon TX", MECH, S35, ["^tx"], None),
     ("Pentax", "Pentax Spotmatic", MECH, S35, ["spotmatic!", "^sp"], r"(?:ii|iia|2|500|1000)(?![a-z0-9])"),
     ("Pentax", "Pentax Spotmatic F", MECH, S35, ["spotmatic f!", "^sp f"], None),
     ("Pentax", "Pentax SV", MECH, S35, ["^sv"], None),
@@ -243,7 +248,10 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 13
+VERSION = 14
+
+# Models added later: the model search looks for their old listings first (once).
+PRIORITY_SEARCH = ("Canon FX", "Canon FP", "Canon TL", "Canon TLb", "Canon TX")
 
 # Models that must not match when the text also contains this pattern.
 MODEL_EXCLUDE = {

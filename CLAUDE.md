@@ -102,7 +102,7 @@ Cron (каждые 2 ч) — только запасной перезапуск 
 
 ### Механические
 - Nikon: F, F2, FM, FM2, FM2n, FM2n/T, FM3A, Nikkormat FTn
-- Canon: F-1, F-1n, FTb, FT QL, Pellix; дальномерные Canon P, Canon 7
+- Canon: F-1, F-1n, FTb, FT QL, Pellix, FX, FP, TL, TLb, TX; дальномерные Canon P, Canon 7
 - Pentax: Spotmatic / SP, Spotmatic F, SV, K1000, KM, MX, KX
 - Olympus: OM-1, OM-1n, OM-3, OM-3Ti
 - Minolta: SR-T 101, SR-T 102, SR-T 201, SR-7

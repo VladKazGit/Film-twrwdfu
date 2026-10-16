@@ -281,6 +281,23 @@ def _can_request(client):
     return client.requests_made < MAX_REQUESTS and getattr(client, "has_time", lambda: True)()
 
 
+def sweep_state(state, sweep, now):
+    st = state.setdefault(sweep.key, {"query": 0, "page": 1, "done_on": None, "pending": {}, "skipped": []})
+    st.setdefault("seen", [])
+    st.setdefault("query_started", now)
+    return st
+
+
+def queue_priority_models(state, now):
+    """Put newly added models at the head of the model search, once each."""
+    st = sweep_state(state, MODEL_SWEEP, now)
+    done = st.setdefault("prioritized", [])
+    for model in models.PRIORITY_SEARCH:
+        if model in models.MODEL_INFO and model not in done:
+            st.setdefault("priority", []).append([model.lower(), model])
+            done.append(model)
+
+
 def search_sweep(sweep, state, client, active, closed, now, today, stats, changed, estimate=None):
     """Advance one search pass by a slice: candidate age checks, then result pages.
 
@@ -289,9 +306,7 @@ def search_sweep(sweep, state, client, active, closed, now, today, stats, change
     with the 'found' flag, otherwise remembered and skipped. With `presence`,
     a tracked 'found' camera missing from its model's results is checked next.
     """
-    st = state.setdefault(sweep.key, {"query": 0, "page": 1, "done_on": None, "pending": {}, "skipped": []})
-    st.setdefault("seen", [])
-    st.setdefault("query_started", now)
+    st = sweep_state(state, sweep, now)
     skipped = set(st["skipped"])
 
     for key in list(st["pending"])[:sweep.checks_per_tick]:
@@ -322,10 +337,16 @@ def search_sweep(sweep, state, client, active, closed, now, today, stats, change
     for _ in range(pages):
         if not _can_request(client):
             return
-        query, model = sweep.queries[st["query"] % len(sweep.queries)]
-        if st["page"] == 1:
-            st["query_started"], st["seen"] = now, []
-        results = client.search_page(query, st["page"], sweep.max_price)
+        priority = st.get("priority") or []
+        if priority and (st.get("prio_cursor") or st["page"] == 1):  # never split a regular query
+            query, model = priority[0]
+            cur = st.setdefault("prio_cursor", {"page": 1, "seen": [], "query_started": now})
+        else:
+            query, model = sweep.queries[st["query"] % len(sweep.queries)]
+            cur = st
+        if cur["page"] == 1:
+            cur["query_started"], cur["seen"] = now, []
+        results = client.search_page(query, cur["page"], sweep.max_price)
         stats["search_pages"] += 1
         hits = 0
         for rec in results:
@@ -337,7 +358,7 @@ def search_sweep(sweep, state, client, active, closed, now, today, stats, change
             if rec_id in active:
                 mark_seen(active[rec_id], rec, now, checked=False)
                 changed.add(rec_id)
-                st["seen"].append(rec_id)
+                cur["seen"].append(rec_id)
             elif rec_id in closed or rec_id in skipped or str(rec_id) in st["pending"]:
                 continue
             elif rec_id < FOUND_MIN_ID:
@@ -358,13 +379,13 @@ def search_sweep(sweep, state, client, active, closed, now, today, stats, change
                 item.update(age_source="id", vinted_listed_est=listed.isoformat(), age_days_at_discovery=age)
                 active[rec_id] = item
                 changed.add(rec_id)
-                st["seen"].append(rec_id)
+                cur["seen"].append(rec_id)
                 stats["found"] += 1
             else:
                 st["pending"][str(rec_id)] = rec
                 stats["search_candidates"] += 1
-        if len(results) == 96 and st["page"] < sweep.max_pages and hits:
-            st["page"] += 1
+        if len(results) == 96 and cur["page"] < sweep.max_pages and hits:
+            cur["page"] += 1
             continue
         if sweep.presence:
             if model:
@@ -373,7 +394,11 @@ def search_sweep(sweep, state, client, active, closed, now, today, stats, change
                 brands = set(models.brands_in(query))
                 belongs = lambda i, b=brands, p=sweep.max_price: (
                     i.get("brand") in b and (i["price_history"][-1]["price"] or 0) <= p)
-            _mark_missing(belongs, set(st["seen"]), st["query_started"], active, stats, changed)
+            _mark_missing(belongs, set(cur["seen"]), cur["query_started"], active, stats, changed)
+        if cur is not st:  # priority query done
+            st["priority"] = priority[1:]
+            del st["prio_cursor"]
+            continue
         st["query"], st["page"] = st["query"] + 1, 1
         if st["query"] >= len(sweep.queries):
             st["query"], st["done_on"] = 0, today
@@ -588,6 +613,7 @@ def run_tick(store, client, labels=None, now=None):
     if rest_enabled and not first_run and not full_scan:
         estimate = ageest.build_estimator([*active.values(), *closed.values()], state.get("max_seen_id"),
                                           date.fromisoformat(today))
+        queue_priority_models(state, now)
         for sweep in SWEEPS:
             try:
                 search_sweep(sweep, state, client, active, closed, now, today, stats, changed, estimate)

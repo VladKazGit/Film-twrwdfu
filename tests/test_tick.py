@@ -2,7 +2,7 @@
 import tempfile
 from collections import Counter
 
-from tracker import report, tick
+from tracker import models, report, tick
 from tracker.store import DataStore
 
 
@@ -312,6 +312,22 @@ def main():
     assert state["f"]["passes"] == 1 and state["f"]["query"] == 0
     tick.search_sweep(fill, state, client, {}, {}, "2026-10-16 12:37", "2026-10-16", Counter(), set())
     assert client.requests_made == 7 and state["f"]["query"] == 1, "after the first pass: 1 page per tick"
+
+    # Priority models are searched before the regular pass continues (once each).
+    prio = tick.Sweep("model_search", (("q0", None), ("q1", None), ("q2", None)), None, 10, 1, 4, False, False)
+    state, client = {}, FakeClient({})
+    real_sweep, real_prio = tick.MODEL_SWEEP, models.PRIORITY_SEARCH
+    tick.MODEL_SWEEP, models.PRIORITY_SEARCH = prio, ("Canon TX",)
+    try:
+        tick.search_sweep(prio, state, client, {}, {}, "2026-10-16 20:07", "2026-10-16", Counter(), set())
+        tick.queue_priority_models(state, "2026-10-16 20:07")
+        assert state["model_search"]["priority"] == [["canon tx", "Canon TX"]] and state["model_search"]["query"] == 1
+        tick.search_sweep(prio, state, client, {}, {}, "2026-10-16 20:22", "2026-10-16", Counter(), set())
+        assert state["model_search"]["priority"] == [] and state["model_search"]["query"] == 1, "priority first"
+        tick.queue_priority_models(state, "2026-10-16 20:37")
+        assert state["model_search"]["priority"] == [], "each model only once"
+    finally:
+        tick.MODEL_SWEEP, models.PRIORITY_SEARCH = real_sweep, real_prio
 
     # Model pass at any price: found -> missing from its model's results -> checked -> sold.
     sweep = tick.Sweep("t", (("canon ae-1", "Canon AE-1"), ("nikon f2", "Nikon F2")), None, 10, 1, 16, False, True)
