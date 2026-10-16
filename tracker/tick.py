@@ -29,10 +29,10 @@ FULL_SCAN_EVERY_MIN = 240
 REST_MIN_PRICE = 3.0
 REST_TRACK_MIN = 180
 LIST_TRACK_MIN = 30 * 1440
-MAX_REQUESTS = 85
+MAX_REQUESTS = 115
 TICK_TIME_BUDGET_S = 9 * 60  # Vinted traffic per tick; the rest goes to the next tick
 DAILY_CHECKS_PER_TICK = 25
-DESCRIPTION_CHECKS_PER_TICK = 10
+DESCRIPTION_CHECKS_PER_TICK = 15
 BOUNDARY_TAIL = 10
 
 
@@ -54,12 +54,12 @@ class Sweep:
 # Cheap cameras by brand, refreshed daily for 'До 20 €'.
 CHEAP_SWEEP = Sweep("search", tuple((q, None) for q in (
     "zenit", "zenith", "fed", "zorki", "kiev", "praktica", "canon", "nikon", "pentax", "olympus",
-    "minolta", "konica", "yashica", "mamiya", "contax", "leica", "hasselblad", "rollei")), 20, 4, 2, 4, True, True)
-# Every list model at any price. The first pass and its age checks are pushed through in
-# about two days (5 pages, up to 40 checks per tick); afterwards 2 pages per tick, and
-# checks only for the few new candidates.
-MODEL_SWEEP = Sweep("model_search", tuple((m.lower(), m) for m in models.MODEL_INFO), None, 10, 2, 40, False, True,
-                    fill_pages_per_tick=5)
+    "minolta", "konica", "yashica", "mamiya", "contax", "leica", "hasselblad", "rollei")), 20, 4, 3, 6, True, True)
+# Every list model at any price. The first pass and its age checks are pushed through
+# (7 pages, up to 60 checks per tick); afterwards 2 pages per tick, and checks only for
+# the few new candidates.
+MODEL_SWEEP = Sweep("model_search", tuple((m.lower(), m) for m in models.MODEL_INFO), None, 10, 2, 60, False, True,
+                    fill_pages_per_tick=7)
 SWEEPS = (CHEAP_SWEEP, MODEL_SWEEP)
 FOUND_MAX_AGE_DAYS = 183  # half a year on Vinted
 FOUND_MIN_ID = 8_300_000_000  # older ids are well over half a year old: skipped without opening
@@ -67,7 +67,7 @@ OLD_ON_VINTED_DAYS = 30  # cameras listed on Vinted longer ago than this ...
 OLD_RECHECK_MIN = 3 * 1440  # ... are checked every 3 days instead of daily
 NEW_ROWS_HOURS = 12  # light blue 3: cameras first seen within this many hours
 FRESH_ROWS_HOURS = 3  # light green 3, like 'активен' (above the blue): within this many hours
-FOUND_CHECKS_PER_TICK = 10
+FOUND_CHECKS_PER_TICK = 15
 
 LIST_BRANDS = {brand for brand, *_ in models.MODELS}
 SIGNAL_FLAGS = {"accessory?", "digital?"}
