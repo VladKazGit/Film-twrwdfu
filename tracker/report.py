@@ -3,7 +3,7 @@ import re
 import statistics
 from collections import Counter
 
-from . import clock
+from . import clock, models
 
 # Sale time buckets by the upper estimate (time_to_sell_max), minutes.
 BUCKETS = [(30, "< 30 мин"), (360, "30 мин – 6 ч"), (1440, "6–24 ч"), (10080, "1–7 дн"), (None, "> 7 дн")]
@@ -252,6 +252,42 @@ def current_price(item):
         return item["price_final"]
     history = item.get("price_history") or []
     return history[-1]["price"] if history else item.get("price_start")
+
+
+CHECK_HEADER = ["Причина", "id", "Модель", "Заголовок", "Цена", "Медиана модели", "Статус", "Источник модели",
+                "Начало описания", "Ссылка"]
+CHECK_PRICE_SHARE, CHECK_MIN_MEDIAN, CHECK_MIN_SAMPLES = 0.25, 40, 5
+
+
+def check_rows(items):
+    """'Проверка': rows of 'Список' that look like misrecognitions (manually labelled ones are trusted)."""
+    rows = [i for i in items if i.get("group") == "list" and i.get("model_source") != "manual"]
+    prices = {}
+    for i in rows:
+        if current_price(i):
+            prices.setdefault(i.get("model"), []).append(current_price(i))
+    medians = {m: statistics.median(p) for m, p in prices.items() if len(p) >= CHECK_MIN_SAMPLES}
+    found = []
+    for i in rows:
+        reasons, price, median = [], current_price(i), medians.get(i.get("model"))
+        if median and median >= CHECK_MIN_MEDIAN and price is not None and price < CHECK_PRICE_SHARE * median:
+            reasons.append(f"цена {_price_text(price)} € при обычной {_price_text(median)} €")
+        words = models.accessory_words(i.get("title") or "")
+        if words:
+            reasons.append("в заголовке: " + ", ".join(words))
+        lead = models.lead_word(i.get("description"))
+        if lead:
+            reasons.append(f"описание начинается с «{lead}»")
+        if i.get("model_source") == "description":
+            reasons.append("модель только из описания")
+        if reasons:
+            found.append((len(reasons), -(price or 0), i, "; ".join(reasons), median))
+    found.sort(key=lambda f: (f[0], f[1]), reverse=True)
+    return [CHECK_HEADER] + [
+        [reason, i["id"], i.get("model") or "", i.get("title") or "", _num(current_price(i)),
+         "" if median is None else _price_text(median), STATUS_RU.get(i.get("status"), i.get("status") or ""),
+         SOURCE_RU.get(i.get("model_source"), ""), (i.get("description") or "")[:120], i.get("url") or ""]
+        for _, _, i, reason, median in found]
 
 
 def cheap_cameras(items, max_price):

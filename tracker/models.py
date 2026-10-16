@@ -243,7 +243,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 10
+VERSION = 12
 
 # Models that must not match when the text also contains this pattern.
 MODEL_EXCLUDE = {
@@ -322,7 +322,8 @@ def _compile_alias(brand, model, alias, not_after):
         tail += f"(?!{SEP}(?:{not_after}))"
     if re.search(r"[a-z]$", alias):
         # 'FG-20', 'F 301', 'FM 10' are other models; '50mm', 'f 1.4' are lenses.
-        tail += r"(?!\s*-?\s*\d+" + _NOT_OTHER_MODEL + ")"
+        # 'x' is allowed only after one digit ('2x Objektive'), not after a model number ('F-401x').
+        tail += r"(?!\s*-?\s*(?:\d{2,}(?![\d.,:]|\s*mm)|\d" + _NOT_OTHER_MODEL + "))"
     # Mount names: 'Nikon F mount', 'Canon EF Bajonett' are lenses/adapters.
     tail += rf"(?!{SEP}(?:mount|bajonett|bayonet|anschluss|adapter|adaptateur|monture|attacco|innesto|vatting))"
     head = _START + (_brand_pattern(BRANDS[brand][1]) + SEP if adjacent else "")
@@ -381,7 +382,7 @@ _ACCESSORY_WORDS = re.compile(
     r"|\badapter|batterie|\bbattery|\bgriff\b|\bgrip\b|stativ|tripod|treppiede|belichtungsmesser"
     r"|light ?meter|posemetre|esposimetro|ruckteil|\bfilm ?back|magazin\b|gegenlichtblende"
     r"|lens hood|ausloser|\bfilm(?:e|s)?\b(?!\s*(?:kamera|camera))|pellicol|pellicule|\bfilmrolle"
-    r"|\bback\b|data ?back|finder|(?<!mess)sucher\b|\bviseur|\bmirino|waist ?level|lichtschacht"
+    r"|\bback\b|data ?back|(?<!range)finder|(?<!mess)sucher\b|\bviseur|\bmirino|waist ?level|lichtschacht"
     r"|zubehor\b|acc?es+oires?\b|accessori[oe]?\b|accessor(?:y|ies)\b|toebehoren\b"
     r"|katalog|catalog|cataloghi|catalogue|depliant|prospekt|brochure|broschure|\bguide\b|\bguida\b|ratgeber|leitfaden|\bbuch\b|\bbook\b|\blibro\b|\blivre\b|\bposter\b|zeitschrift|rivista|\bflyer")
 # Lens makers and zoom: 'Zoom Vivitar 70/210 per Nikon F' is a lens.
@@ -406,7 +407,9 @@ _PARTS = re.compile(
     r"|front plate|advance lever|rewind crank|frame counter|leatherette|light seals?\b"
     r"|\bcapot\b|levier d.armement|\bcompteur\b|\bgainage|\bmousses?\b|bovenkap|onderplaat"
     # badge, battery cap / compartment, eyecup and cap
-    r"|etichetta|\btappo\b|\bvano\b|oeilleton|\bcache\b|eyecup|augenmuschel|oculaire")
+    r"|etichetta|\btappo\b|\bvano\b|oeilleton|\bcache\b|eyecup|augenmuschel|oculaire"
+    # body / lens / rear caps
+    r"|body ?caps?\b|gehausedeckel|ruckdeckel|lens caps?\b|objektivdeckel")
 _FOR_BEFORE = re.compile(r"\b(?:per|for|pour|fur|als|voor|para)\s+(?:\w+\s+)?$")
 # Words that say the listing is a camera body or kit, not just its manual.
 _KIT_WORDS = re.compile(r"\bbody\b|gehause|boitier|\bcorpo\b|objektiv|\blens|obiettiv|objectif|\bkit\b|\bset\b|\bnur\b")
@@ -508,6 +511,24 @@ def _is_accessory(norm, model_span):
     acc = _ACCESSORY_WORDS.search(tail)
     # "Nikon F Waist Level Finder ... Case": accessory words, no camera, no "with".
     return bool(acc) and not _WITH_WORDS.search(tail[:acc.start()]) and not _CAMERA_WORDS.search(norm)
+
+
+def accessory_words(title):
+    """Accessory/part/manual words in a title that no "with" word introduces (for review)."""
+    norm = normalize(title)
+    words = []
+    for rx in (_PARTS, _MANUAL, _ACCESSORY_WORDS, _LENS_WORDS):
+        for m in rx.finditer(norm):
+            if not _WITH_WORDS.search(norm[:m.start()]) and m.group(0).strip() not in words:
+                words.append(m.group(0).strip())
+    return words
+
+
+def lead_word(description):
+    """The accessory/part/manual word a description starts with, or None."""
+    lead = _LEAD_FILLER.sub("", normalize(description or "")[:160])
+    m = _PARTS.match(lead) or _MANUAL.match(lead) or _LEAD_ACCESSORY.match(lead)
+    return m.group(0).strip() if m else None
 
 
 def lead_is_accessory(description):

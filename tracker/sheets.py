@@ -10,6 +10,7 @@ REST_SHEET = "Остальные"
 CHEAP_SHEET = "До 20 €"
 FAST_SHEET = "Быстрые продажи"
 SALES_SHEET = "Продажи"
+CHECK_SHEET = "Проверка"
 CHEAP_MAX_PRICE = 20.0
 RUNS_SHEET = "Запуски"
 SUMMARY_SHEET = "Сводка"

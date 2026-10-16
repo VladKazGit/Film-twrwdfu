@@ -745,6 +745,7 @@ def write_sheets(writer, result, state_flags):
         updates["cheap_ids"] = cheap_ids
     writer.replace(sheets.FAST_SHEET, report.fast_rows(items), links=True)
     writer.replace(sheets.SALES_SHEET, report.sales_rows(items), links=True)
+    writer.replace(sheets.CHECK_SHEET, report.check_rows(items), links=True)
     writer.replace(sheets.SUMMARY_SHEET, report.summary_rows(result["summary"]))
     if not state_flags.get("runs_header_v3"):  # v3: 'Комментарий' and 'Новых в «До 20 €»'
         writer.ensure_runs_header()

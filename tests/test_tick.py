@@ -215,7 +215,7 @@ def main():
         status_col = report.ITEM_HEADER.index("Статус")
         assert fast_ws.sent[1][status_col] == "'продан" and fast_ws.rows[1][status_col] == "продан"
         assert fast_ws.rows[1][0] == 1011 and fast_ws.sent[1][link_col] == fast_ws.rows[1][link_col]
-        assert ss.sheets["Сводка"].mode == "RAW"
+        assert ss.sheets["Сводка"].mode == "RAW" and ss.sheets["Проверка"].rows[0] == report.CHECK_HEADER
         assert ss.sheets["Список"].rows[0][0] == "id" and len(ss.sheets["Список"].rows) >= 4
         assert ss.sheets["Модели"].rows[0] == sheets.MODELS_HEADER and len(ss.sheets["Модели"].rows) > 150
         assert ss.sheets["Сводка"].rows[0][0] == "Обновлено"
@@ -460,6 +460,24 @@ def main():
         r = tick.run_tick(store, FakeClient(base), now="2026-10-16 17:15")
         moved = (store.load_active().get(acc["id"]) or store.load_closed().get(acc["id"]))
         assert moved["group"] == "rest" and r["run"]["reclassified"] >= 1, (moved["group"], r["run"]["reclassified"])
+
+    # 'Проверка': a Mat-124G at 3 EUR among 200 EUR ones, a model taken from the description,
+    # and a title with an accessory word that slipped through; manual labels are trusted.
+    def card(item_id, title, price, **extra):
+        it = tick.new_item(rec(item_id, title, price), "2026-10-16 12:00", "2026-10-16 11:45", [])
+        it.update(extra)
+        return it
+    pool = [card(100 + k, "Yashica Mat-124G", 200.0 + k) for k in range(5)]
+    cheap_mat = card(200, "Yashica Mat-124g", 3.0)
+    by_desc = card(201, "Kamera Canon", 50.0, model="Canon AE-1", model_source="description", group="list", in_list=True)
+    slipped = card(202, "Nikon FM2 Kamera Tasche Leder", 120.0)
+    labelled = card(203, "Yashica Mat-124g", 2.0, model_source="manual")
+    rows = report.check_rows(pool + [cheap_mat, by_desc, slipped, labelled])
+    reasons = {r[1]: r[0] for r in rows[1:]}
+    assert rows[0] == report.CHECK_HEADER and set(reasons) == {200, 201, 202}, reasons
+    assert reasons[200].startswith("цена 3 € при обычной 201.50 €") and "модель только из описания" in reasons[201]
+    assert "tasche" in reasons[202], reasons[202]
+    assert "accessory?" in tick.new_item(rec(300, "Nikon FM2 camera body cap", 9.0), "x", None, [])["flags"]
 
     # Sorting: a fresh listing stays above old cameras found later by search.
     fresh = {"id": 1, "first_seen": "2026-10-16 19:07", "flags": []}
