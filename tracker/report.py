@@ -136,6 +136,7 @@ def item_row(item):
 
 
 NEW_HEADER = "Новая (12 ч)"
+FRESH_HEADER = "Новая (3 ч)"
 
 
 def is_new(item, since, old_listings=False):
@@ -145,11 +146,12 @@ def is_new(item, since, old_listings=False):
     return (item.get("first_seen") or "") >= since and not set(item.get("flags") or []) & excluded
 
 
-def item_rows(items, with_group=False, new_since=None, new_old_listings=False):
-    """Item sheet rows, newest first. with_group adds 'Группа'; new_since adds a last
-    column marking new cameras ('да')."""
+def item_rows(items, with_group=False, new_since=None, new_old_listings=False, fresh_since=None):
+    """Item sheet rows, newest first. with_group adds 'Группа'; new_since / fresh_since add
+    columns marking cameras that appeared in the last 12 / 3 hours ('да')."""
     ordered = sorted(items, key=lambda i: (i.get("first_seen") or "", i["id"]), reverse=True)
-    header = ITEM_HEADER + (["Группа"] if with_group else []) + ([NEW_HEADER] if new_since else [])
+    header = (ITEM_HEADER + (["Группа"] if with_group else []) + ([NEW_HEADER] if new_since else [])
+              + ([FRESH_HEADER] if fresh_since else []))
     rows = [header]
     for item in ordered:
         row = item_row(item)
@@ -157,6 +159,8 @@ def item_rows(items, with_group=False, new_since=None, new_old_listings=False):
             row.append(GROUP_RU.get(item.get("group"), ""))
         if new_since:
             row.append("да" if is_new(item, new_since, new_old_listings) else "")
+        if fresh_since:
+            row.append("да" if is_new(item, fresh_since, new_old_listings) else "")
         rows.append(row)
     return rows
 

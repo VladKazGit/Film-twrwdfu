@@ -60,7 +60,8 @@ FOUND_MAX_AGE_DAYS = 183  # half a year on Vinted
 FOUND_MIN_ID = 8_300_000_000  # older ids are well over half a year old: skipped without opening
 OLD_ON_VINTED_DAYS = 30  # cameras listed on Vinted longer ago than this ...
 OLD_RECHECK_MIN = 3 * 1440  # ... are checked every 3 days instead of daily
-NEW_ROWS_HOURS = 12  # 'Список' highlights cameras first seen within this many hours
+NEW_ROWS_HOURS = 12  # light blue 3: cameras first seen within this many hours
+FRESH_ROWS_HOURS = 3  # light yellow 3 (above the blue): within this many hours
 FOUND_CHECKS_PER_TICK = 10
 
 LIST_BRANDS = {brand for brand, *_ in models.MODELS}
@@ -603,15 +604,16 @@ def write_sheets(writer, result, state_flags):
         updates["models_offered"] = sorted(set(offered) | set(names))
 
     new_since = clock.stamp(clock.parse(result["run"]["at"]) - timedelta(hours=NEW_ROWS_HOURS))
-    writer.replace(sheets.LIST_SHEET,
-                   report.item_rows([i for i in items if i.get("group") == "list"], new_since=new_since))
+    fresh_since = clock.stamp(clock.parse(result["run"]["at"]) - timedelta(hours=FRESH_ROWS_HOURS))
+    writer.replace(sheets.LIST_SHEET, report.item_rows([i for i in items if i.get("group") == "list"],
+                                                       new_since=new_since, fresh_since=fresh_since))
     candidates = report.cheap_cameras(items, sheets.CHEAP_MAX_PRICE)
     cheap = [i for i in candidates if i.get("model") and sheets.model_key(i["model"]) in allowed]
     print(f"sheets: cheap sheet {len(cheap)} of {len(candidates)} list cameras at <= 20 EUR"
           f" (the others have models missing from the models sheet)")
     # 'До 20 €' is mostly old cheap cameras found by search: mark what entered the sheet in 12 h.
     writer.replace(sheets.CHEAP_SHEET, report.item_rows(cheap, with_group=True, new_since=new_since,
-                                                        new_old_listings=True))
+                                                        new_old_listings=True, fresh_since=fresh_since))
     writer.replace(sheets.FAST_SHEET, report.fast_rows(items))
     writer.replace(sheets.SALES_SHEET, report.sales_rows(items))
     writer.replace(sheets.SUMMARY_SHEET, report.summary_rows(result["summary"]))
@@ -630,19 +632,28 @@ def write_sheets(writer, result, state_flags):
             updates["status_colors"] = sorted(colored | set(todo))
         except Exception as exc:
             print(f"sheets: status colours not applied: {type(exc).__name__}: {env.redact(exc)}")
-    # Light blue 3 rows for new cameras; the rule goes below the green status rule.
+    # Rows of new cameras: light blue 3 (12 h), light yellow 3 (3 h) above it,
+    # both below the green status rule.
     blue = set(state_flags.get("new_rows_colors") or [])
     if state_flags.get("new_rows_color"):  # earlier flag: only 'Список' had the rule
         blue.add(sheets.LIST_SHEET)
+    yellow = set(state_flags.get("fresh_rows_colors") or [])
     green = set(updates.get("status_colors") or colored)
-    widths = {sheets.LIST_SHEET: len(report.ITEM_HEADER) + 1, sheets.CHEAP_SHEET: len(report.ITEM_HEADER) + 2}
-    for title, width in widths.items():
-        if title in blue or not writer.has(title):
+    n = len(report.ITEM_HEADER)
+    columns = {sheets.LIST_SHEET: (n, n + 1), sheets.CHEAP_SHEET: (n + 1, n + 2)}  # 12 h flag, 3 h flag
+    for title, (col_12h, col_3h) in columns.items():
+        if not writer.has(title):
             continue
+        index = 1 if title in green else 0
         try:
-            writer.color_new_rows(title, width - 1, width, 1 if title in green else 0)
-            blue.add(title)
-            updates["new_rows_colors"] = sorted(blue)
+            if title not in blue:
+                writer.color_new_rows(title, col_12h, col_3h + 1, index, sheets.LIGHT_BLUE_3)
+                blue.add(title)
+                updates["new_rows_colors"] = sorted(blue)
+            if title not in yellow:
+                writer.color_new_rows(title, col_3h, col_3h + 1, index, sheets.LIGHT_YELLOW_3)
+                yellow.add(title)
+                updates["fresh_rows_colors"] = sorted(yellow)
         except Exception as exc:
             print(f"sheets: new-row colours not applied: {type(exc).__name__}: {env.redact(exc)}")
     return updates

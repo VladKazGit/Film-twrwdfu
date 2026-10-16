@@ -25,6 +25,7 @@ MANUAL_HEADER = ["id (или ссылка)", "Модель", "Комментар
 MODELS_HEADER = ["Модель", "Бренд", "Тип", "Формат", "Регион"]
 LIGHT_GREEN_3 = {"red": 217 / 255, "green": 234 / 255, "blue": 211 / 255}  # #d9ead3
 LIGHT_BLUE_3 = {"red": 207 / 255, "green": 226 / 255, "blue": 243 / 255}  # #cfe2f3
+LIGHT_YELLOW_3 = {"red": 255 / 255, "green": 242 / 255, "blue": 204 / 255}  # #fff2cc
 
 
 def column_letter(index):
@@ -88,16 +89,17 @@ class SheetWriter:
                             "format": {"backgroundColor": LIGHT_GREEN_3}}}}} for t in titles]
         self.spreadsheet.batch_update({"requests": requests})
 
-    def color_new_rows(self, title, flag_column, width, index):
-        """Light blue 3 rows where the flag column says 'да'. Inserted below the status
-        rule (index 1) so an active status cell stays green."""
+    def color_new_rows(self, title, flag_column, width, index, color=LIGHT_BLUE_3):
+        """Colour rows where the flag column says 'да'. Inserted below the status rule
+        (index 1) so an active status cell stays green; a rule inserted later at the
+        same index sits above the earlier ones."""
         letter = column_letter(flag_column)
         self.spreadsheet.batch_update({"requests": [{"addConditionalFormatRule": {"index": index, "rule": {
             "ranges": [{"sheetId": self._sheets[title].id, "startRowIndex": 1,
                         "startColumnIndex": 0, "endColumnIndex": width}],
             "booleanRule": {"condition": {"type": "CUSTOM_FORMULA",
                                           "values": [{"userEnteredValue": f'=${letter}2="да"'}]},
-                            "format": {"backgroundColor": LIGHT_BLUE_3}}}}}]})
+                            "format": {"backgroundColor": color}}}}}]})
 
     def replace(self, title, rows):
         """Overwrite a whole sheet with rows (first row is the header)."""
