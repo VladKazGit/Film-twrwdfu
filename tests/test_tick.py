@@ -253,6 +253,7 @@ def main():
         assert upd.get("new_rows_colors") == ["До 20 €", "Список"], "old flag: only 'До 20 €' added"
         assert upd.get("fresh_rows_colors") == ["До 20 €", "Список"]
         assert ss.sheets["Запуски"].rows[-1][-1] == 1 and upd["cheap_ids"] == [400, 1021], "Zenit E 1021 entered 'До 20 €'"
+        assert ss.sheets["Запуски"].rows[-1][-2].endswith("В «До 20 €» (1): Zenit E — 15 €"), ss.sheets["Запуски"].rows[-1][-2]
         assert "Zenit KM" in upd["models_offered"] and models_ws.rows[-1][0] == "Zenit KM"
         assert [r[0] for r in ss.sheets["До 20 €"].rows[1:]] == [1021, 400], "Cyrillic 'зенит-е' matches Zenit E"
 

@@ -685,17 +685,20 @@ def log_line(run):
             f" | errors: {'; '.join(run['errors']) or 'none'}")
 
 
-def runs_row(run, cheap_added=0):
+def runs_row(run, cheap_added=()):
+    """One 'Запуски' row; cheap_added: cameras that entered 'До 20 €' in this tick."""
     return [run["at"], "да" if run["full_scan"] else "", run["pages"], run["requests"], run["mb"], run["seconds"],
             run["new_list"], run["new_rest"], run["bumped"], run["checks"], run["sold_list"], run["sold_rest"],
             run["deleted"], run["reserved_hidden"], run["closed_3h"], run["closed_30d"], run["descriptions"],
-            run["description_to_list"], run["deferred"], "; ".join(run["errors"]), runs_comment(run), cheap_added]
+            run["description_to_list"], run["deferred"], "; ".join(run["errors"]),
+            runs_comment(run, cheap=[_camera_label(i) for i in cheap_added]), len(cheap_added)]
 
 
-def runs_comment(run, limit=40):
-    """'Добавлены (3): Canon AE-1 — 120 €, … | Проданы (1): Zenit E — 15 €'."""
+def runs_comment(run, limit=40, cheap=()):
+    """'Добавлены (3): Canon AE-1 — 120 €, … | Проданы (1): … | В «До 20 €» (1): Zenit E — 15 €'."""
     parts = []
-    for title, names in (("Добавлены", run.get("added") or []), ("Проданы", run.get("sold_names") or [])):
+    for title, names in (("Добавлены", run.get("added") or []), ("Проданы", run.get("sold_names") or []),
+                         ("В «До 20 €»", list(cheap))):
         if names:
             more = f" … и ещё {len(names) - limit}" if len(names) > limit else ""
             parts.append(f"{title} ({len(names)}): " + ", ".join(names[:limit]) + more)
@@ -732,7 +735,7 @@ def write_sheets(writer, result, state_flags):
     # Cameras that entered 'До 20 €' since the previous tick (none counted on the very first one).
     cheap_ids = sorted(i["id"] for i in cheap)
     previous = state_flags.get("cheap_ids")
-    cheap_added = 0 if previous is None else len(set(cheap_ids) - set(previous))
+    cheap_added = [] if previous is None else [i for i in cheap if i["id"] not in set(previous)]
     if cheap_ids != previous:
         updates["cheap_ids"] = cheap_ids
     writer.replace(sheets.FAST_SHEET, report.fast_rows(items), links=True)
