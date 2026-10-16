@@ -128,8 +128,19 @@ def item_row(item):
     ]
 
 
-def item_rows(items, with_group=False):
+NEW_HEADER = "Новая (12 ч)"
+
+
+def is_new(item, since):
+    """A new listing (not an old one found, bumped or seen at the start) first seen at or after `since`."""
+    return (item.get("first_seen") or "") >= since and not set(item.get("flags") or []) & {"preexisting", "found", "bumped"}
+
+
+def item_rows(items, with_group=False, new_since=None):
+    """Item sheet rows, newest first. new_since adds a last column marking new cameras ('да')."""
     ordered = sorted(items, key=lambda i: (i.get("first_seen") or "", i["id"]), reverse=True)
+    if new_since:
+        return [ITEM_HEADER + [NEW_HEADER]] + [item_row(i) + ["да" if is_new(i, new_since) else ""] for i in ordered]
     if with_group:
         return [ITEM_HEADER + ["Группа"]] + [item_row(i) + [GROUP_RU.get(i.get("group"), "")] for i in ordered]
     return [ITEM_HEADER] + [item_row(i) for i in ordered]

@@ -155,7 +155,15 @@ def main():
         writer = sheets.SheetWriter(ss)
         updates = tick.write_sheets(writer, r5, {})
         assert updates["runs_header"] and "Zenit E" in updates["models_offered"]
-        assert len(ss.formats) == 4 and set(updates["status_colors"]) == {"Список", "Остальные", "До 20 €", "Быстрые продажи"}
+        assert len(ss.formats) == 5 and set(updates["status_colors"]) == {"Список", "Остальные", "До 20 €", "Быстрые продажи"}
+        blue = ss.formats[-1]["addConditionalFormatRule"]
+        assert updates["new_rows_color"] and blue["index"] == 1, "below the green status rule"
+        letter = sheets.column_letter(len(report.ITEM_HEADER))
+        assert blue["rule"]["booleanRule"]["condition"]["values"][0]["userEnteredValue"] == f'=${letter}2="да"'
+        list_rows = ss.sheets["Список"].rows
+        assert list_rows[0][-1] == report.NEW_HEADER and len(list_rows[0]) == len(report.ITEM_HEADER) + 1
+        marked = {r[0] for r in list_rows[1:] if r[-1] == "да"}
+        assert marked == {1020, 1021}, marked  # new listings first seen 17.10 07:07; bumped 400 and older ones are not
         rule = ss.formats[0]["addConditionalFormatRule"]["rule"]
         assert rule["booleanRule"]["condition"]["values"][0]["userEnteredValue"] == "активен"
         assert rule["ranges"][0]["startColumnIndex"] == report.ITEM_HEADER.index("Статус")
@@ -176,7 +184,7 @@ def main():
         models_ws = ss.sheets["Модели"]
         models_ws.rows = [r for r in models_ws.rows if r[0] != "Zenit E"]
         state_flags = {"runs_header": True, "models_offered": updates["models_offered"],
-                       "status_colors": updates["status_colors"]}
+                       "status_colors": updates["status_colors"], "new_rows_color": True}
         assert tick.write_sheets(writer, r5, state_flags) == {}
         assert [r[0] for r in ss.sheets["До 20 €"].rows[1:]] == [400] and ["Zenit E"] not in [r[:1] for r in models_ws.rows]
         # A model new to the dictionary is offered once; spelling in the sheet does not matter.
@@ -184,7 +192,7 @@ def main():
         offered = [m for m in updates["models_offered"] if m != "Zenit KM"]
         models_ws.rows = [r for r in models_ws.rows if r[0] != "Zenit KM"]
         upd = tick.write_sheets(writer, r5, {"runs_header": True, "models_offered": offered,
-                                             "status_colors": updates["status_colors"]})
+                                             "status_colors": updates["status_colors"], "new_rows_color": True})
         assert "Zenit KM" in upd["models_offered"] and models_ws.rows[-1][0] == "Zenit KM"
         assert [r[0] for r in ss.sheets["До 20 €"].rows[1:]] == [1021, 400], "Cyrillic 'зенит-е' matches Zenit E"
 
@@ -283,6 +291,11 @@ def main():
         a, c = store.load_active(), store.load_closed()
         assert r["run"]["reopened"] == 1 and zen["id"] in client.opened, r["run"]
         assert zen["id"] in a and zen["id"] not in c and a[zen["id"]]["status"] == "active" and not a[zen["id"]].get("needs_check")
+
+    assert sheets.column_letter(0) == "A" and sheets.column_letter(25) == "Z" and sheets.column_letter(26) == "AA"
+    assert report.is_new({"first_seen": "2026-10-16 20:00", "flags": ["night"]}, "2026-10-16 09:00")
+    assert not report.is_new({"first_seen": "2026-10-16 20:00", "flags": ["found"]}, "2026-10-16 09:00")
+    assert not report.is_new({"first_seen": "2026-10-16 08:00", "flags": []}, "2026-10-16 09:00")
 
     # 'Продали за': days for new listings, Vinted's date for old ones, months past 30 days.
     assert [report.format_days(d) for d in (None, 0.4, 1, 3.9, 5, 21, 30, 45, 62, 150)] == [

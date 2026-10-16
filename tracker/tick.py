@@ -60,6 +60,7 @@ FOUND_MAX_AGE_DAYS = 183  # half a year on Vinted
 FOUND_MIN_ID = 8_300_000_000  # older ids are well over half a year old: skipped without opening
 OLD_ON_VINTED_DAYS = 30  # cameras listed on Vinted longer ago than this ...
 OLD_RECHECK_MIN = 3 * 1440  # ... are checked every 3 days instead of daily
+NEW_ROWS_HOURS = 12  # 'Список' highlights cameras first seen within this many hours
 FOUND_CHECKS_PER_TICK = 10
 
 LIST_BRANDS = {brand for brand, *_ in models.MODELS}
@@ -601,7 +602,9 @@ def write_sheets(writer, result, state_flags):
     if set(names) - set(offered):
         updates["models_offered"] = sorted(set(offered) | set(names))
 
-    writer.replace(sheets.LIST_SHEET, report.item_rows([i for i in items if i.get("group") == "list"]))
+    new_since = clock.stamp(clock.parse(result["run"]["at"]) - timedelta(hours=NEW_ROWS_HOURS))
+    writer.replace(sheets.LIST_SHEET,
+                   report.item_rows([i for i in items if i.get("group") == "list"], new_since=new_since))
     candidates = report.cheap_cameras(items, sheets.CHEAP_MAX_PRICE)
     cheap = [i for i in candidates if i.get("model") and sheets.model_key(i["model"]) in allowed]
     print(f"sheets: cheap sheet {len(cheap)} of {len(candidates)} list cameras at <= 20 EUR"
@@ -624,6 +627,14 @@ def write_sheets(writer, result, state_flags):
             updates["status_colors"] = sorted(colored | set(todo))
         except Exception as exc:
             print(f"sheets: status colours not applied: {type(exc).__name__}: {env.redact(exc)}")
+    if not state_flags.get("new_rows_color") and writer.has(sheets.LIST_SHEET):
+        green_first = sheets.LIST_SHEET in (updates.get("status_colors") or colored)
+        try:
+            width = len(report.ITEM_HEADER) + 1
+            writer.color_new_rows(sheets.LIST_SHEET, width - 1, width, 1 if green_first else 0)
+            updates["new_rows_color"] = True
+        except Exception as exc:
+            print(f"sheets: new-row colours not applied: {type(exc).__name__}: {env.redact(exc)}")
     return updates
 
 
