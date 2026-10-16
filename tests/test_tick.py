@@ -1,5 +1,6 @@
 """Tick logic on a fake Vinted and a fake spreadsheet. Run: python -m tests.test_tick"""
 import tempfile
+from collections import Counter
 
 from tracker import report, tick
 from tracker.store import DataStore
@@ -32,7 +33,7 @@ class FakeClient:
 
 class FakeWorksheet:
     def __init__(self, title):
-        self.title, self.rows, self.size = title, [], (0, 0)
+        self.title, self.rows, self.size, self.id = title, [], (0, 0), abs(hash(title)) % 10_000
 
     def update(self, range_name, values, value_input_option):
         assert range_name == "A1" and len(values) <= self.size[0] or not self.size[0], self.title
@@ -70,6 +71,9 @@ class FakeSpreadsheet:
 
     def worksheets(self):
         return list(self.sheets.values())
+
+    def batch_update(self, body):
+        self.formats = getattr(self, "formats", []) + body["requests"]
 
     def add_worksheet(self, title, rows, cols):
         self.sheets[title] = FakeWorksheet(title)
@@ -151,6 +155,10 @@ def main():
         writer = sheets.SheetWriter(ss)
         updates = tick.write_sheets(writer, r5, {})
         assert updates["runs_header"] and "Zenit E" in updates["models_offered"]
+        assert len(ss.formats) == 4 and set(updates["status_colors"]) == {"Список", "Остальные", "До 20 €", "Быстрые продажи"}
+        rule = ss.formats[0]["addConditionalFormatRule"]["rule"]
+        assert rule["booleanRule"]["condition"]["values"][0]["userEnteredValue"] == "активен"
+        assert rule["ranges"][0]["startColumnIndex"] == report.ITEM_HEADER.index("Статус")
         runs = ss.sheets["Запуски"].rows
         assert runs[0] == sheets.RUNS_HEADER and runs[1][1] == "check-setup" and len(runs) == 3
         assert ss.sheets["Список"].rows[0][0] == "id" and len(ss.sheets["Список"].rows) >= 4
@@ -167,14 +175,16 @@ def main():
         # 'До 20 €' follows 'Модели': the user deletes Zenit E, it leaves 'До 20 €' and is not re-added.
         models_ws = ss.sheets["Модели"]
         models_ws.rows = [r for r in models_ws.rows if r[0] != "Zenit E"]
-        state_flags = {"runs_header": True, "models_offered": updates["models_offered"]}
+        state_flags = {"runs_header": True, "models_offered": updates["models_offered"],
+                       "status_colors": updates["status_colors"]}
         assert tick.write_sheets(writer, r5, state_flags) == {}
         assert [r[0] for r in ss.sheets["До 20 €"].rows[1:]] == [400] and ["Zenit E"] not in [r[:1] for r in models_ws.rows]
         # A model new to the dictionary is offered once; spelling in the sheet does not matter.
         models_ws.rows.append(["зенит-е"])
         offered = [m for m in updates["models_offered"] if m != "Zenit KM"]
         models_ws.rows = [r for r in models_ws.rows if r[0] != "Zenit KM"]
-        upd = tick.write_sheets(writer, r5, {"runs_header": True, "models_offered": offered})
+        upd = tick.write_sheets(writer, r5, {"runs_header": True, "models_offered": offered,
+                                             "status_colors": updates["status_colors"]})
         assert "Zenit KM" in upd["models_offered"] and models_ws.rows[-1][0] == "Zenit KM"
         assert [r[0] for r in ss.sheets["До 20 €"].rows[1:]] == [1021, 400], "Cyrillic 'зенит-е' matches Zenit E"
 
@@ -191,24 +201,53 @@ def main():
         assert a[1020]["model_source"] == "manual"
         print("log:", tick.log_line(r4["run"]))
     # Search for older cheap list cameras: half a year limit, list models only.
+    Z12, ZE, PRIMA, ANCIENT = 9_000_000_300, 9_000_000_301, 9_000_000_302, 8_000_000_303
     with tempfile.TemporaryDirectory() as tmp:
         store = DataStore(tmp)
-        base = {1: [rec(2000, "Kamera", 30.0)] + older(1999)}
+        base = {1: [rec(10_000_002_000, "Kamera", 30.0)] + older(10_000_001_999)}
         tick.run_tick(store, FakeClient(base), now="2026-10-18 08:07")
-        search = {("zenit", 1): [rec(300, "Zenit 12 XP", 20.0), rec(301, "Zenit E", 5.0), rec(302, "Canon Prima", 10.0)]}
-        pages_age = {300: {"uploaded_ago": "5 Monaten"}, 301: {"uploaded_ago": "7 Monaten"}}
+        search = {("zenit", 1): [rec(Z12, "Zenit 12 XP", 20.0), rec(ZE, "Zenit E", 5.0), rec(PRIMA, "Canon Prima", 10.0),
+                                 rec(ANCIENT, "Zenit TTL", 8.0)]}
+        pages_age = {Z12: {"uploaded_ago": "5 Monaten"}, ZE: {"uploaded_ago": "7 Monaten"}}
         r = tick.run_tick(store, FakeClient(base, pages_age, search), now="2026-10-18 08:22")
         assert r["run"]["search_candidates"] == 2 and r["run"]["found"] == 0, r["run"]
-        r = tick.run_tick(store, FakeClient(base, pages_age, search), now="2026-10-18 08:37")
+        assert r["run"]["search_skipped"] == 1, "an id far below the half-year mark is skipped without opening"
+        client = FakeClient(base, pages_age, search)
+        r = tick.run_tick(store, client, now="2026-10-18 08:37")
         a = store.load_active()
-        assert r["run"]["found"] == 1 and r["run"]["search_skipped"] == 1, r["run"]
-        assert a[300]["flags"] == ["found"] and a[300]["uploaded_ago"] == "5 Monaten" and 301 not in a and 302 not in a
-        assert [i["id"] for i in report.cheap_cameras(r["items"], 20.0)] == [300]
-        assert report.fast_confidence({**a[300], "status": "sold", "time_to_sell_min": 0}) is None
-        for minute in range(52, 52 + 15 * 10, 15):  # finish the daily pass over all queries
+        assert r["run"]["found"] == 1 and r["run"]["search_skipped"] == 1 and ANCIENT not in client.opened, r["run"]
+        assert a[Z12]["flags"] == ["found"] and a[Z12]["uploaded_ago"] == "5 Monaten" and ZE not in a and PRIMA not in a
+        assert [i["id"] for i in report.cheap_cameras(r["items"], 20.0)] == [Z12]
+        assert report.fast_confidence({**a[Z12], "status": "sold", "time_to_sell_min": 0}) is None
+        for minute in range(52, 52 + 15 * 10, 15):  # finish the daily cheap pass over all brands
             now = f"2026-10-18 {9 + minute // 60:02d}:{minute % 60:02d}"
             tick.run_tick(store, FakeClient(base, pages_age, search), now=now)
         assert store.load_state()["search"]["done_on"] == "2026-10-18"
+
+    # Model pass at any price: found -> missing from its model's results -> checked -> sold.
+    sweep = tick.Sweep("t", (("canon ae-1", "Canon AE-1"), ("nikon f2", "Nikon F2")), None, 10, 1, 16, False, True)
+    AE1 = 9_875_831_290
+    state, active, closed, stats, changed = {}, {}, {}, Counter(), set()
+    client = FakeClient({}, {AE1: {"uploaded_ago": "6 Wochen", "price": 140.0}},
+                        {("canon ae-1", 1): [rec(AE1, "Canon AE-1 Set", 140.0)]})
+    tick.search_sweep(sweep, state, client, active, closed, "2026-10-18 10:07", "2026-10-18", stats, changed)
+    tick.search_sweep(sweep, state, client, active, closed, "2026-10-18 10:22", "2026-10-18", stats, changed)
+    assert AE1 in active and active[AE1]["model"] == "Canon AE-1" and "found" in active[AE1]["flags"]
+    assert tick.check_priority(active[AE1], "2026-10-19 10:22", vanished=False) is None, "seen: no daily check"
+    client.search = {}  # next pass: the AE-1 is gone from its results
+    for now in ("2026-10-19 10:07", "2026-10-19 10:22"):
+        tick.search_sweep(sweep, state, client, active, closed, now, "2026-10-19", stats, changed)
+    assert active[AE1].get("needs_check") and stats["found_missing"] == 1
+    assert tick.check_priority(active[AE1], "2026-10-19 10:37", vanished=False) == tick.P_FOUND
+    tick.apply_page(active[AE1], {"status": "sold", "price": 130.0, "description": None, "favourites": 4}, "2026-10-19 10:37")
+    assert active[AE1]["status"] == "sold" and "needs_check" not in active[AE1]
+    # Over a month on Vinted ('6 Wochen'): checked every 3 days; a younger one daily.
+    old = {**active[AE1], "status": "active", "closed_at": None, "last_checked_at": "2026-10-19 10:37"}
+    assert active[AE1]["vinted_listed_est"] == "2026-09-06" and active[AE1]["uploaded_ago"] == "6 Wochen"
+    assert tick.check_priority(old, "2026-10-21 10:38", vanished=False) is None
+    assert tick.check_priority(old, "2026-10-22 10:38", vanished=False) == tick.P_FOUND
+    young = {**old, "vinted_listed_est": "2026-10-10"}
+    assert tick.check_priority(young, "2026-10-20 10:38", vanished=False) == tick.P_FOUND
 
     # 'До 20 €' includes exactly 20 EUR.
     at = lambda price, group="list", flags=(): {"price_history": [{"at": "x", "price": price}], "group": group,

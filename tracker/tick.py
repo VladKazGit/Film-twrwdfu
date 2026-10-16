@@ -11,6 +11,8 @@ covered pages are checked by age: list items every tick (< 3 h), every 4 h
 """
 import argparse
 import sys
+from dataclasses import dataclass
+from datetime import timedelta
 import tempfile
 import time
 import traceback
@@ -27,25 +29,44 @@ FULL_SCAN_EVERY_MIN = 240
 REST_MIN_PRICE = 3.0
 REST_TRACK_MIN = 180
 LIST_TRACK_MIN = 30 * 1440
-MAX_REQUESTS = 60
+MAX_REQUESTS = 75
 DAILY_CHECKS_PER_TICK = 25
 DESCRIPTION_CHECKS_PER_TICK = 10
 BOUNDARY_TAIL = 10
 
-# Daily search for older cheap list cameras (listed before the tracker saw them).
-SEARCH_QUERIES = ("zenit", "zenith", "fed", "zorki", "kiev", "praktica", "canon", "nikon", "pentax", "olympus",
-                  "minolta", "konica", "yashica", "mamiya", "contax", "leica", "hasselblad", "rollei")
-SEARCH_MAX_PRICE = 20
-SEARCH_MAX_PAGES = 4
-SEARCH_PAGES_PER_TICK = 2
-SEARCH_CHECKS_PER_TICK = 8
-FOUND_MAX_AGE_DAYS = 183  # half a year
+
+
+@dataclass(frozen=True)
+class Sweep:
+    """A search pass for older list cameras (listed before the tracker saw them, never bumped)."""
+    key: str              # state key
+    queries: tuple        # (search text, model it targets or None)
+    max_price: object     # None: any price
+    max_pages: int
+    pages_per_tick: int
+    checks_per_tick: int  # candidate item pages opened per tick (age check)
+    daily: bool           # one pass per day; otherwise passes run back to back
+    presence: bool        # a tracked 'found' camera missing from its model's results gets checked
+
+
+# Cheap cameras by brand, refreshed daily for 'До 20 €'.
+CHEAP_SWEEP = Sweep("search", tuple((q, None) for q in (
+    "zenit", "zenith", "fed", "zorki", "kiev", "praktica", "canon", "nikon", "pentax", "olympus",
+    "minolta", "konica", "yashica", "mamiya", "contax", "leica", "hasselblad", "rollei")), 20, 4, 2, 8, True, False)
+# Every list model at any price; a pass takes about two days.
+MODEL_SWEEP = Sweep("model_search", tuple((m.lower(), m) for m in models.MODEL_INFO), None, 10, 3, 16, False, True)
+SWEEPS = (CHEAP_SWEEP, MODEL_SWEEP)
+FOUND_MAX_AGE_DAYS = 183  # half a year on Vinted
+FOUND_MIN_ID = 8_300_000_000  # older ids are well over half a year old: skipped without opening
+OLD_ON_VINTED_DAYS = 30  # cameras listed on Vinted longer ago than this ...
+OLD_RECHECK_MIN = 3 * 1440  # ... are checked every 3 days instead of daily
+FOUND_CHECKS_PER_TICK = 10
 
 LIST_BRANDS = {brand for brand, *_ in models.MODELS}
 SIGNAL_FLAGS = {"accessory?", "digital?"}
 
 # Check priorities: catalog -> list -> rest.
-P_LIST_VANISHED, P_LIST_DUE, P_LIST_DAILY, P_DESCRIPTION, P_REST_VANISHED, P_REST_DUE = range(6)
+P_LIST_VANISHED, P_LIST_DUE, P_LIST_DAILY, P_FOUND, P_DESCRIPTION, P_REST_VANISHED, P_REST_DUE = range(7)
 
 
 # ---------------------------------------------------------------- item updates
@@ -136,6 +157,8 @@ def set_model(item, model, source):
 def apply_page(item, page, now):
     """Update an item from its page. Returns the page status."""
     item["last_checked_at"] = now
+    item.pop("needs_check", None)
+    _remember_vinted_age(item, page.get("uploaded_ago"), now)
     _set_favourites(item, page.get("favourites"), now)
     if page["description"] and not item.get("description"):
         item["description"] = page["description"]
@@ -155,6 +178,23 @@ def apply_page(item, page, now):
     return status
 
 
+def _remember_vinted_age(item, uploaded_ago, now):
+    """Keep the first known Vinted upload age ('Hochgeladen') as an estimated listing date."""
+    days = age_days(uploaded_ago)
+    if days is None or item.get("vinted_listed_est"):
+        return
+    item.setdefault("uploaded_ago", uploaded_ago)
+    item["vinted_listed_est"] = (clock.parse(now) - timedelta(days=days)).strftime("%Y-%m-%d")
+
+
+def recheck_minutes(item, now):
+    """Daily check, or every 3 days for cameras over a month old on Vinted."""
+    listed = item.get("vinted_listed_est")
+    if listed and clock.minutes_between(f"{listed} 00:00", now) > OLD_ON_VINTED_DAYS * 1440:
+        return OLD_RECHECK_MIN
+    return 1440
+
+
 def wants_description(item):
     """Rest items whose title names only a list brand: the description may name the model."""
     return (item["group"] == "rest" and not item["description_checked"] and item["model"] is None
@@ -164,9 +204,11 @@ def wants_description(item):
 
 def check_priority(item, now, vanished):
     """Priority for opening the item page this tick, or None if not due."""
-    age = clock.minutes_between(item["first_seen"], now)
     since = clock.minutes_between(item["last_checked_at"], now)
-    preexisting = bool({"preexisting", "found"} & set(item["flags"]))  # listing time unknown
+    if "found" in item["flags"]:  # old listing: its model's search results show it is still there
+        return P_FOUND if item.get("needs_check") or since >= recheck_minutes(item, now) else None
+    age = clock.minutes_between(item["first_seen"], now)
+    preexisting = "preexisting" in item["flags"]
     if item["group"] == "rest":
         if vanished:
             return P_REST_VANISHED
@@ -174,69 +216,98 @@ def check_priority(item, now, vanished):
     if vanished:
         return P_LIST_VANISHED
     if preexisting or age >= 1440:
-        return P_LIST_DAILY if since >= 1440 else None
+        return P_LIST_DAILY if since >= recheck_minutes(item, now) else None
     if age < 180:
         return P_LIST_DUE
     return P_LIST_DUE if since >= 240 else None
 
 
-def search_sweep(state, client, active, closed, now, today, stats, changed):
-    """Find older list cameras at <= 20 EUR by text search, one slice per tick.
+def search_sweep(sweep, state, client, active, closed, now, today, stats, changed):
+    """Advance one search pass by a slice: candidate age checks, then result pages.
 
-    Candidates get their item page opened: active and at most half a year old
-    on Vinted -> tracked with the 'found' flag; otherwise remembered and skipped.
-    One full pass over SEARCH_QUERIES per day.
+    A list camera from the results that is not tracked yet becomes a candidate;
+    its item page decides: active and at most half a year on Vinted -> tracked
+    with the 'found' flag, otherwise remembered and skipped. With `presence`,
+    a tracked 'found' camera missing from its model's results is checked next.
     """
-    search = state.setdefault("search", {"query": 0, "page": 1, "done_on": None, "pending": {}, "skipped": []})
-    skipped = set(search["skipped"])
+    st = state.setdefault(sweep.key, {"query": 0, "page": 1, "done_on": None, "pending": {}, "skipped": []})
+    st.setdefault("seen", [])
+    st.setdefault("query_started", now)
+    skipped = set(st["skipped"])
 
-    for key in list(search["pending"])[:SEARCH_CHECKS_PER_TICK]:
+    for key in list(st["pending"])[:sweep.checks_per_tick]:
         if client.requests_made >= MAX_REQUESTS:
             return
-        rec = search["pending"][key]
+        rec = st["pending"][key]
+        if rec["id"] in active or rec["id"] in closed:
+            del st["pending"][key]
+            continue
         page = client.item_page(rec["id"])
-        del search["pending"][key]
+        del st["pending"][key]
         stats["checks"] += 1
         age = age_days(page["uploaded_ago"])
         item = new_item(rec, now, None, ["found"])
         if page["status"] != "active" or item["group"] != "list" or (age is not None and age > FOUND_MAX_AGE_DAYS):
-            search["skipped"].append(rec["id"])
+            st["skipped"].append(rec["id"])
             stats["search_skipped"] += 1
             continue
-        item["uploaded_ago"] = page["uploaded_ago"]
         item["age_days_at_discovery"] = age
         apply_page(item, page, now)
         active[rec["id"]] = item
         changed.add(rec["id"])
         stats["found"] += 1
 
-    if search["done_on"] == today:
+    if sweep.daily and st["done_on"] == today:
         return
-    for _ in range(SEARCH_PAGES_PER_TICK):
+    for _ in range(sweep.pages_per_tick):
         if client.requests_made >= MAX_REQUESTS:
             return
-        results = client.search_page(SEARCH_QUERIES[search["query"]], search["page"], SEARCH_MAX_PRICE)
+        query, model = sweep.queries[st["query"] % len(sweep.queries)]
+        if st["page"] == 1:
+            st["query_started"], st["seen"] = now, []
+        results = client.search_page(query, st["page"], sweep.max_price)
         stats["search_pages"] += 1
-        list_on_page = 0
+        hits = 0
         for rec in results:
             cls = models.classify(rec["title"], vinted_brand=rec["brand"])
             if not cls["model"] or SIGNAL_FLAGS & set(cls["flags"]):
                 continue
-            list_on_page += 1
-            if rec["id"] in active:
-                mark_seen(active[rec["id"]], rec, now)
-                changed.add(rec["id"])
-            elif rec["id"] not in closed and rec["id"] not in skipped and str(rec["id"]) not in search["pending"]:
-                search["pending"][str(rec["id"])] = rec
+            hits += model is None or cls["model"] == model
+            rec_id = rec["id"]
+            if rec_id in active:
+                mark_seen(active[rec_id], rec, now)
+                changed.add(rec_id)
+                st["seen"].append(rec_id)
+            elif rec_id in closed or rec_id in skipped or str(rec_id) in st["pending"]:
+                continue
+            elif rec_id < FOUND_MIN_ID:
+                st["skipped"].append(rec_id)
+                skipped.add(rec_id)
+                stats["search_skipped"] += 1
+            else:
+                st["pending"][str(rec_id)] = rec
                 stats["search_candidates"] += 1
-        last_page = len(results) < 96 or search["page"] >= SEARCH_MAX_PAGES or (search["page"] > 1 and not list_on_page)
-        if not last_page:
-            search["page"] += 1
+        if len(results) == 96 and st["page"] < sweep.max_pages and hits:
+            st["page"] += 1
             continue
-        search["query"], search["page"] = search["query"] + 1, 1
-        if search["query"] >= len(SEARCH_QUERIES):
-            search["query"], search["done_on"] = 0, today
-            return
+        if sweep.presence and model:
+            _mark_missing(model, set(st["seen"]), st["query_started"], active, stats, changed)
+        st["query"], st["page"] = st["query"] + 1, 1
+        if st["query"] >= len(sweep.queries):
+            st["query"], st["done_on"] = 0, today
+            if sweep.daily:
+                return
+
+
+def _mark_missing(model, seen, since, active, stats, changed):
+    """Tracked 'found' cameras of this model absent from its search results (and not seen
+    anywhere since the query started) may be sold: open their page next."""
+    for item in active.values():
+        if ("found" in item["flags"] and item["model"] == model and item["id"] not in seen
+                and item["last_seen_active"] < since and not item.get("needs_check")):
+            item["needs_check"] = True
+            changed.add(item["id"])
+            stats["found_missing"] += 1
 
 
 # ---------------------------------------------------------------- tick
@@ -344,12 +415,17 @@ def run_tick(store, client, labels=None, now=None):
         elif wants_description(item):
             queue.append((P_DESCRIPTION, item["first_seen"], item["id"]))
     queue.sort()
-    daily = descriptions = 0
+    daily = descriptions = found_checks = 0
     for priority, _, item_id in queue:
         item = active[item_id]
         if priority == P_LIST_DAILY:
             daily += 1
             if daily > DAILY_CHECKS_PER_TICK:
+                stats["deferred"] += 1
+                continue
+        if priority == P_FOUND:
+            found_checks += 1
+            if found_checks > FOUND_CHECKS_PER_TICK:
                 stats["deferred"] += 1
                 continue
         if priority == P_DESCRIPTION:
@@ -388,15 +464,17 @@ def run_tick(store, client, labels=None, now=None):
                 set_model(item, cls["model"], "description")
                 stats["description_to_list"] += 1
 
-    # ---- search for older cheap list cameras (lowest priority)
+    # ---- searches for older list cameras (lowest priority)
     if rest_enabled and not first_run:
-        try:
-            search_sweep(state, client, active, closed, now, today, stats, changed)
-        except BlockedError as exc:
-            errors.append(f"search: {exc}")
-            rest_enabled = False
-        except VintedError:
-            stats["check_errors"] += 1
+        for sweep in SWEEPS:
+            try:
+                search_sweep(sweep, state, client, active, closed, now, today, stats, changed)
+            except BlockedError as exc:
+                errors.append(f"search: {exc}")
+                rest_enabled = False
+                break
+            except VintedError:
+                stats["check_errors"] += 1
 
     # ---- close items whose tracking period is over
     for item in active.values():
@@ -441,7 +519,7 @@ def _finish(store, state, now, started, client, stats, errors, full_scan, pages,
         "deferred": stats["deferred"], "check_errors": stats["check_errors"],
         "reclassified": stats["reclassified"],
         "search_pages": stats["search_pages"], "search_candidates": stats["search_candidates"],
-        "found": stats["found"], "search_skipped": stats["search_skipped"],
+        "found": stats["found"], "search_skipped": stats["search_skipped"], "found_missing": stats["found_missing"],
         "rest_enabled": rest_enabled, "errors": [env.redact(e) for e in errors],
     }
     store.save_state(state)
@@ -466,7 +544,8 @@ def log_line(run):
             f" | deferred {run['deferred']}, check errors {run['check_errors']}"
             f"{' | reclassified ' + str(run['reclassified']) if run.get('reclassified') else ''}"
             f" | search: pages {run.get('search_pages', 0)}, candidates {run.get('search_candidates', 0)},"
-            f" found {run.get('found', 0)}, too old/gone {run.get('search_skipped', 0)}"
+            f" found {run.get('found', 0)}, too old/gone {run.get('search_skipped', 0)},"
+            f" missing from search {run.get('found_missing', 0)}"
             f"{'' if run['rest_enabled'] else ' | rest disabled today'}"
             f" | errors: {'; '.join(run['errors']) or 'none'}")
 
@@ -508,6 +587,15 @@ def write_sheets(writer, result, state_flags):
     writer.append_run(runs_row(result["run"]))
     if result["daily"]:
         writer.replace(sheets.REST_SHEET, report.item_rows([i for i in items if i.get("group") == "rest"]))
+    colored = set(state_flags.get("status_colors") or [])
+    todo = [t for t in (sheets.LIST_SHEET, sheets.REST_SHEET, sheets.CHEAP_SHEET, sheets.FAST_SHEET)
+            if t not in colored and writer.has(t)]
+    if todo:
+        try:  # cosmetic: a failure must not fail the tick; retried next tick
+            writer.color_active_status(todo, report.ITEM_HEADER.index("Статус"))
+            updates["status_colors"] = sorted(colored | set(todo))
+        except Exception as exc:
+            print(f"sheets: status colours not applied: {type(exc).__name__}: {env.redact(exc)}")
     return updates
 
 
@@ -516,7 +604,7 @@ def main():
     parser.add_argument("--force", action="store_true", help="run outside the 07:00-00:00 Berlin window")
     parser.add_argument("--local", help="use a local folder as the data store (no git)")
     parser.add_argument("--no-sheets", action="store_true", help="skip Google Sheets")
-    parser.add_argument("--max-requests", type=int, default=MAX_REQUESTS + 15)
+    parser.add_argument("--max-requests", type=int, default=MAX_REQUESTS + 15)  # hard cap above the plan
     args = parser.parse_args()
 
     if not args.force and env.now_berlin().hour < WINDOW_START_HOUR:

@@ -22,6 +22,7 @@ RUNS_HEADER = [
 ]
 MANUAL_HEADER = ["id (или ссылка)", "Модель", "Комментарий"]
 MODELS_HEADER = ["Модель", "Бренд", "Тип", "Формат", "Регион"]
+LIGHT_GREEN_3 = {"red": 217 / 255, "green": 234 / 255, "blue": 211 / 255}  # #d9ead3
 
 
 def model_key(name):
@@ -61,6 +62,19 @@ class SheetWriter:
                 ws.freeze(rows=1)
             self._sheets[title] = ws
         return ws
+
+    def has(self, title):
+        return title in self._sheets
+
+    def color_active_status(self, titles, column):
+        """Light green 3 background for 'активен' in the status column (conditional format,
+        survives the per-tick rewrites)."""
+        requests = [{"addConditionalFormatRule": {"index": 0, "rule": {
+            "ranges": [{"sheetId": self._sheets[t].id, "startRowIndex": 1,
+                        "startColumnIndex": column, "endColumnIndex": column + 1}],
+            "booleanRule": {"condition": {"type": "TEXT_EQ", "values": [{"userEnteredValue": "активен"}]},
+                            "format": {"backgroundColor": LIGHT_GREEN_3}}}}} for t in titles]
+        self.spreadsheet.batch_update({"requests": requests})
 
     def replace(self, title, rows):
         """Overwrite a whole sheet with rows (first row is the header)."""

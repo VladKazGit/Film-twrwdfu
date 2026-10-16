@@ -368,10 +368,12 @@ class VintedClient:
             raise BlockedError("catalog page without items")
         return items
 
-    def search_page(self, text, page, max_price):
-        """Category search by text (relevance order) up to max_price. Empty list past the end."""
-        resp = self.fetch(BASE_URL + "/catalog", {"search_text": text, "catalog[]": CATEGORY_ID,
-                                                  "price_to": max_price, "order": "relevance", "page": page})
+    def search_page(self, text, page, max_price=None):
+        """Category search by text (relevance order), optionally up to max_price."""
+        params = {"search_text": text, "catalog[]": CATEGORY_ID, "order": "relevance", "page": page}
+        if max_price is not None:
+            params["price_to"] = max_price
+        resp = self.fetch(BASE_URL + "/catalog", params)
         if resp.status_code != 200:
             raise VintedError(f"search http {resp.status_code}")
         if not flight_payload(resp.text):
