@@ -56,6 +56,13 @@ class DataStore:
             for old in self.closed_dir.glob(f"*/{name}"):
                 old.unlink()
 
+    def discard(self, item_id):
+        """Remove an item that should not be tracked at all (found by search, too old)."""
+        name = f"{item_id}.json"
+        (self.active_dir / name).unlink(missing_ok=True)
+        for old in self.closed_dir.glob(f"*/{name}"):
+            old.unlink()
+
     # ---- daily exports
 
     def write_exports(self, items, summary, readme):

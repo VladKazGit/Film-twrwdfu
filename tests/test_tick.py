@@ -322,11 +322,11 @@ def main():
     assert tick.check_priority(active[AE1], "2026-10-19 10:37", vanished=False) == tick.P_FOUND
     tick.apply_page(active[AE1], {"status": "sold", "price": 130.0, "description": None, "favourites": 4}, "2026-10-19 10:37")
     assert active[AE1]["status"] == "sold" and "needs_check" not in active[AE1]
-    # Over a month on Vinted ('6 Wochen'): checked every 3 days; a younger one daily.
+    # Over a month on Vinted ('6 Wochen'): checked every 5 days; a younger one daily.
     old = {**active[AE1], "status": "active", "closed_at": None, "last_checked_at": "2026-10-19 10:37"}
     assert active[AE1]["vinted_listed_est"] == "2026-09-06" and active[AE1]["uploaded_ago"] == "6 Wochen"
-    assert tick.check_priority(old, "2026-10-21 10:38", vanished=False) is None
-    assert tick.check_priority(old, "2026-10-22 10:38", vanished=False) == tick.P_FOUND
+    assert tick.check_priority(old, "2026-10-23 10:38", vanished=False) is None
+    assert tick.check_priority(old, "2026-10-24 10:38", vanished=False) == tick.P_FOUND
     young = {**old, "vinted_listed_est": "2026-10-10"}
     assert tick.check_priority(young, "2026-10-20 10:38", vanished=False) == tick.P_FOUND
 
@@ -380,6 +380,44 @@ def main():
     tick.apply_page(yashica, {"status": "active", "price": 3.0, "description": "brochure originale in ottime condizioni",
                               "favourites": 0}, "2026-10-16 12:15")
     assert yashica["group"] == "rest" and "accessory?" in yashica["flags"]
+
+    # Age from the id: anchors with known Vinted dates -> interpolated listing date.
+    from datetime import date, timedelta
+    from tracker import ageest
+    today = date(2026, 10, 16)
+    anchors = [{"id": 10_390_000_000 - d * 10_000_000, "vinted_listed_est": (today - timedelta(days=d)).isoformat()}
+               for d in range(0, 200, 5)]
+    estimate = ageest.build_estimator(anchors, 10_390_000_000, today)
+    assert abs((today - estimate(10_390_000_000 - 97 * 10_000_000)).days - 97) <= 1
+    assert (today - estimate(8_000_000_000)).days > 200, "below the anchors: extrapolated"
+    assert ageest.build_estimator(anchors[:10]) is None, "too few anchors"
+
+    # Fast fill: a found camera comes in with its age estimated by id, is enriched once
+    # (exact age, description); older than half a year by the exact age -> removed.
+    with tempfile.TemporaryDirectory() as tmp:
+        store = DataStore(tmp)
+        base = {1: [rec(10_390_000_000, "Kamera", 30.0)] + older(10_389_999_999)}
+        tick.run_tick(store, FakeClient(base), now="2026-10-16 12:07")
+        old_ids = [10_390_000_000 - d * 10_000_000 for d in range(0, 200, 5)]
+        for k, item_id in enumerate(old_ids[1:31]):  # 30 anchors with known Vinted dates
+            it = tick.new_item(rec(item_id, "Nikon FM2", 100.0), "2026-10-16 12:07", None, ["found"])
+            it.update(age_source="vinted", vinted_listed_est=(today - timedelta(days=5 * (k + 1))).isoformat(),
+                      description="Kamera", description_checked=True, last_checked_at="2026-10-16 12:07")
+            store.save(it)
+        young, old_one = 9_600_000_001, 9_000_000_001
+        search = {("nikon f", 1): [rec(young, "Nikon F Photomic", 150.0), rec(old_one, "Nikon F body", 140.0)]}
+        client = FakeClient(base, {young: {"uploaded_ago": "2 Monaten", "description": "Kamera, Prisma"},
+                                   old_one: {"uploaded_ago": "7 Monaten"}}, search)
+        r = tick.run_tick(store, client, now="2026-10-16 12:22")
+        a = store.load_active()
+        assert young in a and a[young]["age_source"] == "id" and "оценка" in report.item_row(a[young])[9], r["run"]
+        assert young not in client.opened and tick.needs_enrich(a[young])
+        r = tick.run_tick(store, client, now="2026-10-16 12:37")
+        a = store.load_active()
+        assert r["run"]["enriched"] >= 1 and a[young]["age_source"] == "vinted" and a[young]["uploaded_ago"] == "2 Monaten"
+        assert not tick.needs_enrich(a[young]) and a[young]["description"] == "Kamera, Prisma"
+        # Estimated ~139 days by id (taken in), '7 Monaten' on its page -> removed and never re-added.
+        assert r["run"]["too_old"] == 1 and old_one not in a and old_one in store.load_state()["model_search"]["skipped"]
 
     # 'Запуски' comment: what entered the list and what sold this tick.
     comment = tick.runs_comment(r2["run"])

@@ -95,6 +95,13 @@ def uploaded_ago_ru(text):
     return text
 
 
+def _vinted_age_text(item):
+    """Vinted's own age in Russian, or '~3 месяца назад (оценка)' while it is estimated by id."""
+    if item.get("age_source") == "id" and item.get("age_days_at_discovery") is not None:
+        return f"~{format_days(item['age_days_at_discovery'])} назад (оценка)"
+    return uploaded_ago_ru(item.get("uploaded_ago"))
+
+
 def format_days(days):
     """'меньше дня', '3 дня', '12 дней' up to 30 days, then months: '2 месяца'."""
     if days is None:
@@ -142,7 +149,7 @@ def item_row(item):
         item["id"], item.get("model") or "", item.get("title") or "",
         STATUS_RU.get(item.get("status"), item.get("status") or ""),
         _num(item.get("price_start")), _num(item.get("price_final")), _num(item.get("favourites")),
-        item.get("listed_after") or "", item.get("first_seen") or "", uploaded_ago_ru(item.get("uploaded_ago")),
+        item.get("listed_after") or "", item.get("first_seen") or "", _vinted_age_text(item),
         item.get("last_seen_active") or "",
         item.get("sold_detected_at") or "", _num(item.get("time_to_sell_min")), _num(item.get("time_to_sell_max")),
         format_days(days_to_sell(item)),

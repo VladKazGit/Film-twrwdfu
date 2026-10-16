@@ -12,14 +12,14 @@ covered pages are checked by age: list items every tick (< 3 h), every 4 h
 import argparse
 import sys
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import date, timedelta
 import tempfile
 import time
 import traceback
 from collections import Counter
 from pathlib import Path
 
-from . import clock, env, models, report
+from . import ageest, clock, env, models, report
 from .store import DataStore
 from .vinted import MAX_PAGES, BlockedError, VintedClient, VintedError, age_days
 
@@ -51,29 +51,32 @@ class Sweep:
     fill_pages_per_tick: int = 0  # faster until the first pass is done (0: no difference)
 
 
+SEARCH_MAX_PRICE_CHEAP = 20  # enrichment goes first to cameras for 'До 20 €'
 # Cheap cameras by brand, refreshed daily for 'До 20 €'.
 CHEAP_SWEEP = Sweep("search", tuple((q, None) for q in (
     "zenit", "zenith", "fed", "zorki", "kiev", "praktica", "canon", "nikon", "pentax", "olympus",
     "minolta", "konica", "yashica", "mamiya", "contax", "leica", "hasselblad", "rollei")), 20, 4, 3, 6, True, True)
-# Every list model at any price. The first pass and its age checks are pushed through
-# (7 pages, up to 60 checks per tick); afterwards 2 pages per tick, and checks only for
-# the few new candidates.
+# Every list model at any price. The first pass runs fast (20 pages per tick; ages come
+# from the id, no item page per candidate); afterwards 2 pages per tick.
 MODEL_SWEEP = Sweep("model_search", tuple((m.lower(), m) for m in models.MODEL_INFO), None, 10, 2, 60, False, True,
-                    fill_pages_per_tick=7)
+                    fill_pages_per_tick=20)
 SWEEPS = (CHEAP_SWEEP, MODEL_SWEEP)
 FOUND_MAX_AGE_DAYS = 183  # half a year on Vinted
 FOUND_MIN_ID = 8_300_000_000  # older ids are well over half a year old: skipped without opening
 OLD_ON_VINTED_DAYS = 30  # cameras listed on Vinted longer ago than this ...
-OLD_RECHECK_MIN = 3 * 1440  # ... are checked every 3 days instead of daily
+OLD_RECHECK_MIN = 5 * 1440  # ... are checked every 5 days instead of daily
 NEW_ROWS_HOURS = 12  # light blue 3: cameras first seen within this many hours
 FRESH_ROWS_HOURS = 3  # light green 3, like 'активен' (above the blue): within this many hours
 FOUND_CHECKS_PER_TICK = 15
+# Found cameras are added with an age estimated from the id, then each item page is
+# opened once (exact age, description, kit, status): more per tick once the first pass is done.
+ENRICH_PER_TICK, ENRICH_PER_TICK_AFTER_FILL = 20, 40
 
 LIST_BRANDS = {brand for brand, *_ in models.MODELS}
 SIGNAL_FLAGS = {"accessory?", "digital?"}
 
 # Check priorities: catalog -> list -> rest.
-P_LIST_VANISHED, P_LIST_DUE, P_LIST_DAILY, P_FOUND, P_DESCRIPTION, P_REST_VANISHED, P_REST_DUE = range(7)
+P_LIST_VANISHED, P_LIST_DUE, P_LIST_DAILY, P_FOUND, P_ENRICH, P_DESCRIPTION, P_REST_VANISHED, P_REST_DUE = range(8)
 
 
 # ---------------------------------------------------------------- item updates
@@ -207,16 +210,27 @@ def apply_page(item, page, now):
 
 
 def _remember_vinted_age(item, uploaded_ago, now):
-    """Keep the first known Vinted upload age ('Hochgeladen') as an estimated listing date."""
+    """Keep the first known Vinted upload age ('Hochgeladen') as the listing date; it
+    replaces an estimate by id. A found camera older than half a year is marked too old."""
     days = age_days(uploaded_ago)
-    if days is None or item.get("vinted_listed_est"):
+    if days is None or (item.get("vinted_listed_est") and item.get("age_source") != "id"):
         return
-    item.setdefault("uploaded_ago", uploaded_ago)
+    item["uploaded_ago"] = uploaded_ago
     item["vinted_listed_est"] = (clock.parse(now) - timedelta(days=days)).strftime("%Y-%m-%d")
+    if item.get("age_source") == "id":
+        item["age_source"] = "vinted"
+        item["age_days_at_discovery"] = days - clock.minutes_between(item["first_seen"], now) // 1440
+        if "found" in item["flags"] and days > FOUND_MAX_AGE_DAYS:
+            item["too_old"] = True
+
+
+def needs_enrich(item):
+    """A found camera added with an id-estimated age and no item page yet."""
+    return "found" in item["flags"] and (item.get("age_source") == "id" or not item.get("description_checked"))
 
 
 def recheck_minutes(item, now):
-    """Daily check, or every 3 days for cameras over a month old on Vinted."""
+    """Daily check, or every 5 days for cameras over a month old on Vinted."""
     listed = item.get("vinted_listed_est")
     if listed and clock.minutes_between(f"{listed} 00:00", now) > OLD_ON_VINTED_DAYS * 1440:
         return OLD_RECHECK_MIN
@@ -229,7 +243,7 @@ def wants_description(item):
     if item.get("description_checked") or item.get("description"):
         return False
     flags = set(item["flags"])
-    if "preexisting" in flags or SIGNAL_FLAGS & flags:
+    if "preexisting" in flags or "found" in flags or SIGNAL_FLAGS & flags:  # found: enrichment
         return False
     if item["group"] == "list":
         return True
@@ -264,7 +278,7 @@ def _can_request(client):
     return client.requests_made < MAX_REQUESTS and getattr(client, "has_time", lambda: True)()
 
 
-def search_sweep(sweep, state, client, active, closed, now, today, stats, changed):
+def search_sweep(sweep, state, client, active, closed, now, today, stats, changed, estimate=None):
     """Advance one search pass by a slice: candidate age checks, then result pages.
 
     A list camera from the results that is not tracked yet becomes a candidate;
@@ -327,6 +341,22 @@ def search_sweep(sweep, state, client, active, closed, now, today, stats, change
                 st["skipped"].append(rec_id)
                 skipped.add(rec_id)
                 stats["search_skipped"] += 1
+            elif estimate is not None:
+                # Age from the id: no item page now; the card is enriched later.
+                stats["search_candidates"] += 1
+                listed = estimate(rec_id)
+                age = (date.fromisoformat(today) - listed).days
+                if age > FOUND_MAX_AGE_DAYS:
+                    st["skipped"].append(rec_id)
+                    skipped.add(rec_id)
+                    stats["search_skipped"] += 1
+                    continue
+                item = new_item(rec, now, None, ["found"])
+                item.update(age_source="id", vinted_listed_est=listed.isoformat(), age_days_at_discovery=age)
+                active[rec_id] = item
+                changed.add(rec_id)
+                st["seen"].append(rec_id)
+                stats["found"] += 1
             else:
                 st["pending"][str(rec_id)] = rec
                 stats["search_candidates"] += 1
@@ -478,10 +508,14 @@ def run_tick(store, client, labels=None, now=None):
         priority = check_priority(item, now, vanished=item["id"] >= boundary and item["id"] not in seen)
         if priority is not None:
             queue.append((priority, item["last_checked_at"], item["id"]))
+        elif needs_enrich(item):
+            cheap = (report.current_price(item) or 0) <= SEARCH_MAX_PRICE_CHEAP
+            queue.append((P_ENRICH, ("0" if cheap else "1") + item["first_seen"], item["id"]))
         elif wants_description(item):
             queue.append((P_DESCRIPTION, item["first_seen"], item["id"]))
     queue.sort()
-    daily = descriptions = found_checks = 0
+    daily = descriptions = found_checks = enriched = 0
+    enrich_cap = ENRICH_PER_TICK_AFTER_FILL if state.get(MODEL_SWEEP.key, {}).get("passes") else ENRICH_PER_TICK
     promoted = []  # rest items that became list cameras through their description
     for priority, _, item_id in queue:
         item = active[item_id]
@@ -498,6 +532,11 @@ def run_tick(store, client, labels=None, now=None):
         if priority == P_DESCRIPTION:
             descriptions += 1
             if descriptions > DESCRIPTION_CHECKS_PER_TICK:
+                stats["deferred"] += 1
+                continue
+        if priority == P_ENRICH:
+            enriched += 1
+            if enriched > enrich_cap:
                 stats["deferred"] += 1
                 continue
         if priority >= P_REST_VANISHED and not rest_enabled:
@@ -517,9 +556,9 @@ def run_tick(store, client, labels=None, now=None):
             continue
         stats["checks"] += 1
         changed.add(item_id)
-        if priority == P_DESCRIPTION:
+        if priority in (P_DESCRIPTION, P_ENRICH):
             item["description_checked"] = True
-            stats["descriptions"] += 1
+            stats["descriptions" if priority == P_DESCRIPTION else "enriched"] += 1
         status = apply_page(item, page, now)
         if status == "sold":
             stats[f"sold_{item['group']}"] += 1
@@ -532,11 +571,21 @@ def run_tick(store, client, labels=None, now=None):
                 stats["description_to_list"] += 1
                 promoted.append(item_id)
 
+    # Found cameras that turned out older than half a year: not tracked at all.
+    for item_id in [i for i, it in active.items() if it.get("too_old")]:
+        del active[item_id]
+        changed.discard(item_id)
+        store.discard(item_id)
+        state.setdefault(MODEL_SWEEP.key, {}).setdefault("skipped", []).append(item_id)
+        stats["too_old"] += 1
+
     # ---- searches for older list cameras (lowest priority; skipped on full-scan ticks to avoid peaks)
     if rest_enabled and not first_run and not full_scan:
+        estimate = ageest.build_estimator([*active.values(), *closed.values()], state.get("max_seen_id"),
+                                          date.fromisoformat(today))
         for sweep in SWEEPS:
             try:
-                search_sweep(sweep, state, client, active, closed, now, today, stats, changed)
+                search_sweep(sweep, state, client, active, closed, now, today, stats, changed, estimate)
             except BlockedError as exc:
                 errors.append(f"search: {exc}")
                 rest_enabled = False
@@ -601,6 +650,7 @@ def _finish(store, state, now, started, client, stats, errors, full_scan, pages,
         "reclassified": stats["reclassified"], "reopened": stats["reopened"],
         "search_pages": stats["search_pages"], "search_candidates": stats["search_candidates"],
         "found": stats["found"], "search_skipped": stats["search_skipped"], "found_missing": stats["found_missing"],
+        "enriched": stats["enriched"], "too_old": stats["too_old"],
         "rest_enabled": rest_enabled, "errors": [env.redact(e) for e in errors],
         # Names stay in the private data repo and sheet; log_line() never prints them.
         "added": [_camera_label(i) for i in added], "sold_names": [_camera_label(i) for i in sold],
@@ -630,6 +680,7 @@ def log_line(run):
             f" | search: pages {run.get('search_pages', 0)}, candidates {run.get('search_candidates', 0)},"
             f" found {run.get('found', 0)}, too old/gone {run.get('search_skipped', 0)},"
             f" missing from search {run.get('found_missing', 0)}"
+            f" | enriched {run.get('enriched', 0)}, too old {run.get('too_old', 0)}"
             f"{'' if run['rest_enabled'] else ' | rest disabled today'}"
             f" | errors: {'; '.join(run['errors']) or 'none'}")
 
