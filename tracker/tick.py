@@ -29,7 +29,7 @@ FULL_SCAN_EVERY_MIN = 240
 REST_MIN_PRICE = 3.0
 REST_TRACK_MIN = 180
 LIST_TRACK_MIN = 30 * 1440
-MAX_REQUESTS = 75
+MAX_REQUESTS = 60
 DAILY_CHECKS_PER_TICK = 25
 DESCRIPTION_CHECKS_PER_TICK = 10
 BOUNDARY_TAIL = 10
@@ -52,9 +52,9 @@ class Sweep:
 # Cheap cameras by brand, refreshed daily for 'До 20 €'.
 CHEAP_SWEEP = Sweep("search", tuple((q, None) for q in (
     "zenit", "zenith", "fed", "zorki", "kiev", "praktica", "canon", "nikon", "pentax", "olympus",
-    "minolta", "konica", "yashica", "mamiya", "contax", "leica", "hasselblad", "rollei")), 20, 4, 2, 8, True, False)
-# Every list model at any price; a pass takes about two days.
-MODEL_SWEEP = Sweep("model_search", tuple((m.lower(), m) for m in models.MODEL_INFO), None, 10, 3, 16, False, True)
+    "minolta", "konica", "yashica", "mamiya", "contax", "leica", "hasselblad", "rollei")), 20, 4, 2, 4, True, False)
+# Every list model at any price; slow on purpose (a pass and the first fill take about 4 days).
+MODEL_SWEEP = Sweep("model_search", tuple((m.lower(), m) for m in models.MODEL_INFO), None, 10, 2, 8, False, True)
 SWEEPS = (CHEAP_SWEEP, MODEL_SWEEP)
 FOUND_MAX_AGE_DAYS = 183  # half a year on Vinted
 FOUND_MIN_ID = 8_300_000_000  # older ids are well over half a year old: skipped without opening
@@ -140,6 +140,7 @@ def close(item, status, now, price=None):
         item["time_to_sell_min"] = max(0, clock.minutes_between(item["first_seen"], item["last_seen_active"]))
         if item.get("listed_after"):
             item["time_to_sell_max"] = clock.minutes_between(item["listed_after"], now)
+        item["days_to_sell"] = report.days_to_sell(item)
 
 
 def set_model(item, model, source):
@@ -345,7 +346,10 @@ def run_tick(store, client, labels=None, now=None):
             if item.get("model_source") == "manual":
                 continue
             cls = models.classify(item["title"], item.get("description"), item.get("vinted_brand"))
-            if cls["model"] != item.get("model"):
+            signal = sorted(SIGNAL_FLAGS & set(cls["flags"]))
+            flags = [f for f in item["flags"] if f not in SIGNAL_FLAGS] + signal
+            if cls["model"] != item.get("model") or flags != item["flags"]:
+                item["flags"] = flags
                 set_model(item, cls["model"], cls["model_source"])
                 if item.get("closed_at"):
                     item["group"] = "list" if item["in_list"] else "rest"
@@ -464,8 +468,8 @@ def run_tick(store, client, labels=None, now=None):
                 set_model(item, cls["model"], "description")
                 stats["description_to_list"] += 1
 
-    # ---- searches for older list cameras (lowest priority)
-    if rest_enabled and not first_run:
+    # ---- searches for older list cameras (lowest priority; skipped on full-scan ticks to avoid peaks)
+    if rest_enabled and not first_run and not full_scan:
         for sweep in SWEEPS:
             try:
                 search_sweep(sweep, state, client, active, closed, now, today, stats, changed)

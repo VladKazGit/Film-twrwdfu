@@ -2,6 +2,8 @@
 import statistics
 from collections import Counter
 
+from . import clock
+
 # Sale time buckets by the upper estimate (time_to_sell_max), minutes.
 BUCKETS = [(30, "< 30 мин"), (360, "30 мин – 6 ч"), (1440, "6–24 ч"), (10080, "1–7 дн"), (None, "> 7 дн")]
 FAST_MINUTES = 30
@@ -22,7 +24,7 @@ SOURCE_RU = {"title": "заголовок", "description": "описание", "
 ITEM_HEADER = [
     "id", "Модель", "Заголовок", "Статус", "Цена старт", "Цена финал", "Сохранений", "Выставлен после", "Впервые",
     "Выставлен на Vinted (при обнаружении)",
-    "Последний раз активен", "Продажа обнаружена", "Время продажи мин, мин", "Время продажи макс, мин",
+    "Последний раз активен", "Продажа обнаружена", "Время продажи мин, мин", "Время продажи макс, мин", "Продали за",
     "Корзина", "Комплект", "Детали комплекта", "Тип", "Формат", "Регион", "Бренд", "Источник модели",
     "Флаги", "Состояние", "Ссылка",
 ]
@@ -37,6 +39,43 @@ def bucket(item):
         if limit is None or item["time_to_sell_max"] <= limit:
             return label
     return None
+
+
+def days_to_sell(item):
+    """Days from listing to the detected sale, or None.
+
+    New listings start at the tick before they first showed up (upper
+    estimate, as in the buckets); old, bumped and preexisting ones at Vinted's
+    own upload date ('Hochgeladen'), which is coarse (weeks, months).
+    """
+    if item.get("status") != "sold" or not item.get("sold_detected_at"):
+        return None
+    if item.get("listed_after") and not set(item.get("flags") or []) & {"preexisting", "found", "bumped"}:
+        start = item["listed_after"]
+    elif item.get("vinted_listed_est"):
+        start = f"{item['vinted_listed_est']} 00:00"
+    else:
+        return None
+    return round(max(0, clock.minutes_between(start, item["sold_detected_at"])) / 1440, 2)
+
+
+def _plural(n, one, few, many):
+    if n % 10 == 1 and n % 100 != 11:
+        return one
+    return few if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14 else many
+
+
+def format_days(days):
+    """'меньше дня', '3 дня', '12 дней' up to 30 days, then months: '2 месяца'."""
+    if days is None:
+        return ""
+    if days < 1:
+        return "меньше дня"
+    if days <= 30:
+        n = int(days)
+        return f"{n} {_plural(n, 'день', 'дня', 'дней')}"
+    n = max(1, round(days / 30))
+    return f"{n} {_plural(n, 'месяц', 'месяца', 'месяцев')}"
 
 
 def fast_confidence(item):
@@ -76,6 +115,7 @@ def item_row(item):
         item.get("listed_after") or "", item.get("first_seen") or "", item.get("uploaded_ago") or "",
         item.get("last_seen_active") or "",
         item.get("sold_detected_at") or "", _num(item.get("time_to_sell_min")), _num(item.get("time_to_sell_max")),
+        format_days(days_to_sell(item)),
         bucket(item) or "", KIT_RU.get(item.get("kit"), ""), ", ".join(item.get("kit_details") or []),
         MECH_RU.get(item.get("mech_type"), ""), FORMAT_RU.get(item.get("format"), ""),
         REGION_RU.get(item.get("region"), ""), item.get("brand") or "",
@@ -136,12 +176,14 @@ def summarize(items, now):
     per_model = {}
     for item in groups["list"]:
         stats = per_model.setdefault(item["model"], {"seen": 0, "sold": 0, "fast": 0, "maybe": 0, "times": [],
-                                                     "favourites": []})
+                                                     "favourites": [], "days": []})
         stats["seen"] += 1
         if item.get("favourites") is not None:
             stats["favourites"].append(item["favourites"])
         if item.get("status") == "sold":
             stats["sold"] += 1
+            if days_to_sell(item) is not None:
+                stats["days"].append(days_to_sell(item))
             if bucket(item):
                 stats["times"].append(item["time_to_sell_max"])
             if bucket(item) == BUCKETS[0][1]:
@@ -151,7 +193,8 @@ def summarize(items, now):
     models = [
         {"model": model, "seen": s["seen"], "sold": s["sold"], "sold_under_30": s["fast"], "maybe_under_30": s["maybe"],
          "median_max_minutes": statistics.median(s["times"]) if s["times"] else None,
-         "mean_favourites": round(statistics.mean(s["favourites"]), 1) if s["favourites"] else None}
+         "mean_favourites": round(statistics.mean(s["favourites"]), 1) if s["favourites"] else None,
+         "median_days_to_sell": statistics.median(s["days"]) if s["days"] else None}
         for model, s in per_model.items()
     ]
     models.sort(key=lambda m: (-m["sold_under_30"], -m["maybe_under_30"], -m["sold"], -m["seen"], m["model"]))
@@ -179,9 +222,9 @@ def summary_rows(summary):
     rows += [["Возможно < 30 мин (по нижней оценке)", lst["fast_maybe"], rest["fast_maybe"]]]
     rows += [["Продано без оценки (preexisting/night/bumped/found)", lst["sold_without_estimate"], rest["sold_without_estimate"]]]
     rows += [[], ["Модель", "Появилось", "Продано", "Продано < 30 мин", "Возможно < 30 мин",
-                  "Медиана макс. времени продажи, мин", "Сохранений в среднем"]]
+                  "Медиана макс. времени продажи, мин", "Сохранений в среднем", "Продали за (медиана)"]]
     rows += [[m["model"], m["seen"], m["sold"], m["sold_under_30"], m["maybe_under_30"], _num(m["median_max_minutes"]),
-              _num(m["mean_favourites"])]
+              _num(m["mean_favourites"]), format_days(m.get("median_days_to_sell"))]
              for m in summary["models"]]
     width = max(len(r) for r in rows)
     return [r + [""] * (width - len(r)) for r in rows]

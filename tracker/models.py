@@ -243,7 +243,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 3
+VERSION = 4
 
 # Models that must not match when the text also contains this pattern.
 MODEL_EXCLUDE = {
@@ -381,10 +381,13 @@ _ACCESSORY_WORDS = re.compile(
     r"|light ?meter|posemetre|esposimetro|ruckteil|\bfilm ?back|magazin\b|gegenlichtblende"
     r"|lens hood|ausloser|\bfilm(?:e|s)?\b(?!\s*(?:kamera|camera))|pellicol|pellicule|\bfilmrolle"
     r"|\bback\b|data ?back|finder|(?<!mess)sucher\b|\bviseur|\bmirino|waist ?level|lichtschacht"
-    r"|zubehor\b|acc?es+oires?\b|accessori[oe]?\b|accessor(?:y|ies)\b|toebehoren\b")
+    r"|zubehor\b|acc?es+oires?\b|accessori[oe]?\b|accessor(?:y|ies)\b|toebehoren\b"
+    r"|katalog|catalog|cataloghi|catalogue|depliant|prospekt|brochure|broschure|\bbuch\b|\bbook\b|\blibro\b|\blivre\b|\bposter\b|zeitschrift|rivista|\bflyer")
 # Words that make a listing an accessory unless a "with" word comes before them.
+# Printed matter (catalogues, brochures, books) counts too.
 _STRONG_ACCESSORY = re.compile(
     r"zubehor\b|acc?es+oires?\b|accessori[oe]?\b|accessor(?:y|ies)\b|toebehoren\b"
+    r"|katalog|catalog|cataloghi|catalogue|depliant|prospekt|brochure|broschure|\bbuch\b|\bbook\b|\blibro\b|\blivre\b|\bposter\b|zeitschrift|rivista|\bflyer"
     r"|camera (?:strap|bag|case|accessor)|kamera(?:tasche|gurt)")
 _LEADING_FILLER = re.compile(
     r"^(?:\W|(?:vintage|rare|ancien(?:ne)?|alt(?:e|er)?|old|lot|lotto|set|kit|neu|new|nuovo)\b)+")
@@ -494,7 +497,11 @@ def classify(title, description=None, vinted_brand=None):
     if hits:
         span, model = hits[0][:2], hits[0][2]
         source = "title"
-    elif description and not NON_LIST_SERIES.search(normalize(title)):
+    title_flags = flags_of(title, span)
+    # An accessory/digital title does not get a camera model from its description
+    # ('Lotto depliant e cataloghi Leica' -> description mentions an M3).
+    if model is None and description and not NON_LIST_SERIES.search(normalize(title)) \
+            and not {"accessory?", "digital?"} & set(title_flags):
         hits = find_models(description, extra + brands_in(title)[:1])
         if hits:
             model, source = hits[0][2], "description"
@@ -522,7 +529,7 @@ def classify(title, description=None, vinted_brand=None):
         "format": info["format"],
         "kit": kit,
         "kit_details": kit_details,
-        "flags": flags_of(title, span),
+        "flags": title_flags,
     }
 
 

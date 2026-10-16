@@ -249,6 +249,15 @@ def main():
     young = {**old, "vinted_listed_est": "2026-10-10"}
     assert tick.check_priority(young, "2026-10-20 10:38", vanished=False) == tick.P_FOUND
 
+    # 'Продали за': days for new listings, Vinted's date for old ones, months past 30 days.
+    assert [report.format_days(d) for d in (None, 0.4, 1, 3.9, 5, 21, 30, 45, 62, 150)] == [
+        "", "меньше дня", "1 день", "3 дня", "5 дней", "21 день", "30 дней", "2 месяца", "2 месяца", "5 месяцев"]
+    new = {"status": "sold", "listed_after": "2026-10-16 10:07", "sold_detected_at": "2026-10-19 10:37", "flags": []}
+    old = {"status": "sold", "listed_after": None, "vinted_listed_est": "2026-06-01",
+           "sold_detected_at": "2026-10-19 10:37", "flags": ["found"]}
+    assert report.days_to_sell(new) == 3.02 and report.format_days(report.days_to_sell(old)) == "5 месяцев"
+    assert report.days_to_sell({**new, "status": "active"}) is None
+
     # 'До 20 €' includes exactly 20 EUR.
     at = lambda price, group="list", flags=(): {"price_history": [{"at": "x", "price": price}], "group": group,
                                                 "flags": list(flags)}

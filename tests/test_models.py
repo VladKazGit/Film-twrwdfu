@@ -129,6 +129,9 @@ FLAG_CASES = [
     ("Film tested! - Minolta F25 35mm film camera", [], None),
     ("Konica Big Mini 35mm Filmkamera Tasche Getestet", [], "extras"),
     ("Canon IXUS (elph) vintage 1996", [], None),
+    ("Lotto depliant e cataloghi vintage Leica anni 50 rari in italiano", ["accessory?"], None),
+    ("Leica M3 Katalog 1958", ["accessory?"], None),
+    ("Canon AE-1 mit Anleitung und Prospekt", [], None),
     ("Appareil photo numérique vintage", ["digital?"], None),
     ("Nikon Z fc + Nikkor Z DX 16-50mm + SD 128GB", ["digital?"], None),
     ("Canons FTb mit Blitz und Weitwinkel linse", [], "with_lens"),
@@ -145,6 +148,7 @@ DESC_CASES = [
     ("Canon EOS 5000", "Gehäuse wie Canon AE-1", None),
     ("Appareil photo Canon", "Canon AE-1 Program avec objectif", "Canon AE-1 Program"),
     ("Kamera Canon", "Canon EF Spiegelreflexkamera von 1976", "Canon EF"),
+    ("Lotto depliant e cataloghi vintage Leica anni 50", "Leica M3, Leicaflex SL, IIIf", None),
 ]
 
 

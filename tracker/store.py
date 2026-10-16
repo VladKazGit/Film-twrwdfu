@@ -14,7 +14,7 @@ CSV_FIELDS = [
     "id", "url", "title", "condition", "brand", "model", "model_source", "in_list", "group",
     "mech_type", "region", "format", "kit", "kit_details", "price_start", "price_final", "favourites",
     "listed_after", "first_seen", "last_seen_active", "sold_detected_at", "closed_at", "status",
-    "time_to_sell_min", "time_to_sell_max", "flags", "seller_id",
+    "time_to_sell_min", "time_to_sell_max", "days_to_sell", "vinted_listed_est", "flags", "seller_id",
 ]
 
 
