@@ -137,13 +137,19 @@ def is_new(item, since):
 
 
 def item_rows(items, with_group=False, new_since=None):
-    """Item sheet rows, newest first. new_since adds a last column marking new cameras ('да')."""
+    """Item sheet rows, newest first. with_group adds 'Группа'; new_since adds a last
+    column marking new cameras ('да')."""
     ordered = sorted(items, key=lambda i: (i.get("first_seen") or "", i["id"]), reverse=True)
-    if new_since:
-        return [ITEM_HEADER + [NEW_HEADER]] + [item_row(i) + ["да" if is_new(i, new_since) else ""] for i in ordered]
-    if with_group:
-        return [ITEM_HEADER + ["Группа"]] + [item_row(i) + [GROUP_RU.get(i.get("group"), "")] for i in ordered]
-    return [ITEM_HEADER] + [item_row(i) for i in ordered]
+    header = ITEM_HEADER + (["Группа"] if with_group else []) + ([NEW_HEADER] if new_since else [])
+    rows = [header]
+    for item in ordered:
+        row = item_row(item)
+        if with_group:
+            row.append(GROUP_RU.get(item.get("group"), ""))
+        if new_since:
+            row.append("да" if is_new(item, new_since) else "")
+        rows.append(row)
+    return rows
 
 
 def current_price(item):

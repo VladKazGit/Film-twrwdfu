@@ -609,7 +609,7 @@ def write_sheets(writer, result, state_flags):
     cheap = [i for i in candidates if i.get("model") and sheets.model_key(i["model"]) in allowed]
     print(f"sheets: cheap sheet {len(cheap)} of {len(candidates)} list cameras at <= 20 EUR"
           f" (the others have models missing from the models sheet)")
-    writer.replace(sheets.CHEAP_SHEET, report.item_rows(cheap, with_group=True))
+    writer.replace(sheets.CHEAP_SHEET, report.item_rows(cheap, with_group=True, new_since=new_since))
     writer.replace(sheets.FAST_SHEET, report.fast_rows(items))
     writer.replace(sheets.SUMMARY_SHEET, report.summary_rows(result["summary"]))
     if not state_flags.get("runs_header"):
@@ -627,12 +627,19 @@ def write_sheets(writer, result, state_flags):
             updates["status_colors"] = sorted(colored | set(todo))
         except Exception as exc:
             print(f"sheets: status colours not applied: {type(exc).__name__}: {env.redact(exc)}")
-    if not state_flags.get("new_rows_color") and writer.has(sheets.LIST_SHEET):
-        green_first = sheets.LIST_SHEET in (updates.get("status_colors") or colored)
+    # Light blue 3 rows for new cameras; the rule goes below the green status rule.
+    blue = set(state_flags.get("new_rows_colors") or [])
+    if state_flags.get("new_rows_color"):  # earlier flag: only 'Список' had the rule
+        blue.add(sheets.LIST_SHEET)
+    green = set(updates.get("status_colors") or colored)
+    widths = {sheets.LIST_SHEET: len(report.ITEM_HEADER) + 1, sheets.CHEAP_SHEET: len(report.ITEM_HEADER) + 2}
+    for title, width in widths.items():
+        if title in blue or not writer.has(title):
+            continue
         try:
-            width = len(report.ITEM_HEADER) + 1
-            writer.color_new_rows(sheets.LIST_SHEET, width - 1, width, 1 if green_first else 0)
-            updates["new_rows_color"] = True
+            writer.color_new_rows(title, width - 1, width, 1 if title in green else 0)
+            blue.add(title)
+            updates["new_rows_colors"] = sorted(blue)
         except Exception as exc:
             print(f"sheets: new-row colours not applied: {type(exc).__name__}: {env.redact(exc)}")
     return updates
