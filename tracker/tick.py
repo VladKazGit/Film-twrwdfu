@@ -482,6 +482,7 @@ def run_tick(store, client, labels=None, now=None):
             queue.append((P_DESCRIPTION, item["first_seen"], item["id"]))
     queue.sort()
     daily = descriptions = found_checks = 0
+    promoted = []  # rest items that became list cameras through their description
     for priority, _, item_id in queue:
         item = active[item_id]
         if priority == P_LIST_DAILY:
@@ -529,6 +530,7 @@ def run_tick(store, client, labels=None, now=None):
             if cls["model"]:
                 set_model(item, cls["model"], "description")
                 stats["description_to_list"] += 1
+                promoted.append(item_id)
 
     # ---- searches for older list cameras (lowest priority; skipped on full-scan ticks to avoid peaks)
     if rest_enabled and not first_run and not full_scan:
@@ -561,11 +563,21 @@ def run_tick(store, client, labels=None, now=None):
     state["last_tick_at"] = now
     state.setdefault("first_run_at", now)
     return _finish(store, state, now, started, client, stats, errors, full_scan, pages_read,
-                   rest_enabled, today, active, closed, changed, fatal=False, daily=first_run or first_of_day)
+                   rest_enabled, today, active, closed, changed, fatal=False, daily=first_run or first_of_day,
+                   promoted=promoted)
+
+
+def _camera_label(item):
+    """'Canon AE-1 — 120 €' (+ how it came in) for the 'Запуски' comment."""
+    flags = set(item.get("flags") or [])
+    origin = " (найдено)" if "found" in flags else " (поднято)" if "bumped" in flags else ""
+    price = report.current_price(item)
+    price_text = f" — {report._price_text(price)} €" if price is not None else ""
+    return f"{item.get('model') or (item.get('title') or '')[:40]}{price_text}{origin}"
 
 
 def _finish(store, state, now, started, client, stats, errors, full_scan, pages, rest_enabled, today,
-            active, closed, changed, fatal, daily=False):
+            active, closed, changed, fatal, daily=False, promoted=()):
     if not rest_enabled:
         state["rest_disabled_on"] = today
     for item_id in changed:
@@ -573,6 +585,9 @@ def _finish(store, state, now, started, client, stats, errors, full_scan, pages,
         store.save(item)
         if item.get("closed_at") and item_id in active:
             closed[item_id] = active.pop(item_id)
+    added = [i for i in active.values() if i.get("group") == "list" and (i.get("first_seen") == now or i["id"] in promoted)]
+    sold = [i for i in closed.values()
+            if i.get("group") == "list" and i.get("status") == "sold" and i.get("sold_detected_at") == now]
     run = {
         "at": now, "full_scan": full_scan, "pages": pages, "requests": client.requests_made,
         "mb": round(client.bytes_received / 1e6, 1), "seconds": round(time.monotonic() - started),
@@ -587,6 +602,8 @@ def _finish(store, state, now, started, client, stats, errors, full_scan, pages,
         "search_pages": stats["search_pages"], "search_candidates": stats["search_candidates"],
         "found": stats["found"], "search_skipped": stats["search_skipped"], "found_missing": stats["found_missing"],
         "rest_enabled": rest_enabled, "errors": [env.redact(e) for e in errors],
+        # Names stay in the private data repo and sheet; log_line() never prints them.
+        "added": [_camera_label(i) for i in added], "sold_names": [_camera_label(i) for i in sold],
     }
     store.save_state(state)
     store.append_run(run)
@@ -621,7 +638,17 @@ def runs_row(run):
     return [run["at"], "да" if run["full_scan"] else "", run["pages"], run["requests"], run["mb"], run["seconds"],
             run["new_list"], run["new_rest"], run["bumped"], run["checks"], run["sold_list"], run["sold_rest"],
             run["deleted"], run["reserved_hidden"], run["closed_3h"], run["closed_30d"], run["descriptions"],
-            run["description_to_list"], run["deferred"], "; ".join(run["errors"])]
+            run["description_to_list"], run["deferred"], "; ".join(run["errors"]), runs_comment(run)]
+
+
+def runs_comment(run, limit=40):
+    """'Добавлены (3): Canon AE-1 — 120 €, … | Проданы (1): Zenit E — 15 €'."""
+    parts = []
+    for title, names in (("Добавлены", run.get("added") or []), ("Проданы", run.get("sold_names") or [])):
+        if names:
+            more = f" … и ещё {len(names) - limit}" if len(names) > limit else ""
+            parts.append(f"{title} ({len(names)}): " + ", ".join(names[:limit]) + more)
+    return " | ".join(parts)
 
 
 # ---------------------------------------------------------------- sheets and entry point
@@ -643,23 +670,23 @@ def write_sheets(writer, result, state_flags):
     new_since = clock.stamp(clock.parse(result["run"]["at"]) - timedelta(hours=NEW_ROWS_HOURS))
     fresh_since = clock.stamp(clock.parse(result["run"]["at"]) - timedelta(hours=FRESH_ROWS_HOURS))
     writer.replace(sheets.LIST_SHEET, report.item_rows([i for i in items if i.get("group") == "list"],
-                                                       new_since=new_since, fresh_since=fresh_since))
+                                                       new_since=new_since, fresh_since=fresh_since), links=True)
     candidates = report.cheap_cameras(items, sheets.CHEAP_MAX_PRICE)
     cheap = [i for i in candidates if i.get("model") and sheets.model_key(i["model"]) in allowed]
     print(f"sheets: cheap sheet {len(cheap)} of {len(candidates)} list cameras at <= 20 EUR"
           f" (the others have models missing from the models sheet)")
     # 'До 20 €' is mostly old cheap cameras found by search: mark what entered the sheet in 12 h.
     writer.replace(sheets.CHEAP_SHEET, report.item_rows(cheap, with_group=True, new_since=new_since,
-                                                        new_old_listings=True, fresh_since=fresh_since))
-    writer.replace(sheets.FAST_SHEET, report.fast_rows(items))
-    writer.replace(sheets.SALES_SHEET, report.sales_rows(items))
+                                                        new_old_listings=True, fresh_since=fresh_since), links=True)
+    writer.replace(sheets.FAST_SHEET, report.fast_rows(items), links=True)
+    writer.replace(sheets.SALES_SHEET, report.sales_rows(items), links=True)
     writer.replace(sheets.SUMMARY_SHEET, report.summary_rows(result["summary"]))
-    if not state_flags.get("runs_header"):
+    if not state_flags.get("runs_header_v2"):  # v2: with the 'Комментарий' column
         writer.ensure_runs_header()
-        updates["runs_header"] = True
+        updates["runs_header"] = updates["runs_header_v2"] = True
     writer.append_run(runs_row(result["run"]))
     if result["daily"]:
-        writer.replace(sheets.REST_SHEET, report.item_rows([i for i in items if i.get("group") == "rest"]))
+        writer.replace(sheets.REST_SHEET, report.item_rows([i for i in items if i.get("group") == "rest"]), links=True)
     colored = set(state_flags.get("status_colors") or [])
     todo = [t for t in (sheets.LIST_SHEET, sheets.REST_SHEET, sheets.CHEAP_SHEET, sheets.FAST_SHEET)
             if t not in colored and writer.has(t)]

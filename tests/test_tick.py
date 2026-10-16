@@ -37,10 +37,16 @@ class FakeWorksheet:
 
     def update(self, range_name, values, value_input_option):
         assert range_name == "A1" and len(values) <= self.size[0] or not self.size[0], self.title
-        self.rows = [list(r) for r in values]
+        self.mode, self.sent = value_input_option, values
+        if value_input_option == "USER_ENTERED":  # Sheets keeps the text, hides the apostrophe
+            values = [[c[1:] if isinstance(c, str) and c.startswith("'") else c for c in r] for r in values]
+        if len(values) == 1 and self.rows:  # header row only
+            self.rows[0] = list(values[0])
+        else:
+            self.rows = [list(r) for r in values]
 
-    def resize(self, rows, cols):
-        self.size = (rows, cols)
+    def resize(self, rows=None, cols=None):
+        self.size = (rows if rows is not None else self.size[0], cols if cols is not None else self.size[1])
 
     def freeze(self, rows):
         pass
@@ -199,6 +205,15 @@ def main():
         assert rule["ranges"][0]["startColumnIndex"] == report.ITEM_HEADER.index("Статус")
         runs = ss.sheets["Запуски"].rows
         assert runs[0] == sheets.RUNS_HEADER and runs[1][1] == "check-setup" and len(runs) == 3
+        assert updates["runs_header_v2"]
+        # Links clickable, other text kept literal.
+        fast_ws = ss.sheets["Быстрые продажи"]
+        link_col = report.ITEM_HEADER.index("Ссылка")
+        assert fast_ws.mode == "USER_ENTERED" and fast_ws.rows[1][link_col].startswith("https://")
+        status_col = report.ITEM_HEADER.index("Статус")
+        assert fast_ws.sent[1][status_col] == "'продан" and fast_ws.rows[1][status_col] == "продан"
+        assert fast_ws.rows[1][0] == 1011 and fast_ws.sent[1][link_col] == fast_ws.rows[1][link_col]
+        assert ss.sheets["Сводка"].mode == "RAW"
         assert ss.sheets["Список"].rows[0][0] == "id" and len(ss.sheets["Список"].rows) >= 4
         assert ss.sheets["Модели"].rows[0] == sheets.MODELS_HEADER and len(ss.sheets["Модели"].rows) > 150
         assert ss.sheets["Сводка"].rows[0][0] == "Обновлено"
@@ -219,7 +234,7 @@ def main():
         # 'До 20 €' follows 'Модели': the user deletes Zenit E, it leaves 'До 20 €' and is not re-added.
         models_ws = ss.sheets["Модели"]
         models_ws.rows = [r for r in models_ws.rows if r[0] != "Zenit E"]
-        state_flags = {"runs_header": True, "models_offered": updates["models_offered"],
+        state_flags = {"runs_header": True, "runs_header_v2": True, "models_offered": updates["models_offered"],
                        "status_colors": updates["status_colors"], "new_rows_colors": updates["new_rows_colors"],
                        "fresh_rows_colors": updates["fresh_rows_colors"], "fresh_rows_green": True}
         assert tick.write_sheets(writer, r5, state_flags) == {}
@@ -228,7 +243,7 @@ def main():
         models_ws.rows.append(["зенит-е"])
         offered = [m for m in updates["models_offered"] if m != "Zenit KM"]
         models_ws.rows = [r for r in models_ws.rows if r[0] != "Zenit KM"]
-        upd = tick.write_sheets(writer, r5, {"runs_header": True, "models_offered": offered,
+        upd = tick.write_sheets(writer, r5, {"runs_header": True, "runs_header_v2": True, "models_offered": offered,
                                              "status_colors": updates["status_colors"], "new_rows_color": True,
                                              "fresh_rows_green": True})
         assert upd.get("new_rows_colors") == ["До 20 €", "Список"], "old flag: only 'До 20 €' added"
@@ -365,6 +380,19 @@ def main():
     tick.apply_page(yashica, {"status": "active", "price": 3.0, "description": "brochure originale in ottime condizioni",
                               "favourites": 0}, "2026-10-16 12:15")
     assert yashica["group"] == "rest" and "accessory?" in yashica["flags"]
+
+    # 'Запуски' comment: what entered the list and what sold this tick.
+    comment = tick.runs_comment(r2["run"])
+    assert "Добавлены (3): " in comment and "Nikon FM2 — 150 €" in comment and "Zenit 12XP — 10 € (поднято)" in comment, comment
+    assert comment.endswith("Проданы (1): Canon AE-1 — 45 €"), comment
+    assert tick.runs_comment({"added": [f"m{k}" for k in range(45)]}).endswith("m39 … и ещё 5")
+    assert "Canon" not in tick.log_line(r2["run"]), "names never reach the Actions log"
+
+    # An older, shorter 'Запуски' header is replaced, not duplicated.
+    ss2 = FakeSpreadsheet()
+    ss2.sheets["Запуски"].rows = [sheets.RUNS_HEADER[:-1], ["2026-10-16 07:07"]]
+    sheets.SheetWriter(ss2).ensure_runs_header()
+    assert ss2.sheets["Запуски"].rows[0] == sheets.RUNS_HEADER and len(ss2.sheets["Запуски"].rows) == 2
 
     # Vinted's German upload age, in Russian.
     assert [report.uploaded_ago_ru(t) for t in ("5 Monaten", "1 Monat", "2 Wochen", "1 Woche", "3 Tagen", "1 Tag",

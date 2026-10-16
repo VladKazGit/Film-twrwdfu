@@ -20,6 +20,7 @@ RUNS_HEADER = [
     "Время", "Полный обход", "Страниц", "Запросов", "МБ", "Секунд", "Новых: список", "Новых: остальные",
     "Поднятых старых", "Проверено страниц товара", "Продано: список", "Продано: остальные", "Удалено",
     "Резерв/скрыт", "Закрыто 3 ч", "Закрыто 30 дн", "Описаний", "Описание → список", "Отложено", "Ошибки",
+    "Комментарий",
 ]
 MANUAL_HEADER = ["id (или ссылка)", "Модель", "Комментарий"]
 MODELS_HEADER = ["Модель", "Бренд", "Тип", "Формат", "Регион"]
@@ -31,6 +32,13 @@ LIGHT_YELLOW_3 = {"red": 255 / 255, "green": 242 / 255, "blue": 204 / 255}  # #f
 def _same_color(a, b):
     """The API leaves zero channels out and rounds floats."""
     return all(abs(a.get(k, 0) - b.get(k, 0)) < 0.01 for k in ("red", "green", "blue"))
+
+
+def _as_typed(cell):
+    """Text stays literal under USER_ENTERED; links become clickable."""
+    if not isinstance(cell, str) or not cell or cell.startswith(("http://", "https://")):
+        return cell
+    return "'" + cell
 
 
 def column_letter(index):
@@ -127,17 +135,31 @@ class SheetWriter:
             self.spreadsheet.batch_update({"requests": requests})
         return len(requests)
 
-    def replace(self, title, rows):
-        """Overwrite a whole sheet with rows (first row is the header)."""
+    def replace(self, title, rows, links=False):
+        """Overwrite a whole sheet with rows (first row is the header).
+
+        links=True writes 'as typed' so URLs become clickable; every other text
+        cell gets a leading apostrophe so it stays literal text (no formulas,
+        no dates from '2026-10-16 15:52').
+        """
         ws = self._get(title)
         width = max(len(r) for r in rows)
         ws.resize(rows=max(len(rows), 2), cols=width)
-        ws.update(range_name="A1", values=rows, value_input_option="RAW")
+        if links:
+            rows = [[_as_typed(c) for c in r] for r in rows]
+        ws.update(range_name="A1", values=rows, value_input_option="USER_ENTERED" if links else "RAW")
 
     def ensure_runs_header(self):
-        """'Запуски' may start with the check-setup test row: put the header on top."""
+        """'Запуски' may start with the check-setup test row (header goes on top) or
+        with an older, shorter header (it is replaced)."""
         ws = self._get(RUNS_SHEET, RUNS_HEADER)
-        if ws.row_values(1) != RUNS_HEADER:
+        first = ws.row_values(1)
+        if first == RUNS_HEADER:
+            return
+        ws.resize(cols=max(len(RUNS_HEADER), 5))
+        if first and first == RUNS_HEADER[:len(first)]:
+            ws.update(range_name="A1", values=[RUNS_HEADER], value_input_option="RAW")
+        else:
             ws.insert_row(RUNS_HEADER, 1, value_input_option="RAW")
 
     def append_run(self, row):
