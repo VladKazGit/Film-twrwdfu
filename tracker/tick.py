@@ -430,11 +430,13 @@ def run_tick(store, client, labels=None, now=None):
             cls = models.classify(item["title"], item.get("description"), item.get("vinted_brand"))
             signal = sorted(SIGNAL_FLAGS & set(cls["flags"]))
             flags = [f for f in item["flags"] if f not in SIGNAL_FLAGS] + signal
+            before = (item.get("model"), list(item["flags"]), item.get("group"))
             if cls["model"] != item.get("model") or flags != item["flags"]:
                 item["flags"] = flags
                 set_model(item, cls["model"], cls["model_source"])
-                if item.get("closed_at"):
-                    item["group"] = group_of(item)
+            # Group rules changed too (accessories left 'Список'): apply them to old cards.
+            item["group"] = group_of(item)
+            if (item.get("model"), item["flags"], item["group"]) != before:
                 changed.add(item["id"])
                 stats["reclassified"] += 1
         state["models_version"] = models.VERSION

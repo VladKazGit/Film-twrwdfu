@@ -243,7 +243,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 7
+VERSION = 8
 
 # Models that must not match when the text also contains this pattern.
 MODEL_EXCLUDE = {

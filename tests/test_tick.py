@@ -446,6 +446,21 @@ def main():
         "5 месяцев назад", "1 месяц назад", "2 недели назад", "1 неделю назад", "3 дня назад", "1 день назад",
         "1 час назад", "5 часов назад", "18 минут назад", "1 год назад", "2 года назад", "", "gestern"]
 
+    # An old card that kept group 'list' with an accessory flag (created before the rule) moves out.
+    with tempfile.TemporaryDirectory() as tmp:
+        store = DataStore(tmp)
+        base = {1: [rec(10_390_000_000, "Kamera", 30.0)] + older(10_389_999_999)}
+        tick.run_tick(store, FakeClient(base), now="2026-10-16 17:00")
+        acc = tick.new_item(rec(10_384_439_658, "Accessoires Olympus OM 10", 10.0), "2026-10-16 09:00", None, [])
+        acc["group"] = "list"  # as created by the older code
+        store.save(acc)
+        state = store.load_state()
+        state["models_version"] = 0
+        store.save_state(state)
+        r = tick.run_tick(store, FakeClient(base), now="2026-10-16 17:15")
+        moved = (store.load_active().get(acc["id"]) or store.load_closed().get(acc["id"]))
+        assert moved["group"] == "rest" and r["run"]["reclassified"] >= 1, (moved["group"], r["run"]["reclassified"])
+
     # 'Продали за': days for new listings, Vinted's date for old ones, months past 30 days.
     assert [report.format_days(d) for d in (None, 0.4, 1, 3.9, 5, 21, 30, 45, 62, 150)] == [
         "", "меньше дня", "1 день", "3 дня", "5 дней", "21 день", "30 дней", "2 месяца", "2 месяца", "5 месяцев"]
