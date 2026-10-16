@@ -611,6 +611,7 @@ def write_sheets(writer, result, state_flags):
           f" (the others have models missing from the models sheet)")
     writer.replace(sheets.CHEAP_SHEET, report.item_rows(cheap, with_group=True, new_since=new_since))
     writer.replace(sheets.FAST_SHEET, report.fast_rows(items))
+    writer.replace(sheets.SALES_SHEET, report.sales_rows(items))
     writer.replace(sheets.SUMMARY_SHEET, report.summary_rows(result["summary"]))
     if not state_flags.get("runs_header"):
         writer.ensure_runs_header()

@@ -176,6 +176,12 @@ def main():
         assert ss.sheets["Модели"].rows[0] == sheets.MODELS_HEADER and len(ss.sheets["Модели"].rows) > 150
         assert ss.sheets["Сводка"].rows[0][0] == "Обновлено"
         assert "Остальные" in ss.sheets
+        sales = ss.sheets["Продажи"].rows
+        assert sales[0] == report.SALES_HEADER and [r[-1] for r in sales[1:]] == [1011, 400, 1010], [r[-1] for r in sales[1:]]
+        fm2 = dict(zip(report.SALES_HEADER, sales[1]))
+        assert fm2["Модель"] == "Nikon FM2" and fm2["Цена на старте"] == 150.0 and fm2["Цена при продаже"] == 140.0
+        assert fm2["Изменение цены, €"] == -10.0 and fm2["Изменение цены, %"] == -6.7
+        assert fm2["Выставлена"] == "2026-10-16 07:07 – 07:22" and fm2["Висела на сайте"] == "меньше дня"
         fast = ss.sheets["Быстрые продажи"].rows
         assert fast[0][-2:] == ["Группа", "Уверенность"], fast[0]
         assert [r[0] for r in fast[1:]] == [1011, 400] and fast[1][-1] == "возможно", "reserved fast, sold 3 h later"

@@ -18,6 +18,13 @@ MECH_RU = {"mechanical": "механическая", "electronic": "полуав
 REGION_RU = {"Japan": "Япония", "Europe": "Европа", "Eastern Bloc": "Восточный блок"}
 FORMAT_RU = {"35mm": "35 мм", "medium": "средний"}
 KIT_RU = {"body": "тушка", "with_lens": "с объективом", "extras": "с аксессуарами", "unklar": "неясно"}
+KIT_DETAILS_RU = {"lens": "объектив", "flash": "вспышка", "bag": "сумка/чехол", "strap": "ремень", "film": "плёнка",
+                  "manual": "инструкция", "winder": "моторный привод", "filter": "фильтр", "box": "коробка",
+                  "accessories": "аксессуары"}
+
+
+def kit_details_text(item):
+    return ", ".join(KIT_DETAILS_RU.get(d, d) for d in item.get("kit_details") or [])
 SOURCE_RU = {"title": "заголовок", "description": "описание", "brand_only": "только бренд",
              "photo": "фото", "manual": "вручную"}
 
@@ -120,7 +127,7 @@ def item_row(item):
         item.get("last_seen_active") or "",
         item.get("sold_detected_at") or "", _num(item.get("time_to_sell_min")), _num(item.get("time_to_sell_max")),
         format_days(days_to_sell(item)),
-        bucket(item) or "", KIT_RU.get(item.get("kit"), ""), ", ".join(item.get("kit_details") or []),
+        bucket(item) or "", KIT_RU.get(item.get("kit"), ""), kit_details_text(item),
         MECH_RU.get(item.get("mech_type"), ""), FORMAT_RU.get(item.get("format"), ""),
         REGION_RU.get(item.get("region"), ""), item.get("brand") or "",
         SOURCE_RU.get(item.get("model_source"), ""), ", ".join(item.get("flags") or []),
@@ -149,6 +156,52 @@ def item_rows(items, with_group=False, new_since=None):
         if new_since:
             row.append("да" if is_new(item, new_since) else "")
         rows.append(row)
+    return rows
+
+
+SALES_HEADER = [
+    "Модель", "Бренд", "Заголовок", "Цена на старте", "Цена при продаже", "Изменение цены, €", "Изменение цены, %",
+    "История цены", "Выставлена", "Продажа обнаружена", "Висела на сайте", "Висела, дней",
+    "Время продажи макс, мин", "Комплект", "Детали комплекта", "Состояние", "Описание", "Тип", "Формат", "Регион",
+    "Сохранений", "Флаги", "Ссылка", "id",
+]
+DESCRIPTION_LIMIT = 2000  # characters per cell
+
+
+def _price_text(value):
+    return "" if value is None else (f"{value:.0f}" if float(value).is_integer() else f"{value:.2f}")
+
+
+def _listed_text(item):
+    """When the listing went up: a tick window for new listings, Vinted's date (~) for old ones."""
+    flags = set(item.get("flags") or [])
+    if item.get("listed_after") and not flags & {"preexisting", "found", "bumped"}:
+        return f"{item['listed_after']} – {item['first_seen'][11:]}"
+    if item.get("vinted_listed_est"):
+        return f"~{item['vinted_listed_est']}"
+    return ""
+
+
+def sales_rows(items):
+    """'Продажи': sold list cameras, newest sale first."""
+    sold = sorted((i for i in items if i.get("group") == "list" and i.get("status") == "sold"),
+                  key=lambda i: (i.get("sold_detected_at") or "", i["id"]), reverse=True)
+    rows = [SALES_HEADER]
+    for i in sold:
+        start, final = i.get("price_start"), current_price(i)
+        change = round(final - start, 2) if start is not None and final is not None else None
+        percent = round(100 * change / start, 1) if change is not None and start else None
+        history = " → ".join(_price_text(p["price"]) for p in i.get("price_history") or [] if p.get("price") is not None)
+        days = days_to_sell(i)
+        rows.append([
+            i.get("model") or "", i.get("brand") or "", i.get("title") or "",
+            _num(start), _num(final), _num(change), _num(percent), history,
+            _listed_text(i), i.get("sold_detected_at") or "", format_days(days), _num(days),
+            _num(i.get("time_to_sell_max")), KIT_RU.get(i.get("kit"), ""), kit_details_text(i),
+            i.get("condition") or "", (i.get("description") or "")[:DESCRIPTION_LIMIT],
+            MECH_RU.get(i.get("mech_type"), ""), FORMAT_RU.get(i.get("format"), ""), REGION_RU.get(i.get("region"), ""),
+            _num(i.get("favourites")), ", ".join(i.get("flags") or []), i.get("url") or "", i["id"],
+        ])
     return rows
 
 
