@@ -76,7 +76,7 @@ FOUND_CHECKS_PER_TICK = 15
 ENRICH_PER_TICK, ENRICH_PER_TICK_AFTER_FILL = 20, 40
 
 LIST_BRANDS = {brand for brand, *_ in models.MODELS}
-SIGNAL_FLAGS = {"accessory?", "digital?"}
+SIGNAL_FLAGS = {"accessory?", "digital?", "compact?"}
 
 # Check priorities: catalog -> list -> rest.
 P_LIST_VANISHED, P_LIST_DUE, P_LIST_DAILY, P_FOUND, P_ENRICH, P_DESCRIPTION, P_REST_VANISHED, P_REST_DUE = range(8)

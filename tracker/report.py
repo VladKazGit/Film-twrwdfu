@@ -8,7 +8,7 @@ from . import clock, models
 # Sale time buckets by the upper estimate (time_to_sell_max), minutes.
 BUCKETS = [(30, "< 30 мин"), (360, "30 мин – 6 ч"), (1440, "6–24 ч"), (10080, "1–7 дн"), (None, "> 7 дн")]
 FAST_MINUTES = 30
-EXCLUDED_FLAGS = {"accessory?", "digital?"}
+EXCLUDED_FLAGS = {"accessory?", "digital?", "compact?"}
 GROUP_RU = {"list": "Список", "rest": "Остальные"}
 
 STATUS_RU = {

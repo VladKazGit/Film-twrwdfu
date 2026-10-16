@@ -209,7 +209,8 @@ MODELS = [
     ("Minolta", "Minolta X-500", ELEC, S35, ["x 500", "x 570"], None),
     ("Minolta", "Minolta XG-M", ELEC, S35, ["xg m"], None),
     ("Minolta", "Minolta XD-7", ELEC, S35, ["xd 7!", "xd 11!", "^xd"], None),
-    ("Minolta", "Minolta CLE", ELEC, S35, ["cle"], None),
+    # 'cle' right after the brand only: 'Porte clé minolta' is a keychain ('clé' -> 'cle').
+    ("Minolta", "Minolta CLE", ELEC, S35, ["^cle"], None),
     ("Konica", "Konica FS-1", ELEC, S35, ["fs 1"], None),
     ("Konica", "Konica FC-1", ELEC, S35, ["fc 1"], None),
     ("Konica", "Konica Autoreflex TC", ELEC, S35, ["auto reflex tc!"], None),
@@ -248,7 +249,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 14
+VERSION = 16
 
 # Models added later: the model search looks for their old listings first (once).
 PRIORITY_SEARCH = ("Canon FX", "Canon FP", "Canon TL", "Canon TLb", "Canon TX")
@@ -419,7 +420,9 @@ _PARTS = re.compile(
     # badge, battery cap / compartment, eyecup and cap
     r"|etichetta|\btappo\b|\bvano\b|oeilleton|\bcache\b|eyecup|augenmuschel|oculaire"
     # body / lens / rear caps
-    r"|body ?caps?\b|gehausedeckel|ruckdeckel|lens caps?\b|objektivdeckel")
+    r"|body ?caps?\b|gehausedeckel|ruckdeckel|lens caps?\b|objektivdeckel"
+    # focusing screen; keychains
+    r"|depoli|matglas|porte ?-?cles?\b|keychain|key ?ring|schlusselanhanger|portachiavi|sleutelhanger")
 _FOR_BEFORE = re.compile(r"\b(?:per|for|pour|fur|als|voor|para)\s+(?:\w+\s+)?$")
 # Words that say the listing is a camera body or kit, not just its manual.
 _KIT_WORDS = re.compile(r"\bbody\b|gehause|boitier|\bcorpo\b|objektiv|\blens|obiettiv|objectif|\bkit\b|\bset\b|\bnur\b")
@@ -442,6 +445,13 @@ _LEADING_FILLER = re.compile(
 _MODEL_NUMBER = re.compile(r"[a-z]*\d+[a-z0-9]*")
 _WITH_WORDS = re.compile(r"\b(?:mit|with|avec|con|met|inkl|incl|inklusive|including|plus|und|and|et|e)\b|[+&]")
 _FOR_WORDS = re.compile(r"\b(?:fur|for|pour|per|voor|passend|passt|compatible|kompatibel|compatibile)\b")
+# Point-and-shoot signs. No camera of the list has a built-in flash or is a compact, so a
+# 'Pentax K2 Macro' with 'flash intégré' and a '35-70 tele-macro' zoom is a compact.
+_COMPACT = re.compile(
+    r"flash (?:integre|incorpore|integrato|incorporato|intégré)|(?:integrated|built[- ]?in) flash"
+    r"|(?:eingebaute[rnm]?|integrierte[rnm]?) blitz|ingebouwde flitser|point ?(?:and|&|n) ?shoot"
+    # the camera type only: 'kompakt' alone also praises small SLRs ('OM-1 kompakt und leicht')
+    r"|kompaktkamera|compact camera|appareil (?:photo )?(?:argentique )?compact|fotocamera compatta")
 _DIGITAL = re.compile(
     r"digital|numerique|megapixel|\bmpx?\b|\d\s?mp\b|\bdslr|\bdslm|mirrorless|spiegellos"
     r"|coolpix|powershot|lumix|cyber ?shot|dimage|finepix|\bsd ?-?karte|\bsd ?card|\d+ ?gb\b|\bz ?fc\b"
@@ -584,6 +594,8 @@ def classify(title, description=None, vinted_brand=None):
         span, model = hits[0][:2], hits[0][2]
         source = "title"
     title_flags = flags_of(title, span)
+    if _COMPACT.search(normalize(f"{title} {description or ''}")):
+        title_flags = title_flags + ["compact?"]
     # 'Yashica Mat-124g' at 3 EUR whose description starts 'brochure originale ...'.
     if (description and "accessory?" not in title_flags and not _CAMERA_WORDS.search(normalize(title))
             and lead_is_accessory(description)):
@@ -591,7 +603,7 @@ def classify(title, description=None, vinted_brand=None):
     # An accessory/digital title does not get a camera model from its description
     # ('Lotto depliant e cataloghi Leica' -> description mentions an M3).
     if model is None and description and not NON_LIST_SERIES.search(normalize(title)) \
-            and not {"accessory?", "digital?"} & set(title_flags):
+            and not {"accessory?", "digital?", "compact?"} & set(title_flags):
         hits = find_models(description, extra + brands_in(title)[:1])
         if hits:
             model, source = hits[0][2], "description"
