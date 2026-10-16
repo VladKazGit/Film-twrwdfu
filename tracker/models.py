@@ -249,7 +249,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 17
+VERSION = 18
 
 # Models added later: the model search looks for their old listings first (once).
 PRIORITY_SEARCH = ("Canon FX", "Canon FP", "Canon TL", "Canon TLb", "Canon TX")
@@ -398,6 +398,13 @@ _ACCESSORY_WORDS = re.compile(
     r"|katalog|catalog|cataloghi|catalogue|depliant|prospekt|brochure|broschure|\bguide\b|\bguida\b|ratgeber|leitfaden|\bbuch\b|\bbook\b|\blibro\b|\blivre\b|\bposter\b|zeitschrift|rivista|\bflyer")
 # Lens makers and zoom: 'Zoom Vivitar 70/210 per Nikon F' is a lens.
 _LENS_WORDS = re.compile(r"\bzoom\b|vivitar|tamron|\bsigma\b|tokina|soligor|hanimex")
+# A title without a model or camera words that names a lens maker or a zoom range may be a lens
+# ('Vivitar Series 1 70-210mm Makro-Zoom') or a compact ('Canon Prima Zoom 76'): no list model
+# from its description.
+_LENS_TITLE = re.compile(_LENS_WORDS.pattern + r"|\b\d{2,3}\s?-\s?\d{2,3}\s?mm\b")
+# 'passt direkt auf Canon AE-1, A-1, FTb' in a description: compatible cameras, not the item.
+_COMPATIBLE_BEFORE = re.compile(
+    r"\b(?:passt|passend|fits?|compatible|kompatibel|compatibile|adatt[oa]|geeignet)\b[^.!?\n()]*$")
 # Manuals. 'manual' next to camera words means a manual camera ('fully manual SLR').
 _MANUAL = re.compile(
     r"(?:bedienungs|betriebs)?anleitung|gebrauchsanweisung|handbuch|\bnotice\b|mode d.emploi|istruzioni|\blibretto"
@@ -610,9 +617,13 @@ def classify(title, description=None, vinted_brand=None):
         title_flags = title_flags + ["accessory?"]
     # An accessory/digital title does not get a camera model from its description
     # ('Lotto depliant e cataloghi Leica' -> description mentions an M3).
-    if model is None and description and not NON_LIST_SERIES.search(normalize(title)) \
+    norm_title = normalize(title)
+    lens_title = _LENS_TITLE.search(norm_title) and not _CAMERA_WORDS.search(norm_title)
+    if model is None and description and not NON_LIST_SERIES.search(norm_title) and not lens_title \
             and not {"accessory?", "digital?", "compact?"} & set(title_flags):
-        hits = find_models(description, extra + brands_in(title)[:1])
+        norm_desc = normalize(description)
+        hits = [h for h in find_models(description, extra + brands_in(title)[:1])
+                if not _COMPATIBLE_BEFORE.search(norm_desc[:h[0]])]
         if hits:
             model, source = hits[0][2], "description"
 

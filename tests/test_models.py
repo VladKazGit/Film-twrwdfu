@@ -204,6 +204,11 @@ FLAG_CASES = [
 DESC_CASES = [
     ("Canon EOS 5000", "Canon EF Objektiv 35-80 dabei", None),
     ("Canon EOS 5000", "Gehäuse wie Canon AE-1", None),
+    ("Canon FD Anschluss", "Passt direkt auf Canon AE-1, A-1, FTb etc. Linsen sauber.", None),
+    ("Vivitar Series 1 70-210mm f/3.5 Makro-Zoom", "Objektiv für Canon FD. Getestet an einer Canon AE-1.", None),
+    ("Canon Prima Zoom 76", "Kompakt, wie eine Canon AE-1", None),
+    ("Kamera mit Zoom 70-210mm", "Canon AE-1 mit Vivitar Zoom", "Canon AE-1"),
+    ("Appareil photo Canon", "Canon AE-1, zoom compatible avec Canon FD", "Canon AE-1"),
     ("Appareil photo Canon", "Canon AE-1 Program avec objectif", "Canon AE-1 Program"),
     ("Kamera Canon", "Canon EF Spiegelreflexkamera von 1976", "Canon EF"),
     ("Lotto depliant e cataloghi vintage Leica anni 50", "Leica M3, Leicaflex SL, IIIf", None),
