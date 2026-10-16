@@ -41,6 +41,30 @@ def main():
     c = client([503, 200, 503, 200, 503, 200])  # failures not in a row: no block
     assert [outcome(c) for _ in range(3)] == ["ok 200"] * 3
     assert outcome(client([200], time_budget=0)) == "error: time budget exhausted"
+
+    # Session start: a timeout on the home page is retried (it failed a whole tick once).
+    class FakeSession:
+        answers = []
+
+        def __init__(self):
+            self.headers, self.cookies = {}, {"access_token_web": "x"}
+
+        def get(self, url, params=None, timeout=None):
+            a = FakeSession.answers.pop(0)
+            if isinstance(a, Exception):
+                raise a
+            return Resp(a)
+
+    real = vinted.requests.Session
+    vinted.requests.Session = FakeSession
+    try:
+        FakeSession.answers = [requests.ReadTimeout(), 200, 200]  # home times out, home ok, page ok
+        c = vinted.VintedClient(delay=(0, 0))
+        assert outcome(c) == "ok 200" and c.requests_made == 3
+        FakeSession.answers = [requests.ReadTimeout()] * 3
+        assert outcome(vinted.VintedClient(delay=(0, 0))) == "blocked: vinted not responding"
+    finally:
+        vinted.requests.Session = real
     print("vinted client tests passed")
 
 

@@ -335,10 +335,29 @@ class VintedClient:
         if "access_token_web" not in self.session.cookies:
             raise BlockedError("no session cookie")
 
+    def _start_with_retries(self):
+        """Open the session; a slow or failing home page is retried like any request
+        (a single ReadTimeout there used to fail the whole tick)."""
+        for attempt in range(len(RETRY_BACKOFF) + 1):
+            try:
+                self.start()
+                self._failures_in_row = 0
+                return
+            except BlockedError:
+                raise
+            except VintedError as exc:
+                if "budget" in str(exc):
+                    raise
+                self.session = None
+                self._failed()
+                if attempt == len(RETRY_BACKOFF):
+                    raise
+                time.sleep(RETRY_BACKOFF[attempt])
+
     def fetch(self, url, params=None):
         """GET with retries: 429/5xx/network back off, 401/403 renew the session once."""
         if self.session is None:
-            self.start()
+            self._start_with_retries()
         renewed = False
         for attempt in range(len(RETRY_BACKOFF) + 1):
             try:
@@ -354,7 +373,7 @@ class VintedClient:
             code = resp.status_code
             if code in (401, 403) and not renewed:
                 renewed = True
-                self.start()
+                self._start_with_retries()
                 continue
             if code == 429 or code >= 500:
                 self._failed()
