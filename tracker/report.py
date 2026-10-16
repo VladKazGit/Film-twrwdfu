@@ -44,19 +44,23 @@ def bucket(item):
 def days_to_sell(item):
     """Days from listing to the detected sale, or None.
 
-    New listings start at the tick before they first showed up (upper
-    estimate, as in the buckets); old, bumped and preexisting ones at Vinted's
-    own upload date ('Hochgeladen'), which is coarse (weeks, months).
+    New listings: from the tick before they first showed up to the tick that
+    found the sale (upper estimate, as in the buckets; ticks are 15 min apart).
+    Old, bumped and preexisting ones: from Vinted's own upload date
+    ('Hochgeladen', coarse) to the middle of [last seen active, sale detected],
+    since their checks are a day or more apart.
     """
     if item.get("status") != "sold" or not item.get("sold_detected_at"):
         return None
+    sold = item["sold_detected_at"]
     if item.get("listed_after") and not set(item.get("flags") or []) & {"preexisting", "found", "bumped"}:
-        start = item["listed_after"]
-    elif item.get("vinted_listed_est"):
-        start = f"{item['vinted_listed_est']} 00:00"
-    else:
+        return round(max(0, clock.minutes_between(item["listed_after"], sold)) / 1440, 2)
+    if not item.get("vinted_listed_est"):
         return None
-    return round(max(0, clock.minutes_between(start, item["sold_detected_at"])) / 1440, 2)
+    start = f"{item['vinted_listed_est']} 00:00"
+    seen = item.get("last_seen_active") or sold
+    middle = (clock.minutes_between(start, seen) + clock.minutes_between(start, sold)) / 2
+    return round(max(0, middle) / 1440, 2)
 
 
 def _plural(n, one, few, many):

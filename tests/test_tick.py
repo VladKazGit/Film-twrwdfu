@@ -249,6 +249,26 @@ def main():
     young = {**old, "vinted_listed_est": "2026-10-10"}
     assert tick.check_priority(young, "2026-10-20 10:38", vanished=False) == tick.P_FOUND
 
+    # Old cheap camera: a search sighting does not postpone its check; the daily
+    # cheap pass flags it when it drops out of its brand's results.
+    cheap = tick.Sweep("c", (("zenit", None), ("fed", None)), 20, 4, 1, 4, True, True)
+    ZET = 10_134_306_267
+    state, active, closed, stats, changed = {}, {}, {}, Counter(), set()
+    client = FakeClient({}, {ZET: {"uploaded_ago": "2 Wochen", "price": 10.0}},
+                        {("zenit", 1): [rec(ZET, "Zenit ET appareil photo", 10.0)]})
+    for now in ("2026-10-16 00:04", "2026-10-16 00:19", "2026-10-16 00:34"):
+        tick.search_sweep(cheap, state, client, active, closed, now, "2026-10-16", stats, changed)
+    assert ZET in active and active[ZET]["last_checked_at"] == "2026-10-16 00:19", "found and checked at 00:19"
+    state["c"]["done_on"] = None
+    tick.search_sweep(cheap, state, client, active, closed, "2026-10-16 08:07", "2026-10-16", stats, changed)
+    assert active[ZET]["last_seen_active"] == "2026-10-16 08:07" and active[ZET]["last_checked_at"] == "2026-10-16 00:19"
+    tick.search_sweep(cheap, state, client, active, closed, "2026-10-16 08:22", "2026-10-16", stats, changed)  # 'fed'
+    assert not active[ZET].get("needs_check")
+    client.search = {}  # sold: gone from search
+    for now in ("2026-10-17 07:22", "2026-10-17 07:37"):
+        tick.search_sweep(cheap, state, client, active, closed, now, "2026-10-17", stats, changed)
+    assert active[ZET].get("needs_check"), "missing from the daily cheap pass -> checked next"
+
     # A list camera closed as 'unsold in 3 h' is reopened and checked.
     with tempfile.TemporaryDirectory() as tmp:
         store = DataStore(tmp)
@@ -269,7 +289,8 @@ def main():
         "", "меньше дня", "1 день", "3 дня", "5 дней", "21 день", "30 дней", "2 месяца", "2 месяца", "5 месяцев"]
     new = {"status": "sold", "listed_after": "2026-10-16 10:07", "sold_detected_at": "2026-10-19 10:37", "flags": []}
     old = {"status": "sold", "listed_after": None, "vinted_listed_est": "2026-06-01",
-           "sold_detected_at": "2026-10-19 10:37", "flags": ["found"]}
+           "last_seen_active": "2026-10-17 10:37", "sold_detected_at": "2026-10-19 10:37", "flags": ["found"]}
+    assert report.days_to_sell(old) == 139.44, "middle of [last seen, detected] = 18.10 10:37"
     assert report.days_to_sell(new) == 3.02 and report.format_days(report.days_to_sell(old)) == "5 месяцев"
     assert report.days_to_sell({**new, "status": "active"}) is None
 

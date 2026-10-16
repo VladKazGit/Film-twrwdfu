@@ -52,7 +52,7 @@ class Sweep:
 # Cheap cameras by brand, refreshed daily for 'До 20 €'.
 CHEAP_SWEEP = Sweep("search", tuple((q, None) for q in (
     "zenit", "zenith", "fed", "zorki", "kiev", "praktica", "canon", "nikon", "pentax", "olympus",
-    "minolta", "konica", "yashica", "mamiya", "contax", "leica", "hasselblad", "rollei")), 20, 4, 2, 4, True, False)
+    "minolta", "konica", "yashica", "mamiya", "contax", "leica", "hasselblad", "rollei")), 20, 4, 2, 4, True, True)
 # Every list model at any price; slow on purpose (a pass and the first fill take about 4 days).
 MODEL_SWEEP = Sweep("model_search", tuple((m.lower(), m) for m in models.MODEL_INFO), None, 10, 2, 8, False, True)
 SWEEPS = (CHEAP_SWEEP, MODEL_SWEEP)
@@ -122,11 +122,16 @@ def _set_favourites(item, count, now):
         item.setdefault("favourites_history", []).append({"at": now, "count": count})
 
 
-def mark_seen(item, rec, now):
-    """Item is in the catalog: it is active now."""
+def mark_seen(item, rec, now, checked=True):
+    """Item is in the catalog (or in search results): it is active now.
+
+    A search sighting is not a check (checked=False): it must not postpone the
+    scheduled page check of an old camera.
+    """
     item["status"] = "active"
     item["last_seen_active"] = now
-    item["last_checked_at"] = now
+    if checked:
+        item["last_checked_at"] = now
     _set_price(item, rec["price"], now)
     _set_favourites(item, rec.get("favourites"), now)
 
@@ -278,7 +283,7 @@ def search_sweep(sweep, state, client, active, closed, now, today, stats, change
             hits += model is None or cls["model"] == model
             rec_id = rec["id"]
             if rec_id in active:
-                mark_seen(active[rec_id], rec, now)
+                mark_seen(active[rec_id], rec, now, checked=False)
                 changed.add(rec_id)
                 st["seen"].append(rec_id)
             elif rec_id in closed or rec_id in skipped or str(rec_id) in st["pending"]:
@@ -293,8 +298,14 @@ def search_sweep(sweep, state, client, active, closed, now, today, stats, change
         if len(results) == 96 and st["page"] < sweep.max_pages and hits:
             st["page"] += 1
             continue
-        if sweep.presence and model:
-            _mark_missing(model, set(st["seen"]), st["query_started"], active, stats, changed)
+        if sweep.presence:
+            if model:
+                belongs = lambda i, m=model: i["model"] == m
+            else:  # brand query with a price cap: cheap cameras of that brand
+                brands = set(models.brands_in(query))
+                belongs = lambda i, b=brands, p=sweep.max_price: (
+                    i.get("brand") in b and (i["price_history"][-1]["price"] or 0) <= p)
+            _mark_missing(belongs, set(st["seen"]), st["query_started"], active, stats, changed)
         st["query"], st["page"] = st["query"] + 1, 1
         if st["query"] >= len(sweep.queries):
             st["query"], st["done_on"] = 0, today
@@ -302,11 +313,11 @@ def search_sweep(sweep, state, client, active, closed, now, today, stats, change
                 return
 
 
-def _mark_missing(model, seen, since, active, stats, changed):
-    """Tracked 'found' cameras of this model absent from its search results (and not seen
-    anywhere since the query started) may be sold: open their page next."""
+def _mark_missing(belongs, seen, since, active, stats, changed):
+    """Tracked 'found' cameras that belong to a finished query but are absent from its
+    results (and not seen anywhere since it started) may be sold: open their page next."""
     for item in active.values():
-        if ("found" in item["flags"] and item["model"] == model and item["id"] not in seen
+        if ("found" in item["flags"] and belongs(item) and item["id"] not in seen
                 and item["last_seen_active"] < since and not item.get("needs_check")):
             item["needs_check"] = True
             changed.add(item["id"])
