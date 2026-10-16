@@ -280,6 +280,16 @@ def main():
             tick.run_tick(store, FakeClient(base, pages_age, search), now=now)
         assert store.load_state()["search"]["done_on"] == "2026-10-18"
 
+    # First pass runs faster (fill pages per tick), later passes at the normal pace.
+    fill = tick.Sweep("f", tuple((f"q{k}", None) for k in range(6)), None, 10, 1, 4, False, False, fill_pages_per_tick=3)
+    state, client = {}, FakeClient({})
+    tick.search_sweep(fill, state, client, {}, {}, "2026-10-16 12:07", "2026-10-16", Counter(), set())
+    assert client.requests_made == 3 and state["f"]["query"] == 3
+    tick.search_sweep(fill, state, client, {}, {}, "2026-10-16 12:22", "2026-10-16", Counter(), set())
+    assert state["f"]["passes"] == 1 and state["f"]["query"] == 0
+    tick.search_sweep(fill, state, client, {}, {}, "2026-10-16 12:37", "2026-10-16", Counter(), set())
+    assert client.requests_made == 7 and state["f"]["query"] == 1, "after the first pass: 1 page per tick"
+
     # Model pass at any price: found -> missing from its model's results -> checked -> sold.
     sweep = tick.Sweep("t", (("canon ae-1", "Canon AE-1"), ("nikon f2", "Nikon F2")), None, 10, 1, 16, False, True)
     AE1 = 9_875_831_290

@@ -29,7 +29,7 @@ FULL_SCAN_EVERY_MIN = 240
 REST_MIN_PRICE = 3.0
 REST_TRACK_MIN = 180
 LIST_TRACK_MIN = 30 * 1440
-MAX_REQUESTS = 60
+MAX_REQUESTS = 85
 DAILY_CHECKS_PER_TICK = 25
 DESCRIPTION_CHECKS_PER_TICK = 10
 BOUNDARY_TAIL = 10
@@ -47,14 +47,18 @@ class Sweep:
     checks_per_tick: int  # candidate item pages opened per tick (age check)
     daily: bool           # one pass per day; otherwise passes run back to back
     presence: bool        # a tracked 'found' camera missing from its model's results gets checked
+    fill_pages_per_tick: int = 0  # faster until the first pass is done (0: no difference)
 
 
 # Cheap cameras by brand, refreshed daily for 'До 20 €'.
 CHEAP_SWEEP = Sweep("search", tuple((q, None) for q in (
     "zenit", "zenith", "fed", "zorki", "kiev", "praktica", "canon", "nikon", "pentax", "olympus",
     "minolta", "konica", "yashica", "mamiya", "contax", "leica", "hasselblad", "rollei")), 20, 4, 2, 4, True, True)
-# Every list model at any price; slow on purpose (a pass and the first fill take about 4 days).
-MODEL_SWEEP = Sweep("model_search", tuple((m.lower(), m) for m in models.MODEL_INFO), None, 10, 2, 8, False, True)
+# Every list model at any price. The first pass and its age checks are pushed through in
+# about two days (5 pages, up to 40 checks per tick); afterwards 2 pages per tick, and
+# checks only for the few new candidates.
+MODEL_SWEEP = Sweep("model_search", tuple((m.lower(), m) for m in models.MODEL_INFO), None, 10, 2, 40, False, True,
+                    fill_pages_per_tick=5)
 SWEEPS = (CHEAP_SWEEP, MODEL_SWEEP)
 FOUND_MAX_AGE_DAYS = 183  # half a year on Vinted
 FOUND_MIN_ID = 8_300_000_000  # older ids are well over half a year old: skipped without opening
@@ -291,7 +295,8 @@ def search_sweep(sweep, state, client, active, closed, now, today, stats, change
 
     if sweep.daily and st["done_on"] == today:
         return
-    for _ in range(sweep.pages_per_tick):
+    pages = sweep.fill_pages_per_tick if sweep.fill_pages_per_tick and not st.get("passes") else sweep.pages_per_tick
+    for _ in range(pages):
         if client.requests_made >= MAX_REQUESTS:
             return
         query, model = sweep.queries[st["query"] % len(sweep.queries)]
@@ -333,6 +338,7 @@ def search_sweep(sweep, state, client, active, closed, now, today, stats, change
         st["query"], st["page"] = st["query"] + 1, 1
         if st["query"] >= len(sweep.queries):
             st["query"], st["done_on"] = 0, today
+            st["passes"] = st.get("passes", 0) + 1
             if sweep.daily:
                 return
 
