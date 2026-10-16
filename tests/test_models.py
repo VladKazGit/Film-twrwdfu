@@ -156,6 +156,8 @@ FLAG_CASES = [
     ("Kiev 60 Pentaconsix manuale originale in russo", ["accessory?"], None),
     ("Oeilleton de visée et cache Canon AE-1", ["accessory?"], None),
     ("Oeilleton de visée Canon AE-1", ["accessory?"], None),
+    ("Œilleton de visée et cache canon ae-1", ["accessory?"], None),
+    ("Œilleton de visée canon ae-1", ["accessory?"], None),
     ("Reflex manuale Zenit E", [], None),
     ("Canon AE-1 messa a fuoco manuale", [], None),
     ("Olympus OM-10 senza batteria", [], None),

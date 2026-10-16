@@ -243,7 +243,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 12
+VERSION = 13
 
 # Models that must not match when the text also contains this pattern.
 MODEL_EXCLUDE = {
@@ -262,6 +262,8 @@ _CYRILLIC = {
     "п": "p", "р": "r", "с": "s", "т": "t", "у": "u", "ф": "f", "х": "h", "ц": "ts",
     "ч": "ch", "ш": "sh", "щ": "sch", "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu",
     "я": "ya", "і": "i", "ї": "i", "є": "e", "ґ": "g",
+    # Latin letters that accent stripping leaves alone ('Œilleton de visée').
+    "œ": "oe", "æ": "ae", "ø": "o", "ł": "l", "đ": "d", "ı": "i",
 }
 _TRANSLIT = str.maketrans(_CYRILLIC)
 _DASHES = re.compile(r"[‐-―−]")
