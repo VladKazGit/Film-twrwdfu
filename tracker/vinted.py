@@ -30,6 +30,7 @@ HEADERS = {
 
 RETRY_BACKOFF = (15, 45)  # seconds before 2nd and 3rd attempt on 429/5xx/network
 MAX_RETRY_AFTER = 90
+FAILURES_IN_ROW_BLOCK = 3  # network errors / 429 / 5xx in a row: treat Vinted as blocking us
 
 STATUSES = ("active", "reserved", "hidden", "sold", "deleted", "unknown")
 
@@ -286,18 +287,31 @@ def parse_item(html, status_code, final_url, item_id):
 class VintedClient:
     """Single-threaded polite session. Counts requests and bytes for logs."""
 
-    def __init__(self, delay=(2.0, 3.0), timeout=30, max_requests=None):
+    def __init__(self, delay=(2.0, 3.0), timeout=30, max_requests=None, time_budget=None):
         self.delay = delay
         self.timeout = timeout
         self.max_requests = max_requests
+        self.time_budget = time_budget  # seconds of Vinted traffic per tick (None: no limit)
         self.requests_made = 0
         self.bytes_received = 0
         self.session = None
         self._last_request = 0.0
+        self._started = time.monotonic()
+        self._failures_in_row = 0
+
+    def has_time(self):
+        return self.time_budget is None or time.monotonic() - self._started < self.time_budget
+
+    def _failed(self):
+        self._failures_in_row += 1
+        if self._failures_in_row >= FAILURES_IN_ROW_BLOCK:
+            raise BlockedError("vinted not responding")
 
     def _get(self, url, params=None):
         if self.max_requests is not None and self.requests_made >= self.max_requests:
             raise VintedError("request budget exhausted")
+        if not self.has_time():
+            raise VintedError("time budget exhausted")
         pause = random.uniform(*self.delay) - (time.monotonic() - self._last_request)
         if pause > 0:
             time.sleep(pause)
@@ -330,7 +344,10 @@ class VintedClient:
             try:
                 resp = self._get(url, params)
             except VintedError as exc:
-                if "budget" in str(exc) or attempt == len(RETRY_BACKOFF):
+                if "budget" in str(exc):
+                    raise
+                self._failed()
+                if attempt == len(RETRY_BACKOFF):
                     raise
                 time.sleep(RETRY_BACKOFF[attempt])
                 continue
@@ -340,6 +357,7 @@ class VintedClient:
                 self.start()
                 continue
             if code == 429 or code >= 500:
+                self._failed()
                 if attempt == len(RETRY_BACKOFF):
                     break
                 wait = RETRY_BACKOFF[attempt]
@@ -350,6 +368,7 @@ class VintedClient:
                 continue
             if code in (401, 403):
                 raise BlockedError(f"http {code}")
+            self._failures_in_row = 0
             return resp
         if resp.status_code == 429:
             raise BlockedError("http 429")

@@ -30,6 +30,7 @@ REST_MIN_PRICE = 3.0
 REST_TRACK_MIN = 180
 LIST_TRACK_MIN = 30 * 1440
 MAX_REQUESTS = 85
+TICK_TIME_BUDGET_S = 9 * 60  # Vinted traffic per tick; the rest goes to the next tick
 DAILY_CHECKS_PER_TICK = 25
 DESCRIPTION_CHECKS_PER_TICK = 10
 BOUNDARY_TAIL = 10
@@ -258,6 +259,11 @@ def check_priority(item, now, vanished):
     return P_LIST_DUE if since >= 240 else None
 
 
+def _can_request(client):
+    """Within the request and time budget of this tick."""
+    return client.requests_made < MAX_REQUESTS and getattr(client, "has_time", lambda: True)()
+
+
 def search_sweep(sweep, state, client, active, closed, now, today, stats, changed):
     """Advance one search pass by a slice: candidate age checks, then result pages.
 
@@ -272,7 +278,7 @@ def search_sweep(sweep, state, client, active, closed, now, today, stats, change
     skipped = set(st["skipped"])
 
     for key in list(st["pending"])[:sweep.checks_per_tick]:
-        if client.requests_made >= MAX_REQUESTS:
+        if not _can_request(client):
             return
         rec = st["pending"][key]
         if rec["id"] in active or rec["id"] in closed:
@@ -297,7 +303,7 @@ def search_sweep(sweep, state, client, active, closed, now, today, stats, change
         return
     pages = sweep.fill_pages_per_tick if sweep.fill_pages_per_tick and not st.get("passes") else sweep.pages_per_tick
     for _ in range(pages):
-        if client.requests_made >= MAX_REQUESTS:
+        if not _can_request(client):
             return
         query, model = sweep.queries[st["query"] % len(sweep.queries)]
         if st["page"] == 1:
@@ -496,7 +502,7 @@ def run_tick(store, client, labels=None, now=None):
         if priority >= P_REST_VANISHED and not rest_enabled:
             stats["deferred"] += 1
             continue
-        if client.requests_made >= MAX_REQUESTS:
+        if not _can_request(client):
             stats["deferred"] += 1
             continue
         try:
@@ -729,7 +735,7 @@ def _main(args):
         except Exception as exc:
             print(f"sheets unavailable: {type(exc).__name__}: {env.redact(exc)}")
             writer, code = None, 1
-    client = VintedClient(max_requests=args.max_requests)
+    client = VintedClient(max_requests=args.max_requests, time_budget=TICK_TIME_BUDGET_S)
 
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         root = Path(args.local) if args.local else datarepo.clone(Path(tmp) / "data")
