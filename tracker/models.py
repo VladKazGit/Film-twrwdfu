@@ -249,7 +249,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 16
+VERSION = 17
 
 # Models added later: the model search looks for their old listings first (once).
 PRIORITY_SEARCH = ("Canon FX", "Canon FP", "Canon TL", "Canon TLb", "Canon TX")
@@ -455,7 +455,9 @@ _COMPACT = re.compile(
 _DIGITAL = re.compile(
     r"digital|numerique|megapixel|\bmpx?\b|\d\s?mp\b|\bdslr|\bdslm|mirrorless|spiegellos"
     r"|coolpix|powershot|lumix|cyber ?shot|dimage|finepix|\bsd ?-?karte|\bsd ?card|\d+ ?gb\b|\bz ?fc\b"
-    r"|\beos \d{2,4}d\b|\beos \d{1,2}d\b|\bd\d{3,4}\b|\bk-(?:x|m|r|\d{1,2})\b|\*ist")
+    r"|\beos \d{2,4}d\b|\beos \d{1,2}d\b|\bd\d{3,4}\b|\bk-(?:x|m|r|\d{1,2})\b|\*ist"
+    # Minox digital miniatures of classic cameras ('Leica M3 Minox Miniaturizzata')
+    r"|\bminox\b|miniatur")
 
 _LENS = re.compile(
     r"objektiv|obiettiv|objectif|\blens(?:es)?\b|\blente\b|lentille|zoom|\bf\s?/\s?\d|\bf\d[.,]\d"
@@ -534,12 +536,18 @@ def _is_accessory(norm, model_span):
 
 
 def accessory_words(title):
-    """Accessory/part/manual words in a title that no "with" word introduces (for review)."""
+    """Accessory/part/manual words *before* the model in a title (for review): words after it
+    describe the kit ('Canon T90 Kamera Objektiv Speedlite'), words before it the object
+    ('Winder für Canon AE-1'). Nothing if the title names no model."""
     norm = normalize(title)
+    hits = find_models(norm)
+    if not hits:
+        return []
+    head = norm[:hits[0][0]]
     words = []
     for rx in (_PARTS, _MANUAL, _ACCESSORY_WORDS, _LENS_WORDS):
-        for m in rx.finditer(norm):
-            if not _WITH_WORDS.search(norm[:m.start()]) and m.group(0).strip() not in words:
+        for m in rx.finditer(head):
+            if not _WITH_WORDS.search(head[:m.start()]) and m.group(0).strip() not in words:
                 words.append(m.group(0).strip())
     return words
 

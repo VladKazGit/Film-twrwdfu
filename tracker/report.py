@@ -254,40 +254,26 @@ def current_price(item):
     return history[-1]["price"] if history else item.get("price_start")
 
 
-CHECK_HEADER = ["Причина", "id", "Модель", "Заголовок", "Цена", "Медиана модели", "Статус", "Источник модели",
+CHECK_HEADER = ["Причина", "id", "Модель", "Заголовок", "Цена", "Статус", "Источник модели",
                 "Начало описания", "Ссылка"]
-CHECK_PRICE_SHARE, CHECK_MIN_MEDIAN, CHECK_MIN_SAMPLES = 0.25, 40, 5
 
 
 def check_rows(items):
-    """'Проверка': rows of 'Список' that look like misrecognitions (manually labelled ones are trusted)."""
-    rows = [i for i in items if i.get("group") == "list" and i.get("model_source") != "manual"]
-    prices = {}
-    for i in rows:
-        if current_price(i):
-            prices.setdefault(i.get("model"), []).append(current_price(i))
-    medians = {m: statistics.median(p) for m, p in prices.items() if len(p) >= CHECK_MIN_SAMPLES}
+    """'Проверка': rows of 'Список' that look like misrecognitions (manually labelled ones are trusted).
+    Price is no sign: working cameras sell for 5-10 EUR."""
     found = []
-    for i in rows:
-        reasons, price, median = [], current_price(i), medians.get(i.get("model"))
-        if median and median >= CHECK_MIN_MEDIAN and price is not None and price < CHECK_PRICE_SHARE * median:
-            reasons.append(f"цена {_price_text(price)} € при обычной {_price_text(median)} €")
+    for i in items:
+        if i.get("group") != "list" or i.get("model_source") == "manual":
+            continue
         words = models.accessory_words(i.get("title") or "")
         if words:
-            reasons.append("в заголовке: " + ", ".join(words))
-        lead = models.lead_word(i.get("description"))
-        if lead:
-            reasons.append(f"описание начинается с «{lead}»")
-        if i.get("model_source") == "description":
-            reasons.append("модель только из описания")
-        if reasons:
-            found.append((len(reasons), -(price or 0), i, "; ".join(reasons), median))
-    found.sort(key=lambda f: (f[0], f[1]), reverse=True)
+            found.append((i, "перед моделью: " + ", ".join(words)))
+    found.sort(key=lambda f: f[0].get("first_seen") or "", reverse=True)
     return [CHECK_HEADER] + [
         [reason, i["id"], i.get("model") or "", i.get("title") or "", _num(current_price(i)),
-         "" if median is None else _price_text(median), STATUS_RU.get(i.get("status"), i.get("status") or ""),
-         SOURCE_RU.get(i.get("model_source"), ""), (i.get("description") or "")[:120], i.get("url") or ""]
-        for _, _, i, reason, median in found]
+         STATUS_RU.get(i.get("status"), i.get("status") or ""), SOURCE_RU.get(i.get("model_source"), ""),
+         (i.get("description") or "")[:120], i.get("url") or ""]
+        for i, reason in found]
 
 
 def cheap_cameras(items, max_price):

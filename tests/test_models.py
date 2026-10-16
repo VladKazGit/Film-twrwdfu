@@ -176,6 +176,8 @@ FLAG_CASES = [
     ("Nikon FM2 camera body cap", ["accessory?"], None),
     ("Dépoli Minolta x700", ["accessory?"], None),
     ("Porte clé minolta", ["accessory?"], None),
+    ("Leica m3 Minox Miniaturizzata", ["digital?"], None),
+    ("Minox Leica M3 camera", ["digital?"], None),
     ("Vintage Leica M3 Double-Stroke Rangefinder", [], None),
     ("Gehäusedeckel für Canon AE-1", ["accessory?"], None),
     ("Canon AE-1 batteria nuova", [], None),

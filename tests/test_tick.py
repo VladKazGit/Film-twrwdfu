@@ -484,15 +484,38 @@ def main():
         it.update(extra)
         return it
     pool = [card(100 + k, "Yashica Mat-124G", 200.0 + k) for k in range(5)]
-    cheap_mat = card(200, "Yashica Mat-124g", 3.0)
+    cheap_mat = card(200, "Yashica Mat-124g", 5.0)  # cameras sell for 5-10 EUR
     by_desc = card(201, "Kamera Canon", 50.0, model="Canon AE-1", model_source="description", group="list", in_list=True)
-    slipped = card(202, "Nikon FM2 Kamera Tasche Leder", 120.0)
-    labelled = card(203, "Yashica Mat-124g", 2.0, model_source="manual")
-    rows = report.check_rows(pool + [cheap_mat, by_desc, slipped, labelled])
+    kit = card(202, "Nikon FM2 Kamera Tasche Leder", 120.0)
+    slipped = card(204, "Lederhülle Canon AE-1 Kamera", 15.0, group="list", flags=[])  # an old card
+    labelled = card(203, "Winder Canon AE-1", 2.0, group="list", flags=[], model_source="manual")
+    rows = report.check_rows(pool + [cheap_mat, by_desc, kit, slipped, labelled])
     reasons = {r[1]: r[0] for r in rows[1:]}
-    assert rows[0] == report.CHECK_HEADER and set(reasons) == {200, 201, 202}, reasons
-    assert reasons[200].startswith("цена 3 € при обычной 201.50 €") and "модель только из описания" in reasons[201]
-    assert "tasche" in reasons[202], reasons[202]
+    assert rows[0] == report.CHECK_HEADER and set(reasons) == {204}, reasons
+    assert "hulle" in reasons[204], reasons
+
+    # Real cameras the user reviewed: kit words after the model are not suspicious.
+    reviewed = [
+        "Olympus OM-1 Film SLR Camera / Olympus F. Zuiko Auto-S 50mm F1.8 Lens",
+        "Praktica L - Spiegelreflexkamera - DDR - all in - Belichtungsmesser, Blitz, Objektive",
+        "Nikon F3 Analoge Kamera Set DW-3 DW-4 Sucher MF-14 Rückwand",
+        "Appareil photo CANON A-1 Speedlite 155A, son flash et ses trois objectifs",
+        "Canon T90 Kamera Objektiv Speedlite 300TL Blitz Professionell",
+        "Appareil photo Olympus OM 2 N analogique, flash, optique Tamron",
+        "Fotocamera Canon AE1 Program - Zoom -2 Flash- optical filter vintage",
+        "Fotocamera Olympus OM-1 completa di obiettivo",
+        "Canon AE-1 silver film camera set - 3 lenses, flash & power winder",
+        "Kamera Praktica L, Objektiv Carl Zeiss Jena Tessar 2.8/50, Blitzgeräte, Tasche",
+        "Nikon Em appareil photo argentique complet objectif sigma 28-85 mm sacoche cuir et manuels",
+        "Nikon FM Schwarz Black SLR 35mm Filmkamera Gehäuse Body Deckel getestet",
+        "Nikon FG Kamera, Tokina AT-X, 28-85mm Objektiv und Zubehör",
+        "Zorki 4 - Fotocamera a rullino 35mm pellicola funzionante",
+        "Appareil argentique Praktica MTL 5 - objectif 135mm F2.8 monture M42 fonctionnel",
+        "Canon A-1 – Vintage 35mm analog Filmkamera SLR / AE1 Programm 28-85 f1:3.5 Zoom getestet",
+    ]
+    cards = [card(300 + k, t, 90.0) for k, t in enumerate(reviewed)]
+    assert all(c["group"] == "list" and not c["flags"] for c in cards), [(c["title"], c["flags"]) for c in cards]
+    assert report.check_rows(cards)[1:] == [], report.check_rows(cards)[1:]
     assert "accessory?" in tick.new_item(rec(300, "Nikon FM2 camera body cap", 9.0), "x", None, [])["flags"]
 
     # Sorting: a fresh listing stays above old cameras found later by search.
