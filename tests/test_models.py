@@ -147,6 +147,16 @@ FLAG_CASES = [
     ("Canon AE-1 con manuale e borsa", [], None),
     ("Olympus OM-1 per ricambi", [], None),
     ("Nikon F2 + Nikkor 50mm f1.4", [], None),
+    ("Olympus OM-1 etichetta MD argento", ["accessory?"], None),
+    ("Olympus OM-1 tappo batteria argento", ["accessory?"], None),
+    ("Olympus OM-1 vano batteria", ["accessory?"], None),
+    ("Kiev 60 Pentaconsix manuale originale in russo", ["accessory?"], None),
+    ("Oeilleton de visée et cache Canon AE-1", ["accessory?"], None),
+    ("Oeilleton de visée Canon AE-1", ["accessory?"], None),
+    ("Reflex manuale Zenit E", [], None),
+    ("Canon AE-1 messa a fuoco manuale", [], None),
+    ("Olympus OM-10 senza batteria", [], None),
+    ("Canon AE-1 batteria nuova", [], None),
     ("Mamiya M645 camera PD prism finder S original multi language manual", ["accessory?"], None),
     ("Zoom Vivitar 70/210 per Nikon F", ["accessory?"], None),
     ("Nikon FM2 Body, Anleitung", [], None),
@@ -184,6 +194,9 @@ DESC_FLAG_CASES = [
     ("Yashica Mat-124g", "Kamera in gutem Zustand, mit Anleitung", []),
     ("Yashica Mat-124g", "Objektiv sauber, Kamera funktioniert", []),
     ("Yashica Mat-124g Kamera", "brochure dabei", []),
+    ("Olympus om10", "coperchio superiore fotocamera olympus om10 buono stato, da riciclo", ["accessory?"]),
+    ("Olympus om10", "Manuale originale della fotocamera in italiano", ["accessory?"]),
+    ("Olympus om10", "Fotocamera funzionante, coperchio senza graffi", []),
 ]
 
 

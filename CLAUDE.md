@@ -94,7 +94,7 @@ Cron (каждые 2 ч) — только запасной перезапуск 
 - аксессуары (winder, Zubehör, accessoires, Tasche/Objektiv only…) без признаков камеры → флаг `accessory?`; печатная продукция (каталоги, проспекты, брошюры, книги, руководства/guide) — тоже `accessory?`; запчасти (ricambio, Ersatzteil, spare part, calotta, top cover…) — `accessory?`, но «на запчасти» (per/für/for … ricambi) — это камера; цифровые (Dimage, digital, Megapixel…) → `digital?`
 - если заголовок помечен `accessory?`/`digital?`, модель в описании не ищется
 - инструкции (Anleitung, notice, manual, libretto…) без признаков тушки/комплекта и без «с/mit/+» → `accessory?`; объективы: zoom, Vivitar, Tamron, Sigma, Tokina… и «для/per/für» перед моделью → `accessory?`
-- описание, которое *начинается* со слова-аксессуара (brochure, manual, Objektiv…) и не называет камеру, → `accessory?`; описание новых камер из списка загружается сразу
+- описание, которое *начинается* со слова-запчасти или инструкции (coperchio, oeilleton, manuale…), → `accessory?` всегда; со слова-аксессуара (brochure, Objektiv, Tasche…) — если не называет камеру; описание новых камер из списка загружается сразу
 - объявления с `accessory?`/`digital?` не входят в «Список» (группа «Остальные»), даже если в заголовке есть модель; ручная разметка снимает флаг
 - **Praktica Super TL1000 — НЕ в списке**
 

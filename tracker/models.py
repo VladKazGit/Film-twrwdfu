@@ -243,7 +243,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 9
+VERSION = 10
 
 # Models that must not match when the text also contains this pattern.
 MODEL_EXCLUDE = {
@@ -390,6 +390,9 @@ _LENS_WORDS = re.compile(r"\bzoom\b|vivitar|tamron|\bsigma\b|tokina|soligor|hani
 _MANUAL = re.compile(
     r"(?:bedienungs|betriebs)?anleitung|gebrauchsanweisung|handbuch|\bnotice\b|mode d.emploi|istruzioni|\blibretto"
     r"|handleiding|gebruiksaanwijzing|instruction manual|manuale d.uso|(?<!fotocamere )(?<!macchine )\bmanuali\b"
+    # 'manuale' alone also means a manual camera: only as a document ('manuale originale in russo')
+    r"|^manuale\b|\bmanuale\b(?=\s+(?:originale|di istruzioni|istruzioni|utente|tecnico|in\s|italiano|inglese"
+    r"|tedesco|russo|francese))"
     r"|(?<!fully )(?<!full )\bmanual\b(?!\s*(?:focus|fokus|camera|kamera|slr|exposure|mode))")
 # Spare parts. Preceded by "for/per/für..." it is a camera sold for parts instead.
 _PARTS = re.compile(
@@ -401,7 +404,9 @@ _PARTS = re.compile(
     r"|frontplatte|deckkappe|aufzugshebel|zahlwerk|belederung"
     # en / fr / nl
     r"|front plate|advance lever|rewind crank|frame counter|leatherette|light seals?\b"
-    r"|\bcapot\b|levier d.armement|\bcompteur\b|\bgainage|\bmousses?\b|bovenkap|onderplaat")
+    r"|\bcapot\b|levier d.armement|\bcompteur\b|\bgainage|\bmousses?\b|bovenkap|onderplaat"
+    # badge, battery cap / compartment, eyecup and cap
+    r"|etichetta|\btappo\b|\bvano\b|oeilleton|\bcache\b|eyecup|augenmuschel|oculaire")
 _FOR_BEFORE = re.compile(r"\b(?:per|for|pour|fur|als|voor|para)\s+(?:\w+\s+)?$")
 # Words that say the listing is a camera body or kit, not just its manual.
 _KIT_WORDS = re.compile(r"\bbody\b|gehause|boitier|\bcorpo\b|objektiv|\blens|obiettiv|objectif|\bkit\b|\bset\b|\bnur\b")
@@ -506,10 +511,13 @@ def _is_accessory(norm, model_span):
 
 
 def lead_is_accessory(description):
-    """The description starts with an accessory word (brochure, manual, lens...) and names no camera."""
+    """The description starts with a part or manual word ('coperchio superiore fotocamera ...':
+    the camera is what the part is for), or with an accessory word (brochure, lens...) and names
+    no camera."""
     norm = normalize(description)[:160]
     lead = _LEAD_FILLER.sub("", norm)
-    return bool(_LEAD_ACCESSORY.match(lead)) and not _CAMERA_WORDS.search(norm[:80])
+    first = _PARTS.match(lead) or _MANUAL.match(lead)
+    return bool(first) or (bool(_LEAD_ACCESSORY.match(lead)) and not _CAMERA_WORDS.search(norm[:80]))
 
 
 def flags_of(title, model_span=None):
