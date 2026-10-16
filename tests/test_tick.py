@@ -205,7 +205,8 @@ def main():
         assert rule["ranges"][0]["startColumnIndex"] == report.ITEM_HEADER.index("Статус")
         runs = ss.sheets["Запуски"].rows
         assert runs[0] == sheets.RUNS_HEADER and runs[1][1] == "check-setup" and len(runs) == 3
-        assert updates["runs_header_v2"]
+        assert updates["runs_header_v3"] and runs[2][-1] == 0, "first tick: nothing counted as new in 'До 20 €'"
+        assert updates["cheap_ids"] == [400, 1021]
         # Links clickable, other text kept literal.
         fast_ws = ss.sheets["Быстрые продажи"]
         link_col = report.ITEM_HEADER.index("Ссылка")
@@ -234,20 +235,24 @@ def main():
         # 'До 20 €' follows 'Модели': the user deletes Zenit E, it leaves 'До 20 €' and is not re-added.
         models_ws = ss.sheets["Модели"]
         models_ws.rows = [r for r in models_ws.rows if r[0] != "Zenit E"]
-        state_flags = {"runs_header": True, "runs_header_v2": True, "models_offered": updates["models_offered"],
+        state_flags = {"runs_header": True, "runs_header_v2": True, "runs_header_v3": True,
+                       "cheap_ids": updates["cheap_ids"], "models_offered": updates["models_offered"],
                        "status_colors": updates["status_colors"], "new_rows_colors": updates["new_rows_colors"],
                        "fresh_rows_colors": updates["fresh_rows_colors"], "fresh_rows_green": True}
-        assert tick.write_sheets(writer, r5, state_flags) == {}
+        assert tick.write_sheets(writer, r5, state_flags) == {"cheap_ids": [400]}, "Zenit E left 'До 20 €'"
+        assert ss.sheets["Запуски"].rows[-1][-1] == 0
         assert [r[0] for r in ss.sheets["До 20 €"].rows[1:]] == [400] and ["Zenit E"] not in [r[:1] for r in models_ws.rows]
         # A model new to the dictionary is offered once; spelling in the sheet does not matter.
         models_ws.rows.append(["зенит-е"])
         offered = [m for m in updates["models_offered"] if m != "Zenit KM"]
         models_ws.rows = [r for r in models_ws.rows if r[0] != "Zenit KM"]
-        upd = tick.write_sheets(writer, r5, {"runs_header": True, "runs_header_v2": True, "models_offered": offered,
+        upd = tick.write_sheets(writer, r5, {"runs_header": True, "runs_header_v2": True, "runs_header_v3": True,
+                                             "cheap_ids": [400], "models_offered": offered,
                                              "status_colors": updates["status_colors"], "new_rows_color": True,
                                              "fresh_rows_green": True})
         assert upd.get("new_rows_colors") == ["До 20 €", "Список"], "old flag: only 'До 20 €' added"
         assert upd.get("fresh_rows_colors") == ["До 20 €", "Список"]
+        assert ss.sheets["Запуски"].rows[-1][-1] == 1 and upd["cheap_ids"] == [400, 1021], "Zenit E 1021 entered 'До 20 €'"
         assert "Zenit KM" in upd["models_offered"] and models_ws.rows[-1][0] == "Zenit KM"
         assert [r[0] for r in ss.sheets["До 20 €"].rows[1:]] == [1021, 400], "Cyrillic 'зенит-е' matches Zenit E"
 

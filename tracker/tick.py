@@ -685,11 +685,11 @@ def log_line(run):
             f" | errors: {'; '.join(run['errors']) or 'none'}")
 
 
-def runs_row(run):
+def runs_row(run, cheap_added=0):
     return [run["at"], "да" if run["full_scan"] else "", run["pages"], run["requests"], run["mb"], run["seconds"],
             run["new_list"], run["new_rest"], run["bumped"], run["checks"], run["sold_list"], run["sold_rest"],
             run["deleted"], run["reserved_hidden"], run["closed_3h"], run["closed_30d"], run["descriptions"],
-            run["description_to_list"], run["deferred"], "; ".join(run["errors"]), runs_comment(run)]
+            run["description_to_list"], run["deferred"], "; ".join(run["errors"]), runs_comment(run), cheap_added]
 
 
 def runs_comment(run, limit=40):
@@ -729,13 +729,19 @@ def write_sheets(writer, result, state_flags):
     # 'До 20 €' is mostly old cheap cameras found by search: mark what entered the sheet in 12 h.
     writer.replace(sheets.CHEAP_SHEET, report.item_rows(cheap, with_group=True, new_since=new_since,
                                                         new_old_listings=True, fresh_since=fresh_since), links=True)
+    # Cameras that entered 'До 20 €' since the previous tick (none counted on the very first one).
+    cheap_ids = sorted(i["id"] for i in cheap)
+    previous = state_flags.get("cheap_ids")
+    cheap_added = 0 if previous is None else len(set(cheap_ids) - set(previous))
+    if cheap_ids != previous:
+        updates["cheap_ids"] = cheap_ids
     writer.replace(sheets.FAST_SHEET, report.fast_rows(items), links=True)
     writer.replace(sheets.SALES_SHEET, report.sales_rows(items), links=True)
     writer.replace(sheets.SUMMARY_SHEET, report.summary_rows(result["summary"]))
-    if not state_flags.get("runs_header_v2"):  # v2: with the 'Комментарий' column
+    if not state_flags.get("runs_header_v3"):  # v3: 'Комментарий' and 'Новых в «До 20 €»'
         writer.ensure_runs_header()
-        updates["runs_header"] = updates["runs_header_v2"] = True
-    writer.append_run(runs_row(result["run"]))
+        updates["runs_header"] = updates["runs_header_v2"] = updates["runs_header_v3"] = True
+    writer.append_run(runs_row(result["run"], cheap_added))
     if result["daily"]:
         writer.replace(sheets.REST_SHEET, report.item_rows([i for i in items if i.get("group") == "rest"]), links=True)
     colored = set(state_flags.get("status_colors") or [])
