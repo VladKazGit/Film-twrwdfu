@@ -243,7 +243,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 6
+VERSION = 7
 
 # Models that must not match when the text also contains this pattern.
 MODEL_EXCLUDE = {
@@ -383,13 +383,18 @@ _ACCESSORY_WORDS = re.compile(
     r"|lens hood|ausloser|\bfilm(?:e|s)?\b(?!\s*(?:kamera|camera))|pellicol|pellicule|\bfilmrolle"
     r"|\bback\b|data ?back|finder|(?<!mess)sucher\b|\bviseur|\bmirino|waist ?level|lichtschacht"
     r"|zubehor\b|acc?es+oires?\b|accessori[oe]?\b|accessor(?:y|ies)\b|toebehoren\b"
-    r"|katalog|catalog|cataloghi|catalogue|depliant|prospekt|brochure|broschure|\bbuch\b|\bbook\b|\blibro\b|\blivre\b|\bposter\b|zeitschrift|rivista|\bflyer")
+    r"|katalog|catalog|cataloghi|catalogue|depliant|prospekt|brochure|broschure|\bguide\b|\bguida\b|ratgeber|leitfaden|\bbuch\b|\bbook\b|\blibro\b|\blivre\b|\bposter\b|zeitschrift|rivista|\bflyer")
 # Lens makers and zoom: 'Zoom Vivitar 70/210 per Nikon F' is a lens.
 _LENS_WORDS = re.compile(r"\bzoom\b|vivitar|tamron|\bsigma\b|tokina|soligor|hanimex")
 # Manuals. 'manual' next to camera words means a manual camera ('fully manual SLR').
 _MANUAL = re.compile(
     r"(?:bedienungs)?anleitung|gebrauchsanweisung|handbuch|\bnotice\b|mode d.emploi|istruzioni|\blibretto"
     r"|handleiding|(?<!fully )(?<!full )\bmanual\b(?!\s*(?:focus|fokus|camera|kamera|slr|exposure|mode))")
+# Spare parts. Preceded by "for/per/für..." it is a camera sold for parts instead.
+_PARTS = re.compile(
+    r"ricambi[oa]?\b|ersatzteil|spare parts?\b|pieces? detachees?|onderde(?:el|len)\b|calotta|top cover"
+    r"|bottom plate|bodenplatte|shutter curtain|verschlussvorhang")
+_FOR_BEFORE = re.compile(r"\b(?:per|for|pour|fur|als|voor|para)\s+(?:\w+\s+)?$")
 # Words that say the listing is a camera body or kit, not just its manual.
 _KIT_WORDS = re.compile(r"\bbody\b|gehause|boitier|\bcorpo\b|objektiv|\blens|obiettiv|objectif|\bkit\b|\bset\b|\bnur\b")
 # A description that starts with one of these (and names no camera) is about an accessory.
@@ -404,7 +409,7 @@ _LEAD_ACCESSORY = re.compile(
 # Printed matter (catalogues, brochures, books) counts too.
 _STRONG_ACCESSORY = re.compile(
     r"zubehor\b|acc?es+oires?\b|accessori[oe]?\b|accessor(?:y|ies)\b|toebehoren\b"
-    r"|katalog|catalog|cataloghi|catalogue|depliant|prospekt|brochure|broschure|\bbuch\b|\bbook\b|\blibro\b|\blivre\b|\bposter\b|zeitschrift|rivista|\bflyer"
+    r"|katalog|catalog|cataloghi|catalogue|depliant|prospekt|brochure|broschure|\bguide\b|\bguida\b|ratgeber|leitfaden|\bbuch\b|\bbook\b|\blibro\b|\blivre\b|\bposter\b|zeitschrift|rivista|\bflyer"
     r"|camera (?:strap|bag|case|accessor)|kamera(?:tasche|gurt)")
 _LEADING_FILLER = re.compile(
     r"^(?:\W|(?:vintage|rare|ancien(?:ne)?|alt(?:e|er)?|old|lot|lotto|set|kit|neu|new|nuovo)\b)+")
@@ -460,6 +465,9 @@ def _is_accessory(norm, model_span):
     strong = _STRONG_ACCESSORY.search(norm)
     if strong and not _WITH_WORDS.search(norm[:strong.start()]):
         return True  # "Nikon F3 accessoires", "Film Back - Camera Accessory"
+    part = _PARTS.search(norm)
+    if part and not _WITH_WORDS.search(norm[:part.start()]) and not _FOR_BEFORE.search(norm[:part.start()]):
+        return True  # "Calotta superiore Pentax ME Super ricambio originale"
     manual = _MANUAL.search(norm)
     if manual and not _WITH_WORDS.search(norm[:manual.start()]) and not _KIT_WORDS.search(norm):
         return True  # "Notice appareil photo Nikon FE2", "Mamiya M645 ... multi language manual"
