@@ -61,7 +61,7 @@ FOUND_MIN_ID = 8_300_000_000  # older ids are well over half a year old: skipped
 OLD_ON_VINTED_DAYS = 30  # cameras listed on Vinted longer ago than this ...
 OLD_RECHECK_MIN = 3 * 1440  # ... are checked every 3 days instead of daily
 NEW_ROWS_HOURS = 12  # light blue 3: cameras first seen within this many hours
-FRESH_ROWS_HOURS = 3  # light yellow 3 (above the blue): within this many hours
+FRESH_ROWS_HOURS = 3  # light green 3, like 'активен' (above the blue): within this many hours
 FOUND_CHECKS_PER_TICK = 10
 
 LIST_BRANDS = {brand for brand, *_ in models.MODELS}
@@ -632,8 +632,8 @@ def write_sheets(writer, result, state_flags):
             updates["status_colors"] = sorted(colored | set(todo))
         except Exception as exc:
             print(f"sheets: status colours not applied: {type(exc).__name__}: {env.redact(exc)}")
-    # Rows of new cameras: light blue 3 (12 h), light yellow 3 (3 h) above it,
-    # both below the green status rule.
+    # Rows of new cameras: light blue 3 (12 h), light green 3 (3 h) above it,
+    # both below the status rule.
     blue = set(state_flags.get("new_rows_colors") or [])
     if state_flags.get("new_rows_color"):  # earlier flag: only 'Список' had the rule
         blue.add(sheets.LIST_SHEET)
@@ -651,11 +651,19 @@ def write_sheets(writer, result, state_flags):
                 blue.add(title)
                 updates["new_rows_colors"] = sorted(blue)
             if title not in yellow:
-                writer.color_new_rows(title, col_3h, col_3h + 1, index, sheets.LIGHT_YELLOW_3)
+                writer.color_new_rows(title, col_3h, col_3h + 1, index, sheets.LIGHT_GREEN_3)
                 yellow.add(title)
                 updates["fresh_rows_colors"] = sorted(yellow)
         except Exception as exc:
             print(f"sheets: new-row colours not applied: {type(exc).__name__}: {env.redact(exc)}")
+    # The 3-hour rule was light yellow 3 for a while: recolour it once.
+    if not state_flags.get("fresh_rows_green"):
+        try:
+            if state_flags.get("fresh_rows_colors"):
+                writer.recolor_rules(state_flags["fresh_rows_colors"], sheets.LIGHT_YELLOW_3, sheets.LIGHT_GREEN_3)
+            updates["fresh_rows_green"] = True
+        except Exception as exc:
+            print(f"sheets: 3-hour colour not changed: {type(exc).__name__}: {env.redact(exc)}")
     return updates
 
 

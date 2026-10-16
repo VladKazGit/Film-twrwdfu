@@ -74,6 +74,20 @@ class FakeSpreadsheet:
 
     def batch_update(self, body):
         self.formats = getattr(self, "formats", []) + body["requests"]
+        self.rules = getattr(self, "rules", {})
+        for req in body["requests"]:
+            if "addConditionalFormatRule" in req:
+                add = req["addConditionalFormatRule"]
+                sid = add["rule"]["ranges"][0]["sheetId"]
+                self.rules.setdefault(sid, []).insert(add["index"], add["rule"])
+            elif "updateConditionalFormatRule" in req:
+                upd = req["updateConditionalFormatRule"]
+                self.rules[upd["sheetId"]][upd["index"]] = upd["rule"]
+
+    def fetch_sheet_metadata(self, params=None):
+        rules = getattr(self, "rules", {})
+        return {"sheets": [{"properties": {"sheetId": ws.id, "title": ws.title},
+                            "conditionalFormats": rules.get(ws.id, [])} for ws in self.sheets.values()]}
 
     def add_worksheet(self, title, rows, cols):
         self.sheets[title] = FakeWorksheet(title)
@@ -165,9 +179,12 @@ def main():
                     for r in rules if r["rule"]["booleanRule"]["format"]["backgroundColor"] == color]
         L = sheets.column_letter
         assert added(sheets.LIGHT_BLUE_3) == [(1, f'=${L(n)}2="да"'), (1, f'=${L(n + 1)}2="да"')]
-        assert added(sheets.LIGHT_YELLOW_3) == [(1, f'=${L(n + 1)}2="да"'), (1, f'=${L(n + 2)}2="да"')]
-        order = [r["rule"]["booleanRule"]["format"]["backgroundColor"] for r in rules[4:6]]
-        assert order == [sheets.LIGHT_BLUE_3, sheets.LIGHT_YELLOW_3], "yellow inserted after blue at index 1 -> above it"
+        assert [f for f in added(sheets.LIGHT_GREEN_3) if f[1].startswith("=")] == [
+            (1, f'=${L(n + 1)}2="да"'), (1, f'=${L(n + 2)}2="да"')], "3-hour rows: light green 3"
+        list_rules = ss.rules[ss.sheets["Список"].id]
+        assert [r["booleanRule"]["format"]["backgroundColor"] for r in list_rules] == [
+            sheets.LIGHT_GREEN_3, sheets.LIGHT_GREEN_3, sheets.LIGHT_BLUE_3], "status, 3 h above 12 h"
+        assert updates["fresh_rows_green"] and not added(sheets.LIGHT_YELLOW_3)
         assert updates["new_rows_colors"] == updates["fresh_rows_colors"] == ["До 20 €", "Список"]
         cheap_rows = ss.sheets["До 20 €"].rows
         assert cheap_rows[0][-3:] == ["Группа", report.NEW_HEADER, report.FRESH_HEADER]
@@ -204,7 +221,7 @@ def main():
         models_ws.rows = [r for r in models_ws.rows if r[0] != "Zenit E"]
         state_flags = {"runs_header": True, "models_offered": updates["models_offered"],
                        "status_colors": updates["status_colors"], "new_rows_colors": updates["new_rows_colors"],
-                       "fresh_rows_colors": updates["fresh_rows_colors"]}
+                       "fresh_rows_colors": updates["fresh_rows_colors"], "fresh_rows_green": True}
         assert tick.write_sheets(writer, r5, state_flags) == {}
         assert [r[0] for r in ss.sheets["До 20 €"].rows[1:]] == [400] and ["Zenit E"] not in [r[:1] for r in models_ws.rows]
         # A model new to the dictionary is offered once; spelling in the sheet does not matter.
@@ -212,7 +229,8 @@ def main():
         offered = [m for m in updates["models_offered"] if m != "Zenit KM"]
         models_ws.rows = [r for r in models_ws.rows if r[0] != "Zenit KM"]
         upd = tick.write_sheets(writer, r5, {"runs_header": True, "models_offered": offered,
-                                             "status_colors": updates["status_colors"], "new_rows_color": True})
+                                             "status_colors": updates["status_colors"], "new_rows_color": True,
+                                             "fresh_rows_green": True})
         assert upd.get("new_rows_colors") == ["До 20 €", "Список"], "old flag: only 'До 20 €' added"
         assert upd.get("fresh_rows_colors") == ["До 20 €", "Список"]
         assert "Zenit KM" in upd["models_offered"] and models_ws.rows[-1][0] == "Zenit KM"
@@ -229,6 +247,14 @@ def main():
         a = store.load_active()
         assert r7["models_updated"] and a[1031]["model"] == "Zenit TTL" and a[1031]["group"] == "list"
         assert a[1020]["model_source"] == "manual"
+        # A 3-hour rule added in light yellow 3 earlier is recoloured once to light green 3.
+        sid = ss.sheets["Список"].id
+        ss.rules[sid].insert(1, {"ranges": [{"sheetId": sid}], "booleanRule": {
+            "condition": {"type": "CUSTOM_FORMULA", "values": [{"userEnteredValue": "=$AE2=\"да\""}]},
+            "format": {"backgroundColor": {"red": 1, "green": 0.9490196, "blue": 0.8}}}})
+        upd = tick.write_sheets(writer, r5, {**state_flags, "fresh_rows_green": None})
+        assert upd == {"fresh_rows_green": True}
+        assert ss.rules[sid][1]["booleanRule"]["format"]["backgroundColor"] == sheets.LIGHT_GREEN_3
         print("log:", tick.log_line(r4["run"]))
     # Search for older cheap list cameras: half a year limit, list models only.
     Z12, ZE, PRIMA, ANCIENT = 9_000_000_300, 9_000_000_301, 9_000_000_302, 8_000_000_303

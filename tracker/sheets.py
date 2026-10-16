@@ -28,6 +28,11 @@ LIGHT_BLUE_3 = {"red": 207 / 255, "green": 226 / 255, "blue": 243 / 255}  # #cfe
 LIGHT_YELLOW_3 = {"red": 255 / 255, "green": 242 / 255, "blue": 204 / 255}  # #fff2cc
 
 
+def _same_color(a, b):
+    """The API leaves zero channels out and rounds floats."""
+    return all(abs(a.get(k, 0) - b.get(k, 0)) < 0.01 for k in ("red", "green", "blue"))
+
+
 def column_letter(index):
     """0 -> A, 25 -> Z, 26 -> AA."""
     letters = ""
@@ -100,6 +105,27 @@ class SheetWriter:
             "booleanRule": {"condition": {"type": "CUSTOM_FORMULA",
                                           "values": [{"userEnteredValue": f'=${letter}2="да"'}]},
                             "format": {"backgroundColor": color}}}}}]})
+
+    def recolor_rules(self, titles, old, new):
+        """Change the background of existing conditional-format rules from `old` to `new`.
+        Returns how many rules changed."""
+        meta = self.spreadsheet.fetch_sheet_metadata(
+            params={"fields": "sheets(properties(sheetId,title),conditionalFormats)"})
+        requests = []
+        for sheet in meta.get("sheets", []):
+            if sheet["properties"]["title"] not in titles:
+                continue
+            for index, rule in enumerate(sheet.get("conditionalFormats", [])):
+                boolean = rule.get("booleanRule")
+                if not boolean or not _same_color(boolean.get("format", {}).get("backgroundColor", {}), old):
+                    continue
+                requests.append({"updateConditionalFormatRule": {
+                    "index": index, "sheetId": sheet["properties"]["sheetId"],
+                    "rule": {"ranges": rule["ranges"], "booleanRule": {
+                        "condition": boolean["condition"], "format": {"backgroundColor": new}}}}})
+        if requests:
+            self.spreadsheet.batch_update({"requests": requests})
+        return len(requests)
 
     def replace(self, title, rows):
         """Overwrite a whole sheet with rows (first row is the header)."""
