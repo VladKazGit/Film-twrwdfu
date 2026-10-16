@@ -305,6 +305,8 @@ def main():
     assert sheets.column_letter(0) == "A" and sheets.column_letter(25) == "Z" and sheets.column_letter(26) == "AA"
     assert report.is_new({"first_seen": "2026-10-16 20:00", "flags": ["night"]}, "2026-10-16 09:00")
     assert not report.is_new({"first_seen": "2026-10-16 20:00", "flags": ["found"]}, "2026-10-16 09:00")
+    assert report.is_new({"first_seen": "2026-10-16 20:00", "flags": ["found"]}, "2026-10-16 09:00", old_listings=True)
+    assert not report.is_new({"first_seen": "2026-10-16 20:00", "flags": ["preexisting"]}, "2026-10-16 09:00", True)
     assert not report.is_new({"first_seen": "2026-10-16 08:00", "flags": []}, "2026-10-16 09:00")
 
     # 'Продали за': days for new listings, Vinted's date for old ones, months past 30 days.

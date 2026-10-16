@@ -609,7 +609,9 @@ def write_sheets(writer, result, state_flags):
     cheap = [i for i in candidates if i.get("model") and sheets.model_key(i["model"]) in allowed]
     print(f"sheets: cheap sheet {len(cheap)} of {len(candidates)} list cameras at <= 20 EUR"
           f" (the others have models missing from the models sheet)")
-    writer.replace(sheets.CHEAP_SHEET, report.item_rows(cheap, with_group=True, new_since=new_since))
+    # 'До 20 €' is mostly old cheap cameras found by search: mark what entered the sheet in 12 h.
+    writer.replace(sheets.CHEAP_SHEET, report.item_rows(cheap, with_group=True, new_since=new_since,
+                                                        new_old_listings=True))
     writer.replace(sheets.FAST_SHEET, report.fast_rows(items))
     writer.replace(sheets.SALES_SHEET, report.sales_rows(items))
     writer.replace(sheets.SUMMARY_SHEET, report.summary_rows(result["summary"]))

@@ -138,12 +138,14 @@ def item_row(item):
 NEW_HEADER = "Новая (12 ч)"
 
 
-def is_new(item, since):
-    """A new listing (not an old one found, bumped or seen at the start) first seen at or after `since`."""
-    return (item.get("first_seen") or "") >= since and not set(item.get("flags") or []) & {"preexisting", "found", "bumped"}
+def is_new(item, since, old_listings=False):
+    """First seen at or after `since`. Only new listings by default; with old_listings
+    also old ones that just entered the sheet (found by search, bumped)."""
+    excluded = {"preexisting"} if old_listings else {"preexisting", "found", "bumped"}
+    return (item.get("first_seen") or "") >= since and not set(item.get("flags") or []) & excluded
 
 
-def item_rows(items, with_group=False, new_since=None):
+def item_rows(items, with_group=False, new_since=None, new_old_listings=False):
     """Item sheet rows, newest first. with_group adds 'Группа'; new_since adds a last
     column marking new cameras ('да')."""
     ordered = sorted(items, key=lambda i: (i.get("first_seen") or "", i["id"]), reverse=True)
@@ -154,7 +156,7 @@ def item_rows(items, with_group=False, new_since=None):
         if with_group:
             row.append(GROUP_RU.get(item.get("group"), ""))
         if new_since:
-            row.append("да" if is_new(item, new_since) else "")
+            row.append("да" if is_new(item, new_since, new_old_listings) else "")
         rows.append(row)
     return rows
 
