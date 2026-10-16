@@ -111,11 +111,11 @@ def _maybe_fast(item):
 
 
 def fast_rows(items):
-    """'Быстрые продажи': sold cameras that may have sold within 30 minutes, newest sale first."""
-    fast = sorted((i for i in items if fast_confidence(i)),
+    """'Быстрые продажи': list cameras that may have sold within 30 minutes, newest sale first.
+    Fast sales of other cameras (compacts and the like) only count in 'Сводка'."""
+    fast = sorted((i for i in items if i.get("group") == "list" and fast_confidence(i)),
                   key=lambda i: (i.get("sold_detected_at") or "", i["id"]), reverse=True)
-    header = ITEM_HEADER + ["Группа", "Уверенность"]
-    return [header] + [item_row(i) + [GROUP_RU.get(i.get("group"), ""), fast_confidence(i)] for i in fast]
+    return [ITEM_HEADER + ["Уверенность"]] + [item_row(i) + [fast_confidence(i)] for i in fast]
 
 
 def item_row(item):

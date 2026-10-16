@@ -183,7 +183,7 @@ def main():
         assert fm2["Изменение цены, €"] == -10.0 and fm2["Изменение цены, %"] == -6.7
         assert fm2["Выставлена"] == "2026-10-16 07:07 – 07:22" and fm2["Висела на сайте"] == "меньше дня"
         fast = ss.sheets["Быстрые продажи"].rows
-        assert fast[0][-2:] == ["Группа", "Уверенность"], fast[0]
+        assert fast[0][-1] == "Уверенность" and "Группа" not in fast[0], fast[0]
         assert [r[0] for r in fast[1:]] == [1011, 400] and fast[1][-1] == "возможно", "reserved fast, sold 3 h later"
         assert fast[2][-1] == "точно" and "bumped" in fast[2][report.ITEM_HEADER.index("Флаги")], "bumped, sold in 15 min"
         assert all(r[0] != 1010 for r in fast[1:]), "preexisting sale is not fast"
