@@ -144,7 +144,9 @@ class SheetWriter:
         """
         ws = self._get(title)
         width = max(len(r) for r in rows)
-        ws.resize(rows=max(len(rows), 2), cols=width)
+        if len(rows) < 2:  # the sheet keeps 2 rows (frozen header): blank the old data row
+            rows = rows + [[""] * width]
+        ws.resize(rows=len(rows), cols=width)
         if links:
             rows = [[_as_typed(c) for c in r] for r in rows]
         ws.update(range_name="A1", values=rows, value_input_option="USER_ENTERED" if links else "RAW")

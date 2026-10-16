@@ -245,9 +245,11 @@ def current_price(item):
 
 
 def cheap_cameras(items, max_price):
-    """Cameras from 'Список' (not flagged accessory/digital) priced max_price or less."""
+    """Cameras from 'Список' (not flagged accessory/digital) on sale now, priced max_price or
+    less. Sold, deleted, reserved or hidden ones stay in 'Список' / 'Продажи' only."""
     return [i for i in items
-            if i.get("group") == "list" and not set(i.get("flags") or []) & EXCLUDED_FLAGS
+            if i.get("group") == "list" and i.get("status") == "active"
+            and not set(i.get("flags") or []) & EXCLUDED_FLAGS
             and current_price(i) is not None and current_price(i) <= max_price]
 
 

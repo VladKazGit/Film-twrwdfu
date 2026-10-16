@@ -195,6 +195,7 @@ def main():
         cheap_rows = ss.sheets["До 20 €"].rows
         assert cheap_rows[0][-3:] == ["Группа", report.NEW_HEADER, report.FRESH_HEADER]
         assert {r[0] for r in cheap_rows[1:] if r[-2] == "да"} == {1021} and {r[0] for r in cheap_rows[1:] if r[-1] == "да"} == {1021}
+        assert 400 in {r[0] for r in ss.sheets["Список"].rows[1:]} and 400 in {r[-1] for r in ss.sheets["Продажи"].rows[1:]}
         list_rows = ss.sheets["Список"].rows
         assert list_rows[0][-2:] == [report.NEW_HEADER, report.FRESH_HEADER] and len(list_rows[0]) == n + 2
         marked = {r[0] for r in list_rows[1:] if r[-2] == "да"}
@@ -206,7 +207,7 @@ def main():
         runs = ss.sheets["Запуски"].rows
         assert runs[0] == sheets.RUNS_HEADER and runs[1][1] == "check-setup" and len(runs) == 3
         assert updates["runs_header_v3"] and runs[2][-1] == 0, "first tick: nothing counted as new in 'До 20 €'"
-        assert updates["cheap_ids"] == [400, 1021]
+        assert updates["cheap_ids"] == [1021]
         # Links clickable, other text kept literal.
         fast_ws = ss.sheets["Быстрые продажи"]
         link_col = report.ITEM_HEADER.index("Ссылка")
@@ -231,7 +232,7 @@ def main():
         assert fast[2][-1] == "точно" and "bumped" in fast[2][report.ITEM_HEADER.index("Флаги")], "bumped, sold in 15 min"
         assert all(r[0] != 1010 for r in fast[1:]), "preexisting sale is not fast"
         cheap = ss.sheets["До 20 €"].rows
-        assert "Группа" in cheap[0] and [r[0] for r in cheap[1:]] == [1021, 400], cheap[0]
+        assert "Группа" in cheap[0] and [r[0] for r in cheap[1:]] == [1021], "sold Zenit 400 is not shown"
         # 'До 20 €' follows 'Модели': the user deletes Zenit E, it leaves 'До 20 €' and is not re-added.
         models_ws = ss.sheets["Модели"]
         models_ws.rows = [r for r in models_ws.rows if r[0] != "Zenit E"]
@@ -239,9 +240,10 @@ def main():
                        "cheap_ids": updates["cheap_ids"], "models_offered": updates["models_offered"],
                        "status_colors": updates["status_colors"], "new_rows_colors": updates["new_rows_colors"],
                        "fresh_rows_colors": updates["fresh_rows_colors"], "fresh_rows_green": True}
-        assert tick.write_sheets(writer, r5, state_flags) == {"cheap_ids": [400]}, "Zenit E left 'До 20 €'"
+        assert tick.write_sheets(writer, r5, state_flags) == {"cheap_ids": []}, "Zenit E left 'До 20 €'"
         assert ss.sheets["Запуски"].rows[-1][-1] == 0
-        assert [r[0] for r in ss.sheets["До 20 €"].rows[1:]] == [400] and ["Zenit E"] not in [r[:1] for r in models_ws.rows]
+        assert [r[0] for r in ss.sheets["До 20 €"].rows[1:] if r[0] != ""] == [] and ["Zenit E"] not in [r[:1] for r in models_ws.rows]
+        assert len(ss.sheets["До 20 €"].rows) == 2 and not any(ss.sheets["До 20 €"].rows[1]), "old data row blanked"
         # A model new to the dictionary is offered once; spelling in the sheet does not matter.
         models_ws.rows.append(["зенит-е"])
         offered = [m for m in updates["models_offered"] if m != "Zenit KM"]
@@ -252,10 +254,10 @@ def main():
                                              "fresh_rows_green": True})
         assert upd.get("new_rows_colors") == ["До 20 €", "Список"], "old flag: only 'До 20 €' added"
         assert upd.get("fresh_rows_colors") == ["До 20 €", "Список"]
-        assert ss.sheets["Запуски"].rows[-1][-1] == 1 and upd["cheap_ids"] == [400, 1021], "Zenit E 1021 entered 'До 20 €'"
+        assert ss.sheets["Запуски"].rows[-1][-1] == 1 and upd["cheap_ids"] == [1021], "Zenit E 1021 entered 'До 20 €'"
         assert ss.sheets["Запуски"].rows[-1][-2].endswith("В «До 20 €» (1): Zenit E — 15 €"), ss.sheets["Запуски"].rows[-1][-2]
         assert "Zenit KM" in upd["models_offered"] and models_ws.rows[-1][0] == "Zenit KM"
-        assert [r[0] for r in ss.sheets["До 20 €"].rows[1:]] == [1021, 400], "Cyrillic 'зенит-е' matches Zenit E"
+        assert [r[0] for r in ss.sheets["До 20 €"].rows[1:]] == [1021], "Cyrillic 'зенит-е' matches Zenit E"
 
         # Dictionary version change re-classifies active items, manual labels stay.
         state = store.load_state()
@@ -455,9 +457,10 @@ def main():
     assert report.days_to_sell({**new, "status": "active"}) is None
 
     # 'До 20 €' includes exactly 20 EUR.
-    at = lambda price, group="list", flags=(): {"price_history": [{"at": "x", "price": price}], "group": group,
-                                                "flags": list(flags)}
+    at = lambda price, group="list", flags=(), status="active": {
+        "price_history": [{"at": "x", "price": price}], "group": group, "flags": list(flags), "status": status}
     assert len(report.cheap_cameras([at(20.0), at(19.99), at(20.01)], 20.0)) == 2
+    assert not report.cheap_cameras([at(10.0, status=s) for s in ("sold", "deleted", "reserved", "hidden", "unsold_30d")], 20.0)
     assert not report.cheap_cameras([at(10.0, flags=["accessory?"]), at(10.0, group="rest")], 20.0),         "accessories and rest rows are not in 'До 20 €'"
     print("tick tests passed")
 
