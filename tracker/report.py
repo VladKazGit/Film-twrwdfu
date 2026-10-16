@@ -1,4 +1,5 @@
 """Summary statistics and sheet rows (Russian labels for the user)."""
+import re
 import statistics
 from collections import Counter
 
@@ -76,6 +77,24 @@ def _plural(n, one, few, many):
     return few if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14 else many
 
 
+_AGE_RU = (("min", ("минуту", "минуты", "минут")), ("std", ("час", "часа", "часов")),
+           ("stunde", ("час", "часа", "часов")), ("tag", ("день", "дня", "дней")),
+           ("woche", ("неделю", "недели", "недель")), ("monat", ("месяц", "месяца", "месяцев")),
+           ("jahr", ("год", "года", "лет")))
+
+
+def uploaded_ago_ru(text):
+    """Vinted's German 'Hochgeladen' text in Russian: '5 Monaten' -> '5 месяцев назад'."""
+    match = re.match(r"\s*(\d+)\s*([^\W\d_]+)", text or "")
+    if not match:
+        return text or ""
+    n, unit = int(match.group(1)), match.group(2).lower()
+    for prefix, forms in _AGE_RU:
+        if unit.startswith(prefix):
+            return f"{n} {_plural(n, *forms)} назад"
+    return text
+
+
 def format_days(days):
     """'меньше дня', '3 дня', '12 дней' up to 30 days, then months: '2 месяца'."""
     if days is None:
@@ -123,7 +142,7 @@ def item_row(item):
         item["id"], item.get("model") or "", item.get("title") or "",
         STATUS_RU.get(item.get("status"), item.get("status") or ""),
         _num(item.get("price_start")), _num(item.get("price_final")), _num(item.get("favourites")),
-        item.get("listed_after") or "", item.get("first_seen") or "", item.get("uploaded_ago") or "",
+        item.get("listed_after") or "", item.get("first_seen") or "", uploaded_ago_ru(item.get("uploaded_ago")),
         item.get("last_seen_active") or "",
         item.get("sold_detected_at") or "", _num(item.get("time_to_sell_min")), _num(item.get("time_to_sell_max")),
         format_days(days_to_sell(item)),

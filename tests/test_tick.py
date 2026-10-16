@@ -366,6 +366,12 @@ def main():
                               "favourites": 0}, "2026-10-16 12:15")
     assert yashica["group"] == "rest" and "accessory?" in yashica["flags"]
 
+    # Vinted's German upload age, in Russian.
+    assert [report.uploaded_ago_ru(t) for t in ("5 Monaten", "1 Monat", "2 Wochen", "1 Woche", "3 Tagen", "1 Tag",
+                                                "1 Std.", "5 Std.", "18 Min.", "1 Jahr", "2 Jahren", None, "gestern")] == [
+        "5 месяцев назад", "1 месяц назад", "2 недели назад", "1 неделю назад", "3 дня назад", "1 день назад",
+        "1 час назад", "5 часов назад", "18 минут назад", "1 год назад", "2 года назад", "", "gestern"]
+
     # 'Продали за': days for new listings, Vinted's date for old ones, months past 30 days.
     assert [report.format_days(d) for d in (None, 0.4, 1, 3.9, 5, 21, 30, 45, 62, 150)] == [
         "", "меньше дня", "1 день", "3 дня", "5 дней", "21 день", "30 дней", "2 месяца", "2 месяца", "5 месяцев"]
