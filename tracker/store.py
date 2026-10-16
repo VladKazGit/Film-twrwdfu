@@ -46,13 +46,15 @@ class DataStore:
         return {item["id"]: item for item in self._read_all(self.closed_dir)}
 
     def save(self, item):
-        """Write an item; a closed one moves from active/ to closed/<month>/."""
+        """Write an item; a closed one moves from active/ to closed/<month>/, a reopened one back."""
         name = f"{item['id']}.json"
         if item.get("closed_at"):
             self._write_json(self.closed_dir / item["closed_at"][:7] / name, item)
             (self.active_dir / name).unlink(missing_ok=True)
         else:
             self._write_json(self.active_dir / name, item)
+            for old in self.closed_dir.glob(f"*/{name}"):
+                old.unlink()
 
     # ---- daily exports
 

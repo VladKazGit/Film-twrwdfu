@@ -249,6 +249,21 @@ def main():
     young = {**old, "vinted_listed_est": "2026-10-10"}
     assert tick.check_priority(young, "2026-10-20 10:38", vanished=False) == tick.P_FOUND
 
+    # A list camera closed as 'unsold in 3 h' is reopened and checked.
+    with tempfile.TemporaryDirectory() as tmp:
+        store = DataStore(tmp)
+        base = {1: [rec(10_000_002_000, "Kamera", 30.0)] + older(10_000_001_999)}
+        tick.run_tick(store, FakeClient(base), now="2026-10-16 08:07")
+        zen = tick.new_item(rec(9_900_000_001, "Zenit TTL", 15.0), "2026-10-15 22:00", None, ["preexisting"])
+        zen.update(group="list", status="unsold_3h", closed_at="2026-10-16 01:05")
+        store.save(zen)
+        assert store.load_closed()[zen["id"]]["status"] == "unsold_3h"
+        client = FakeClient(base, {zen["id"]: {"status": "active", "price": 15.0, "uploaded_ago": "3 Wochen"}})
+        r = tick.run_tick(store, client, now="2026-10-16 08:22")
+        a, c = store.load_active(), store.load_closed()
+        assert r["run"]["reopened"] == 1 and zen["id"] in client.opened, r["run"]
+        assert zen["id"] in a and zen["id"] not in c and a[zen["id"]]["status"] == "active" and not a[zen["id"]].get("needs_check")
+
     # 'Продали за': days for new listings, Vinted's date for old ones, months past 30 days.
     assert [report.format_days(d) for d in (None, 0.4, 1, 3.9, 5, 21, 30, 45, 62, 150)] == [
         "", "меньше дня", "1 день", "3 дня", "5 дней", "21 день", "30 дней", "2 месяца", "2 месяца", "5 месяцев"]

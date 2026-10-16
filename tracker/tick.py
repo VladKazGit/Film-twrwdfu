@@ -206,6 +206,8 @@ def wants_description(item):
 def check_priority(item, now, vanished):
     """Priority for opening the item page this tick, or None if not due."""
     since = clock.minutes_between(item["last_checked_at"], now)
+    if item.get("needs_check") and item["group"] == "list" and "found" not in item["flags"]:
+        return P_LIST_DUE
     if "found" in item["flags"]:  # old listing: its model's search results show it is still there
         return P_FOUND if item.get("needs_check") or since >= recheck_minutes(item, now) else None
     age = clock.minutes_between(item["first_seen"], now)
@@ -356,6 +358,16 @@ def run_tick(store, client, labels=None, now=None):
                 changed.add(item["id"])
                 stats["reclassified"] += 1
         state["models_version"] = models.VERSION
+
+    # 'Unsold in 3 h' is a rule of the rest group. A list camera closed that way
+    # (it became a list camera later, e.g. after a dictionary update) is reopened
+    # and checked: it is then tracked like any list camera, up to 30 days.
+    for item_id, item in list(closed.items()):
+        if item.get("group") == "list" and item.get("status") == "unsold_3h":
+            item.update(status="active", closed_at=None, needs_check=True)
+            active[item_id] = closed.pop(item_id)
+            changed.add(item_id)
+            stats["reopened"] += 1
 
     # ---- catalog
     full_scan = first_run or clock.minutes_between(state.get("last_full_scan_at") or "2000-01-01 00:00", now) >= FULL_SCAN_EVERY_MIN
@@ -521,7 +533,7 @@ def _finish(store, state, now, started, client, stats, errors, full_scan, pages,
         "unknown": stats["unknown"], "closed_3h": stats["closed_3h"], "closed_30d": stats["closed_30d"],
         "descriptions": stats["descriptions"], "description_to_list": stats["description_to_list"],
         "deferred": stats["deferred"], "check_errors": stats["check_errors"],
-        "reclassified": stats["reclassified"],
+        "reclassified": stats["reclassified"], "reopened": stats["reopened"],
         "search_pages": stats["search_pages"], "search_candidates": stats["search_candidates"],
         "found": stats["found"], "search_skipped": stats["search_skipped"], "found_missing": stats["found_missing"],
         "rest_enabled": rest_enabled, "errors": [env.redact(e) for e in errors],
@@ -547,6 +559,7 @@ def log_line(run):
             f" | descriptions {run['descriptions']} (-> list {run['description_to_list']})"
             f" | deferred {run['deferred']}, check errors {run['check_errors']}"
             f"{' | reclassified ' + str(run['reclassified']) if run.get('reclassified') else ''}"
+            f"{' | reopened ' + str(run['reopened']) if run.get('reopened') else ''}"
             f" | search: pages {run.get('search_pages', 0)}, candidates {run.get('search_candidates', 0)},"
             f" found {run.get('found', 0)}, too old/gone {run.get('search_skipped', 0)},"
             f" missing from search {run.get('found_missing', 0)}"
