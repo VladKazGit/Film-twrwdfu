@@ -461,6 +461,13 @@ def main():
         moved = (store.load_active().get(acc["id"]) or store.load_closed().get(acc["id"]))
         assert moved["group"] == "rest" and r["run"]["reclassified"] >= 1, (moved["group"], r["run"]["reclassified"])
 
+    # Sorting: a fresh listing stays above old cameras found later by search.
+    fresh = {"id": 1, "first_seen": "2026-10-16 19:07", "flags": []}
+    old_found = {"id": 2, "first_seen": "2026-10-16 19:37", "flags": ["found"], "vinted_listed_est": "2026-08-01"}
+    bumped = {"id": 3, "first_seen": "2026-10-16 19:22", "flags": ["bumped"], "vinted_listed_est": "2026-05-01"}
+    order = [i["id"] for i in sorted([old_found, fresh, bumped], key=report.listed_key, reverse=True)]
+    assert order == [3, 1, 2], order
+
     # 'Продали за': days for new listings, Vinted's date for old ones, months past 30 days.
     assert [report.format_days(d) for d in (None, 0.4, 1, 3.9, 5, 21, 30, 45, 62, 150)] == [
         "", "меньше дня", "1 день", "3 дня", "5 дней", "21 день", "30 дней", "2 месяца", "2 месяца", "5 месяцев"]

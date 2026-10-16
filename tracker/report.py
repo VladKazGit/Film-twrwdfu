@@ -172,10 +172,20 @@ def is_new(item, since, old_listings=False):
     return (item.get("first_seen") or "") >= since and not set(item.get("flags") or []) & excluded
 
 
+def listed_key(item):
+    """Sort key 'YYYY-MM-DD HH:MM' for when the camera went on sale: new and bumped listings
+    by their first sighting, old ones found by search by Vinted's upload date. Hundreds of
+    old cameras found in one tick must not push fresh listings down."""
+    flags = set(item.get("flags") or [])
+    if flags & {"found", "preexisting"} and item.get("vinted_listed_est"):
+        return f"{item['vinted_listed_est']} 00:00"
+    return item.get("first_seen") or ""
+
+
 def item_rows(items, with_group=False, new_since=None, new_old_listings=False, fresh_since=None):
     """Item sheet rows, newest first. with_group adds 'Группа'; new_since / fresh_since add
     columns marking cameras that appeared in the last 12 / 3 hours ('да')."""
-    ordered = sorted(items, key=lambda i: (i.get("first_seen") or "", i["id"]), reverse=True)
+    ordered = sorted(items, key=lambda i: (listed_key(i), i["id"]), reverse=True)
     header = (ITEM_HEADER + (["Группа"] if with_group else []) + ([NEW_HEADER] if new_since else [])
               + ([FRESH_HEADER] if fresh_since else []))
     rows = [header]

@@ -11,6 +11,9 @@ covered pages are checked by age: list items every tick (< 3 h), every 4 h
 """
 import argparse
 import sys
+
+import gspread
+import requests
 from dataclasses import dataclass
 from datetime import date, timedelta
 import tempfile
@@ -836,7 +839,13 @@ def _main(args):
             datarepo.commit_and_push(root, f"tick {result['run']['at']}")
         if writer:
             try:
-                updates = write_sheets(writer, result, state_flags)
+                try:
+                    updates = write_sheets(writer, result, state_flags)
+                except (requests.RequestException, gspread.exceptions.APIError) as exc:
+                    # Google dropped the connection now and then: one more try.
+                    print(f"sheets write retry after {type(exc).__name__}")
+                    time.sleep(15)
+                    updates = write_sheets(writer, result, state_flags)
                 if updates:
                     state = store.load_state()
                     state.update(updates)
