@@ -243,7 +243,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 8
+VERSION = 9
 
 # Models that must not match when the text also contains this pattern.
 MODEL_EXCLUDE = {
@@ -388,12 +388,20 @@ _ACCESSORY_WORDS = re.compile(
 _LENS_WORDS = re.compile(r"\bzoom\b|vivitar|tamron|\bsigma\b|tokina|soligor|hanimex")
 # Manuals. 'manual' next to camera words means a manual camera ('fully manual SLR').
 _MANUAL = re.compile(
-    r"(?:bedienungs)?anleitung|gebrauchsanweisung|handbuch|\bnotice\b|mode d.emploi|istruzioni|\blibretto"
-    r"|handleiding|(?<!fully )(?<!full )\bmanual\b(?!\s*(?:focus|fokus|camera|kamera|slr|exposure|mode))")
+    r"(?:bedienungs|betriebs)?anleitung|gebrauchsanweisung|handbuch|\bnotice\b|mode d.emploi|istruzioni|\blibretto"
+    r"|handleiding|gebruiksaanwijzing|instruction manual|manuale d.uso|(?<!fotocamere )(?<!macchine )\bmanuali\b"
+    r"|(?<!fully )(?<!full )\bmanual\b(?!\s*(?:focus|fokus|camera|kamera|slr|exposure|mode))")
 # Spare parts. Preceded by "for/per/für..." it is a camera sold for parts instead.
 _PARTS = re.compile(
     r"ricambi[oa]?\b|ersatzteil|spare parts?\b|pieces? detachees?|onderde(?:el|len)\b|calotta|top cover"
-    r"|bottom plate|bodenplatte|shutter curtain|verschlussvorhang")
+    r"|bottom plate|bodenplatte|shutter curtain|verschlussvorhang"
+    # it: front plate, frame counter, winding, lever, dial, knob, cover, bottom plate
+    r"|mascherina|contapose|avvolgimento|\bleva\b|\bghiera|manopola|coperchio|fondello"
+    # de: front plate, top cover, advance lever, frame counter, leatherette
+    r"|frontplatte|deckkappe|aufzugshebel|zahlwerk|belederung"
+    # en / fr / nl
+    r"|front plate|advance lever|rewind crank|frame counter|leatherette|light seals?\b"
+    r"|\bcapot\b|levier d.armement|\bcompteur\b|\bgainage|\bmousses?\b|bovenkap|onderplaat")
 _FOR_BEFORE = re.compile(r"\b(?:per|for|pour|fur|als|voor|para)\s+(?:\w+\s+)?$")
 # Words that say the listing is a camera body or kit, not just its manual.
 _KIT_WORDS = re.compile(r"\bbody\b|gehause|boitier|\bcorpo\b|objektiv|\blens|obiettiv|objectif|\bkit\b|\bset\b|\bnur\b")
