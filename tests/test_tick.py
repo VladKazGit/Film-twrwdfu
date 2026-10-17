@@ -242,6 +242,10 @@ def main():
         assert fm2["Выставлена"] == "2026-10-16 07:07 – 07:22" and fm2["В продаже"].endswith((" мин", " ч")), fm2
         assert [report.format_on_sale(d) for d in (0.01, 0.3, 3.5, 75, 400, 800)] == [
             "14 мин", "7 ч", "3 дня", "2 месяца", "1 год 1 месяц", "2 года 2 месяца"]
+        hanging = [{"status": "active", "flags": ["found"], "vinted_listed_est": "2026-10-07", "first_seen": "2026-10-16 10:00"},
+                   {"status": "unsold_30d", "flags": [], "listed_after": "2026-09-16 10:00", "first_seen": "2026-09-16 10:15",
+                    "closed_at": "2026-10-16 10:15"}, {"status": "sold", "flags": []}]
+        assert [report.unsold_days(i, "2026-10-17 00:00") for i in hanging] == [10.0, 30.01, None]
         assert report.on_sale_text({"status": "sold", "flags": ["preexisting"], "first_seen": "2026-10-15 10:00",
                                     "sold_detected_at": "2026-10-17 12:00"}) == "≥ 2 дня"
         assert all("\n" not in str(c) and len(str(c)) <= 150 for r in sales[1:] for c in r[:-1]), "one line per sale"

@@ -343,8 +343,22 @@ def _num(value):
     return "" if value is None else value
 
 
-def _mean_price(prices):
-    return round(statistics.mean(prices)) if prices else None
+def unsold_days(item, now):
+    """Days an unsold camera has been on sale: from its listing (Vinted's date for old ones,
+    the first sight if unknown) to now, or to its closing if deleted / unsold in 30 days.
+    None for sold and reserved ones."""
+    status = item.get("status")
+    if status not in ("active", "hidden", "deleted", "unsold_30d"):
+        return None
+    flags = set(item.get("flags") or [])
+    if item.get("listed_after") and not flags & {"preexisting", "found", "bumped"}:
+        start = item["listed_after"]
+    elif item.get("vinted_listed_est"):
+        start = f"{item['vinted_listed_est']} 00:00"
+    else:
+        start = item.get("first_seen")
+    end = now if status in ("active", "hidden") else (item.get("closed_at") or item.get("last_seen_active") or now)
+    return round(max(0, clock.minutes_between(start, end)) / 1440, 2) if start else None
 
 
 def summarize(items, now):
@@ -374,12 +388,10 @@ def summarize(items, now):
     per_model = {}
     for item in groups["list"]:
         stats = per_model.setdefault(item["model"], {"seen": 0, "sold": 0, "fast": 0, "maybe": 0, "times": [],
-                                                     "favourites": [], "days": [], "sold_prices": [],
-                                                     "unsold_prices": []})
+                                                     "favourites": [], "days": [], "unsold_days": []})
         stats["seen"] += 1
-        price = current_price(item)
-        if price is not None and item.get("status") != "reserved":  # reserved: about to sell
-            stats["sold_prices" if item.get("status") == "sold" else "unsold_prices"].append(price)
+        if unsold_days(item, now) is not None:
+            stats["unsold_days"].append(unsold_days(item, now))
         if item.get("favourites") is not None:
             stats["favourites"].append(item["favourites"])
         if item.get("status") == "sold":
@@ -397,7 +409,7 @@ def summarize(items, now):
          "median_max_minutes": statistics.median(s["times"]) if s["times"] else None,
          "mean_favourites": round(statistics.mean(s["favourites"]), 1) if s["favourites"] else None,
          "median_days_to_sell": statistics.median(s["days"]) if s["days"] else None,
-         "mean_price_sold": _mean_price(s["sold_prices"]), "mean_price_unsold": _mean_price(s["unsold_prices"])}
+         "mean_unsold_days": round(statistics.mean(s["unsold_days"]), 2) if s["unsold_days"] else None}
         for model, s in per_model.items()
     ]
     models.sort(key=lambda m: (-m["sold_under_30"], -m["maybe_under_30"], -m["sold"], -m["seen"], m["model"]))
@@ -426,10 +438,10 @@ def summary_rows(summary):
     rows += [["Продано без оценки (preexisting/night/bumped/found)", lst["sold_without_estimate"], rest["sold_without_estimate"]]]
     rows += [[], ["Модель", "Появилось", "Продано", "Продано < 30 мин", "Возможно < 30 мин",
                   "Медиана макс. времени продажи, мин", "Сохранений в среднем", "Продали за (медиана)",
-                  "Средняя цена проданных, €", "Средняя цена непроданных, €"]]
+                  "Непроданные висят (в среднем)"]]
     rows += [[m["model"], m["seen"], m["sold"], m["sold_under_30"], m["maybe_under_30"], _num(m["median_max_minutes"]),
               _num(m["mean_favourites"]), format_days(m.get("median_days_to_sell")),
-              _num(m.get("mean_price_sold")), _num(m.get("mean_price_unsold"))]
+              format_on_sale(m.get("mean_unsold_days"))]
              for m in summary["models"]]
     width = max(len(r) for r in rows)
     return [r + [""] * (width - len(r)) for r in rows]

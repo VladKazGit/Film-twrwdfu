@@ -1,10 +1,11 @@
-"""Ticks every 15 minutes inside one GitHub Actions job (up to ~5.5 hours).
+"""Ticks every 13-18 minutes (at random, not on the clock) inside one GitHub Actions job
+(up to ~5.5 hours).
 
 GitHub's cron is best-effort (late or skipped runs), so the workflow keeps
-itself going instead: this loop runs ticks at :07, :22, :37, :52 Berlin time
-inside the 07:00-00:00 window, quick checks (catalog page 1) every 5 minutes in
-between, and right before its time budget ends the workflow starts the next run,
-which waits for the next slot.
+itself going instead: this loop runs ticks 13-18 minutes apart inside the 07:00-00:00
+Berlin window (the day's first one at 07:03-07:12), two quick checks (catalog page 1)
+in each gap, and right before its time budget ends the workflow starts the next run,
+which goes on with the same rhythm.
 
 Before each tick the latest code from main is fetched, so code changes take
 effect within one tick, not one run.
@@ -12,6 +13,7 @@ effect within one tick, not one run.
 Run: python -m tracker.loop [--tick-now] [--force]
 """
 import argparse
+import random
 import subprocess
 import sys
 import time
@@ -19,30 +21,30 @@ from datetime import timedelta, timezone
 
 from . import env
 
-SLOT_MINUTES = (7, 22, 37, 52)
-QUICK_MINUTES = (2, 12, 17, 27, 32, 42, 47, 57)  # every 5 minutes between the ticks
+GAP_MIN, GAP_MAX = 13, 18  # minutes between ticks, at random
+FIRST_TICK_MIN = (3, 12)  # the day's first tick: 07:03-07:12
+QUICK_JITTER_S = 40  # quick checks at ~1/3 and ~2/3 of a gap, give or take
 WINDOW_START_HOUR = 7
 BUDGET_MIN = 330  # a 6-hour job limit minus one tick and setup
 TICK_TIMEOUT_S = 14 * 60
 QUICK_TIMEOUT_S = 4 * 60
 
 
-def next_slot(now):
-    """Next tick or quick check after now, inside the Berlin window; a day starts with a tick."""
-    slot = now.replace(second=0, microsecond=0) + timedelta(minutes=1)
-    while not _in_window(slot):
-        slot += timedelta(minutes=1)
-    return slot
+def next_tick(after, rng):
+    """A tick 13-18 minutes after `after`; past midnight, the next day's first one (07:03-07:12)."""
+    tick = after + timedelta(seconds=rng.uniform(GAP_MIN * 60, GAP_MAX * 60))
+    if tick.hour < WINDOW_START_HOUR:
+        tick = tick.replace(hour=WINDOW_START_HOUR, minute=0, second=0, microsecond=0) + timedelta(
+            seconds=rng.uniform(FIRST_TICK_MIN[0] * 60, FIRST_TICK_MIN[1] * 60))
+    return tick
 
 
-def is_quick(slot):
-    return slot.minute in QUICK_MINUTES
-
-
-def _in_window(slot):
-    if slot.minute not in SLOT_MINUTES + QUICK_MINUTES or slot.hour < WINDOW_START_HOUR:
-        return False
-    return not (slot.hour == WINDOW_START_HOUR and slot.minute < SLOT_MINUTES[0])  # no quick check before 07:07
+def quick_times(last, tick, rng):
+    """Two quick checks between ticks of one evening/day (none across the night)."""
+    gap = seconds_until(tick, last)
+    if gap > (GAP_MAX + 1) * 60:
+        return []
+    return [last + timedelta(seconds=gap * share + rng.uniform(-QUICK_JITTER_S, QUICK_JITTER_S)) for share in (1 / 3, 2 / 3)]
 
 
 def seconds_until(moment, now):
@@ -50,34 +52,39 @@ def seconds_until(moment, now):
     return (moment.astimezone(timezone.utc) - now.astimezone(timezone.utc)).total_seconds()
 
 
-def run_loop(now_fn, sleep_fn, tick_fn, tick_now=False, budget_min=BUDGET_MIN, log=print):
-    """Tick on slots until the budget ends. Returns the number of failed ticks.
+def run_loop(now_fn, sleep_fn, tick_fn, tick_now=False, budget_min=BUDGET_MIN, log=print, rng=None):
+    """Tick 13-18 minutes apart until the budget ends. Returns the number of failed ticks.
 
-    After a tick, hand over as soon as the next slot is past the budget, so the
-    next run has time to start. A run that has not ticked yet (night) sleeps
+    After a tick, hand over as soon as the next tick is past the budget, so the
+    next run has time to start (it counts its first gap from its own start, a
+    minute after the last tick). A run that has not ticked yet (night) sleeps
     until its budget ends instead, so runs never chain in a tight loop.
     """
+    rng = rng or random.Random()
     start = now_fn()
     # Real minutes, not wall-clock: the DST night must not stretch the run past the job limit.
     deadline = (start.astimezone(timezone.utc) + timedelta(minutes=budget_min)).astimezone(start.tzinfo)
-    failures, ticked = 0, False
+    failures, ticked, last = 0, False, start
     log(f"loop: started, hands over by {deadline:%Y-%m-%d %H:%M} (Berlin)")
     if tick_now:
         failures += 0 if tick_fn(False) else 1
         ticked = True
     while True:
-        now = now_fn()
-        slot = next_slot(now)
-        if seconds_until(slot, deadline) > 0:
+        tick = next_tick(last, rng)
+        if seconds_until(tick, deadline) > 0:
             if not ticked:
-                log(f"loop: next tick {slot:%Y-%m-%d %H:%M} is after this run; sleeping until hand-over")
+                log(f"loop: next tick {tick:%Y-%m-%d %H:%M} is after this run; sleeping until hand-over")
                 _sleep_until(deadline, now_fn, sleep_fn)
             log("loop: handing over to the next run")
             return failures
-        if not is_quick(slot):
-            log(f"loop: next tick {slot:%H:%M}")
-        _sleep_until(slot, now_fn, sleep_fn)
-        failures += 0 if tick_fn(is_quick(slot)) else 1
+        log(f"loop: next tick {tick:%H:%M:%S}")
+        for quick in quick_times(last, tick, rng):
+            if seconds_until(quick, now_fn()) > -60 and seconds_until(tick, quick) > 60:  # late ones are skipped
+                _sleep_until(quick, now_fn, sleep_fn)
+                failures += 0 if tick_fn(True) else 1
+        _sleep_until(tick, now_fn, sleep_fn)
+        last = now_fn()  # gaps count from the real start: an overrun tick does not bunch the next ones
+        failures += 0 if tick_fn(False) else 1
         ticked = True
 
 
@@ -108,7 +115,7 @@ def _tick(force, quick=False):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Ticks every 15 minutes for one Actions run.")
+    parser = argparse.ArgumentParser(description="Ticks every 13-18 minutes for one Actions run.")
     parser.add_argument("--tick-now", action="store_true", help="tick right away (manual start)")
     parser.add_argument("--force", action="store_true", help="first tick ignores the time window")
     args = parser.parse_args()

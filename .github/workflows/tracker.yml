@@ -1,7 +1,7 @@
 name: tracker
 
-# A self-sustaining chain: each run ticks every 15 minutes (:07, :22, :37, :52
-# Berlin, window 07:00-00:00) for up to 5.5 hours, then starts the next run.
+# A self-sustaining chain: each run ticks every 13-18 minutes at random (Berlin,
+# window 07:00-00:00) for up to 5.5 hours, then starts the next run.
 # GitHub's cron is only a backup that restarts the chain if it broke.
 #
 # Start:  Actions -> tracker -> Run workflow (ticks right away, then chains).
