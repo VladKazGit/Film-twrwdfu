@@ -71,6 +71,8 @@ OLD_RECHECK_MIN = 5 * 1440  # ... are checked every 5 days instead of daily
 NEW_ROWS_HOURS = 12  # light blue 3: cameras first seen within this many hours
 FRESH_ROWS_HOURS = 3  # light green 3, like 'активен' (above the blue): within this many hours
 FOUND_CHECKS_PER_TICK = 15
+# Labelled ids the tracker never saw: opened this many per tick, given up after a few failed tries.
+LABELLED_PER_TICK, LABELLED_MAX_TRIES = 5, 3
 # Found cameras are added with an age estimated from the id, then each item page is
 # opened once (exact age, description, kit, status): more per tick once the first pass is done.
 ENRICH_PER_TICK, ENRICH_PER_TICK_AFTER_FILL = 20, 40
@@ -225,6 +227,20 @@ def _remember_vinted_age(item, uploaded_ago, now):
         item["age_days_at_discovery"] = days - clock.minutes_between(item["first_seen"], now) // 1440
         if "found" in item["flags"] and days > FOUND_MAX_AGE_DAYS:
             item["too_old"] = True
+
+
+def add_labelled(item_id, model, page, now):
+    """A card for a camera from 'Ручная разметка' the tracker never saw. Its listing time is
+    unknown, so it is flagged 'found' (out of the speed statistics)."""
+    rec = {"id": item_id, "url": f"https://www.vinted.de/items/{item_id}", "title": page.get("title") or "",
+           "brand": page.get("brand"), "condition": page.get("condition"), "seller_id": None,
+           "price": page.get("price"), "favourites": page.get("favourites")}
+    item = new_item(rec, now, None, [])
+    item["flags"] = ["found"]  # labelled: it is a camera
+    set_model(item, model, "manual")
+    item["description_checked"] = True
+    apply_page(item, page, now)
+    return item
 
 
 def needs_enrich(item):
@@ -436,11 +452,14 @@ def run_tick(store, client, labels=None, now=None):
     changed = set()
 
     # Manual labels win over everything and are never overwritten.
+    unknown_labelled = []
     for item_id, text in (labels or {}).items():
         item = active.get(item_id) or closed.get(item_id)
-        if item is None:
-            continue
         model = models.canonical_model(text) or text
+        if item is None:
+            if model in models.MODEL_INFO:
+                unknown_labelled.append((item_id, model))
+            continue
         if item.get("model") != model or item.get("model_source") != "manual":
             item["flags"] = [f for f in item["flags"] if f not in SIGNAL_FLAGS]  # labelled: it is a camera
             set_model(item, model, "manual")
@@ -609,6 +628,30 @@ def run_tick(store, client, labels=None, now=None):
         state.setdefault(MODEL_SWEEP.key, {}).setdefault("skipped", []).append(item_id)
         stats["too_old"] += 1
 
+    # ---- cameras the user labelled that the tracker never saw (the model only in the photos,
+    # or never on the scanned pages): opened once and tracked like found ones
+    tries = state.setdefault("labelled_tries", {})
+    for item_id, model in [(i, m) for i, m in unknown_labelled if tries.get(str(i), 0) < LABELLED_MAX_TRIES][:LABELLED_PER_TICK]:
+        if not rest_enabled or not _can_request(client):
+            break
+        try:
+            page = client.item_page(item_id)
+        except BlockedError as exc:
+            errors.append(f"item page: {exc}")
+            rest_enabled = False
+            break
+        except VintedError:
+            page = {"status": "unknown"}
+        stats["checks"] += 1
+        if page["status"] == "unknown" or not page.get("title"):
+            tries[str(item_id)] = tries.get(str(item_id), 0) + 1
+            stats["unknown"] += 1
+            continue
+        tries.pop(str(item_id), None)
+        active[item_id] = add_labelled(item_id, model, page, now)
+        changed.add(item_id)
+        stats["labelled"] += 1
+
     # ---- searches for older list cameras (lowest priority; skipped on full-scan ticks to avoid peaks)
     if rest_enabled and not first_run and not full_scan:
         estimate = ageest.build_estimator([*active.values(), *closed.values()], state.get("max_seen_id"),
@@ -650,7 +693,8 @@ def run_tick(store, client, labels=None, now=None):
 def _camera_label(item):
     """'Canon AE-1 — 120 €' (+ how it came in) for the 'Запуски' comment."""
     flags = set(item.get("flags") or [])
-    origin = " (найдено)" if "found" in flags else " (поднято)" if "bumped" in flags else ""
+    origin = (" (разметка)" if item.get("model_source") == "manual" and "found" in flags
+              else " (найдено)" if "found" in flags else " (поднято)" if "bumped" in flags else "")
     price = report.current_price(item)
     price_text = f" — {report._price_text(price)} €" if price is not None else ""
     return f"{item.get('model') or (item.get('title') or '')[:40]}{price_text}{origin}"
@@ -681,7 +725,7 @@ def _finish(store, state, now, started, client, stats, errors, full_scan, pages,
         "reclassified": stats["reclassified"], "reopened": stats["reopened"],
         "search_pages": stats["search_pages"], "search_candidates": stats["search_candidates"],
         "found": stats["found"], "search_skipped": stats["search_skipped"], "found_missing": stats["found_missing"],
-        "enriched": stats["enriched"], "too_old": stats["too_old"],
+        "enriched": stats["enriched"], "too_old": stats["too_old"], "labelled": stats["labelled"],
         "rest_enabled": rest_enabled, "errors": [env.redact(e) for e in errors],
         # Names stay in the private data repo and sheet; log_line() never prints them.
         "added": [_camera_label(i) for i in added], "sold_names": [_camera_label(i) for i in sold],
@@ -712,6 +756,7 @@ def log_line(run):
             f" found {run.get('found', 0)}, too old/gone {run.get('search_skipped', 0)},"
             f" missing from search {run.get('found_missing', 0)}"
             f" | enriched {run.get('enriched', 0)}, too old {run.get('too_old', 0)}"
+            f"{' | from labels ' + str(run['labelled']) if run.get('labelled') else ''}"
             f"{'' if run['rest_enabled'] else ' | rest disabled today'}"
             f" | errors: {'; '.join(run['errors']) or 'none'}")
 

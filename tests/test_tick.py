@@ -158,10 +158,19 @@ def main():
         assert r5["run"]["full_scan"] and r5["daily"] and "night" in a[1020]["flags"]
         assert (store.root / "listings.csv").exists() and (store.root / "README.md").exists()
 
-        # Manual label beats everything.
-        tick.run_tick(store, FakeClient(pages), labels={1020: "olympus om1n"}, now="2026-10-17 07:22")
+        # Manual label beats everything. A labelled id the tracker never saw (the model only in the
+        # photos) is opened and tracked; 'не камера' is not; a page that fails is retried later.
+        client = FakeClient(pages, {5555: {"title": "Analoge Spiegelreflex Kamera", "price": 80.0, "brand": "Canon",
+                                           "uploaded_ago": "2 Monaten", "description": "gepflegte Analogkamera"},
+                                    5557: {"status": "unknown"}})
+        labels = {1020: "olympus om1n", 5555: "Canon AE-1", 5556: "не камера", 5557: "Nikon FM"}
+        r_lab = tick.run_tick(store, client, labels=labels, now="2026-10-17 07:22")
         a = store.load_active()
         assert a[1020]["model"] == "Olympus OM-1n" and a[1020]["model_source"] == "manual"
+        assert a[5555]["model"] == "Canon AE-1" and a[5555]["model_source"] == "manual" and a[5555]["group"] == "list"
+        assert a[5555]["flags"] == ["found"] and a[5555]["vinted_listed_est"] and a[5555]["price_start"] == 80.0
+        assert 5556 not in client.opened and 5557 not in a and store.load_state()["labelled_tries"] == {"5557": 1}
+        assert r_lab["run"]["labelled"] == 1 and "Canon AE-1 — 80 € (разметка)" in r_lab["run"]["added"], r_lab["run"]["added"]
 
         # Broken catalog: fatal, state keeps the last good tick.
         class Broken(FakeClient):
