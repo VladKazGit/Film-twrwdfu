@@ -255,7 +255,9 @@ MODELS = [
 VERSION = 21
 
 # Models added later: the model search looks for their old listings first (once).
-PRIORITY_SEARCH = ("Canon FX", "Canon FP", "Canon TL", "Canon TLb", "Canon TX", "Canon AT-1", "Nikon FG-20")
+# Searched again first after the search covered 3714/3717 (cameras found there).
+PRIORITY_SEARCH = ("Canon FX", "Canon FP", "Canon TL", "Canon TLb", "Canon TX", "Canon AT-1", "Nikon FG-20",
+                   "Canon AE-1", "Canon AE-1 Program", "Canon AV-1", "Canon F-1", "Canon A-1")
 
 # Models that must not match when the text also contains this pattern.
 MODEL_EXCLUDE = {
