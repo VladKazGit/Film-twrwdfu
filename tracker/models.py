@@ -173,7 +173,7 @@ MODELS = [
     ("Kiev", "Kiev 6C", MECH, MED, ["^6 c", "^6 s"], None),
     # --- semi-automatic, hybrid, electronic
     ("Canon", "Canon AE-1", ELEC, S35, ["ae 1!"], None),
-    ("Canon", "Canon AE-1 Program", ELEC, S35, ["ae 1 program!", "ae 1 prog!", "ae 1 p!"], None),
+    ("Canon", "Canon AE-1 Program", ELEC, S35, ["ae 1 program!", "ae 1 programm!", "ae 1 prog!", "ae 1 p!"], None),
     ("Canon", "Canon A-1", ELEC, S35, ["^a 1"], None),
     ("Canon", "Canon AV-1", ELEC, S35, ["av 1"], None),
     ("Canon", "Canon AL-1", ELEC, S35, ["al 1"], None),
@@ -252,7 +252,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 20
+VERSION = 21
 
 # Models added later: the model search looks for their old listings first (once).
 PRIORITY_SEARCH = ("Canon FX", "Canon FP", "Canon TL", "Canon TLb", "Canon TX", "Canon AT-1", "Nikon FG-20")
@@ -320,6 +320,10 @@ class _Alias:
     rx: re.Pattern
 
 
+_BETWEEN = (r"(?:kamera|camera|appareil(?: photo)?|fotocamera|spiegelreflex(?:kamera)?|slr|reflex"
+            r"|analog(?:e|ue)?|analogique|argentique|vintage)")
+
+
 def _compile_alias(brand, model, alias, not_after):
     adjacent = alias.startswith("^")
     alias = alias.lstrip("^")
@@ -340,7 +344,8 @@ def _compile_alias(brand, model, alias, not_after):
         tail += r"(?!\s*-?\s*(?:\d{2,}(?![\d.,:]|\s*mm)|\d" + _NOT_OTHER_MODEL + "))"
     # Mount names: 'Nikon F mount', 'Canon EF Bajonett' are lenses/adapters.
     tail += rf"(?!{SEP}(?:mount|bajonett|bayonet|anschluss|adapter|adaptateur|monture|attacco|innesto|vatting))"
-    head = _START + (_brand_pattern(BRANDS[brand][1]) + SEP if adjacent else "")
+    # 'Canon Kamera F-1', 'Nikon analoge FM': one word naming the camera may sit in between.
+    head = _START + (_brand_pattern(BRANDS[brand][1]) + SEP + f"(?:{_BETWEEN}{SEP})?" if adjacent else "")
     return _Alias(model, brand, not (adjacent or standalone), len(re.sub(r"[^a-z0-9]", "", alias)),
                   re.compile(head + core + tail))
 

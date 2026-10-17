@@ -28,7 +28,7 @@ from pathlib import Path
 
 from . import ageest, clock, env, models, report
 from .store import DataStore
-from .vinted import INSTANT_CATEGORY_ID, MAX_PAGES, BlockedError, VintedClient, VintedError, age_days
+from .vinted import EXTRA_CATEGORY_IDS, MAX_PAGES, BlockedError, VintedClient, VintedError, age_days
 
 WINDOW_START_HOUR = 7  # Berlin; the window ends at midnight
 TICK_PAGES = 2
@@ -628,16 +628,18 @@ def run_tick(store, client, labels=None, now=None, quick=False):
             seen.setdefault(rec["id"], rec)
     tail = [r["id"] for r in last_page[-BOUNDARY_TAIL:] if not r["promoted"]] or [r["id"] for r in last_page]
     boundary = max(tail)
-    # List cameras listed as instant cameras (Polaroid & co stay out): seen like catalog items.
+    # List cameras listed as instant cameras, other cameras or spare parts (Polaroids, parts and
+    # the like stay out): seen like catalog items.
     misplaced = set()
-    try:
-        for rec in client.catalog_page(1, INSTANT_CATEGORY_ID):
-            cls = models.classify(rec["title"], vinted_brand=rec["brand"])
-            if cls["in_list"] and not SIGNAL_FLAGS & set(cls["flags"]) and rec["id"] not in seen:
-                seen[rec["id"]] = rec
-                misplaced.add(rec["id"])
-    except VintedError:
-        stats["check_errors"] += 1
+    for category in EXTRA_CATEGORY_IDS:
+        try:
+            for rec in client.catalog_page(1, category):
+                cls = models.classify(rec["title"], vinted_brand=rec["brand"])
+                if cls["in_list"] and not SIGNAL_FLAGS & set(cls["flags"]) and rec["id"] not in seen:
+                    seen[rec["id"]] = rec
+                    misplaced.add(rec["id"])
+        except VintedError:
+            stats["check_errors"] += 1
 
     # ---- seen items: update tracked, create new
     max_seen = state.get("max_seen_id", 0)

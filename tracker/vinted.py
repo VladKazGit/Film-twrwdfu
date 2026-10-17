@@ -16,7 +16,8 @@ import requests
 
 BASE_URL = "https://www.vinted.de"
 CATEGORY_ID = 3076  # Filmkameras; 3077 Sofortbildkameras is out of scope
-INSTANT_CATEGORY_ID = 3077  # ...but sellers put list cameras there too
+# ...but sellers put list cameras under 'Sofortbildkameras', 'Andere Kameras' and 'Kamera-Ersatzteile' too
+EXTRA_CATEGORY_IDS = (3077, 3714, 3717)
 MAX_PAGES = 10  # total_entries is capped at 960 = 10 pages x 96
 
 USER_AGENT = (
@@ -408,8 +409,8 @@ class VintedClient:
         return items
 
     def search_page(self, text, page, max_price=None):
-        """Search by text in Filmkameras and Sofortbildkameras (relevance order), optionally up to max_price."""
-        params = {"search_text": text, "catalog[]": [CATEGORY_ID, INSTANT_CATEGORY_ID], "order": "relevance", "page": page}
+        """Search by text in Filmkameras and the extra categories (relevance order), optionally up to max_price."""
+        params = {"search_text": text, "catalog[]": [CATEGORY_ID, *EXTRA_CATEGORY_IDS], "order": "relevance", "page": page}
         if max_price is not None:
             params["price_to"] = max_price
         resp = self.fetch(BASE_URL + "/catalog", params)
