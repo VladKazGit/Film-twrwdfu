@@ -239,7 +239,11 @@ def main():
         fm2 = dict(zip(report.SALES_HEADER, sales[1]))
         assert fm2["Модель"] == "Nikon FM2" and fm2["Цена при продаже, €"] == 140.0 and fm2["История цены, €"] == "150 → 140"
         assert fm2["Изменение цены"] == "−10 € (−7 %)", fm2["Изменение цены"]
-        assert fm2["Выставлена"] == "2026-10-16 07:07 – 07:22" and fm2["Висела"] == "меньше дня"
+        assert fm2["Выставлена"] == "2026-10-16 07:07 – 07:22" and fm2["В продаже"].endswith((" мин", " ч")), fm2
+        assert [report.format_on_sale(d) for d in (0.01, 0.3, 3.5, 75, 400, 800)] == [
+            "14 мин", "7 ч", "3 дня", "2 месяца", "1 год 1 месяц", "2 года 2 месяца"]
+        assert report.on_sale_text({"status": "sold", "flags": ["preexisting"], "first_seen": "2026-10-15 10:00",
+                                    "sold_detected_at": "2026-10-17 12:00"}) == "≥ 2 дня"
         assert all("\n" not in str(c) and len(str(c)) <= 150 for r in sales[1:] for c in r[:-1]), "one line per sale"
         item = {"kit": "with_lens", "kit_details": ["lens", "flash"], "description": "Canon AE-1\n\n" + "sehr gut " * 30}
         assert report._kit_text(item) == "с объективом: вспышка" and report._one_line(item["description"], 30).endswith("…")

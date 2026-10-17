@@ -115,6 +115,43 @@ def format_days(days):
     return f"{n} {_plural(n, 'месяц', 'месяца', 'месяцев')}"
 
 
+def format_on_sale(days, at_least=False):
+    """How long a camera was on sale: '25 мин', '5 ч', '3 дня', '2 месяца', '1 год 2 месяца';
+    '≥ ...' when only a lower bound is known."""
+    if days is None:
+        return ""
+    minutes = days * 1440
+    if minutes < 60:
+        text = f"{max(1, round(minutes))} мин"
+    elif days < 1:
+        text = f"{round(minutes / 60)} ч"
+    elif days < 31:
+        n = int(days)
+        text = f"{n} {_plural(n, 'день', 'дня', 'дней')}"
+    elif days < 365:
+        n = max(1, round(days / 30.4))
+        text = f"{n} {_plural(n, 'месяц', 'месяца', 'месяцев')}"
+    else:
+        years, months = int(days // 365), round((days % 365) / 30.4)
+        if months == 12:
+            years, months = years + 1, 0
+        text = f"{years} {_plural(years, 'год', 'года', 'лет')}"
+        if months:
+            text += f" {months} {_plural(months, 'месяц', 'месяца', 'месяцев')}"
+    return ("≥ " if at_least else "") + text
+
+
+def on_sale_text(item):
+    """'В продаже' of a sold camera; without a listing date, at least since it was first seen."""
+    days = days_to_sell(item)
+    if days is not None:
+        return format_on_sale(days)
+    if item.get("first_seen") and item.get("sold_detected_at"):
+        return format_on_sale(max(0, clock.minutes_between(item["first_seen"], item["sold_detected_at"])) / 1440,
+                              at_least=True)
+    return ""
+
+
 def fast_confidence(item):
     """'точно' / 'возможно' if a sold camera may have sold within 30 minutes, else None.
 
@@ -202,7 +239,7 @@ def item_rows(items, with_group=False, new_since=None, new_old_listings=False, f
 
 
 SALES_HEADER = [
-    "Модель", "Цена при продаже, €", "История цены, €", "Изменение цены", "Выставлена", "Продана", "Висела",
+    "Модель", "Цена при продаже, €", "История цены, €", "Изменение цены", "Выставлена", "Продана", "В продаже",
     "Комплект", "Состояние", "Сохранений", "Описание (начало)", "Ссылка",
 ]
 SALES_DESCRIPTION_LIMIT = 150  # one line per sale; the full text stays in the data repo
@@ -257,7 +294,7 @@ def sales_rows(items):
         history = " → ".join(_price_text(p) for p in prices) if len(set(prices)) > 1 else ""
         rows.append([
             i.get("model") or "", _num(final), history, _change_text(start, final),
-            _listed_text(i), i.get("sold_detected_at") or "", format_days(days_to_sell(i)),
+            _listed_text(i), i.get("sold_detected_at") or "", on_sale_text(i),
             _kit_text(i), i.get("condition") or "", _num(i.get("favourites")),
             _one_line(i.get("description"), SALES_DESCRIPTION_LIMIT), i.get("url") or "",
         ])
@@ -306,6 +343,10 @@ def _num(value):
     return "" if value is None else value
 
 
+def _mean_price(prices):
+    return round(statistics.mean(prices)) if prices else None
+
+
 def summarize(items, now):
     """Aggregates for 'Сводка', summary.json and README.md."""
     counted = [i for i in items if not set(i.get("flags") or []) & EXCLUDED_FLAGS]
@@ -333,8 +374,12 @@ def summarize(items, now):
     per_model = {}
     for item in groups["list"]:
         stats = per_model.setdefault(item["model"], {"seen": 0, "sold": 0, "fast": 0, "maybe": 0, "times": [],
-                                                     "favourites": [], "days": []})
+                                                     "favourites": [], "days": [], "sold_prices": [],
+                                                     "unsold_prices": []})
         stats["seen"] += 1
+        price = current_price(item)
+        if price is not None and item.get("status") != "reserved":  # reserved: about to sell
+            stats["sold_prices" if item.get("status") == "sold" else "unsold_prices"].append(price)
         if item.get("favourites") is not None:
             stats["favourites"].append(item["favourites"])
         if item.get("status") == "sold":
@@ -351,7 +396,8 @@ def summarize(items, now):
         {"model": model, "seen": s["seen"], "sold": s["sold"], "sold_under_30": s["fast"], "maybe_under_30": s["maybe"],
          "median_max_minutes": statistics.median(s["times"]) if s["times"] else None,
          "mean_favourites": round(statistics.mean(s["favourites"]), 1) if s["favourites"] else None,
-         "median_days_to_sell": statistics.median(s["days"]) if s["days"] else None}
+         "median_days_to_sell": statistics.median(s["days"]) if s["days"] else None,
+         "mean_price_sold": _mean_price(s["sold_prices"]), "mean_price_unsold": _mean_price(s["unsold_prices"])}
         for model, s in per_model.items()
     ]
     models.sort(key=lambda m: (-m["sold_under_30"], -m["maybe_under_30"], -m["sold"], -m["seen"], m["model"]))
@@ -379,9 +425,11 @@ def summary_rows(summary):
     rows += [["Возможно < 30 мин (по нижней оценке)", lst["fast_maybe"], rest["fast_maybe"]]]
     rows += [["Продано без оценки (preexisting/night/bumped/found)", lst["sold_without_estimate"], rest["sold_without_estimate"]]]
     rows += [[], ["Модель", "Появилось", "Продано", "Продано < 30 мин", "Возможно < 30 мин",
-                  "Медиана макс. времени продажи, мин", "Сохранений в среднем", "Продали за (медиана)"]]
+                  "Медиана макс. времени продажи, мин", "Сохранений в среднем", "Продали за (медиана)",
+                  "Средняя цена проданных, €", "Средняя цена непроданных, €"]]
     rows += [[m["model"], m["seen"], m["sold"], m["sold_under_30"], m["maybe_under_30"], _num(m["median_max_minutes"]),
-              _num(m["mean_favourites"]), format_days(m.get("median_days_to_sell"))]
+              _num(m["mean_favourites"]), format_days(m.get("median_days_to_sell")),
+              _num(m.get("mean_price_sold")), _num(m.get("mean_price_unsold"))]
              for m in summary["models"]]
     width = max(len(r) for r in rows)
     return [r + [""] * (width - len(r)) for r in rows]
