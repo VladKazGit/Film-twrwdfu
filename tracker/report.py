@@ -440,7 +440,7 @@ def summary_rows(summary):
                   "Медиана макс. времени продажи, мин", "Сохранений в среднем", "Продали за (медиана)",
                   "Непроданные висят (в среднем)"]]
     rows += [[m["model"], m["seen"], m["sold"], m["sold_under_30"], m["maybe_under_30"], _num(m["median_max_minutes"]),
-              _num(m["mean_favourites"]), format_days(m.get("median_days_to_sell")),
+              _num(m["mean_favourites"]), format_on_sale(m.get("median_days_to_sell")),
               format_on_sale(m.get("mean_unsold_days"))]
              for m in summary["models"]]
     width = max(len(r) for r in rows)
