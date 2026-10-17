@@ -204,7 +204,7 @@ def main():
         cheap_rows = ss.sheets["До 20 €"].rows
         assert cheap_rows[0][-3:] == ["Группа", report.NEW_HEADER, report.FRESH_HEADER]
         assert {r[0] for r in cheap_rows[1:] if r[-2] == "да"} == {1021} and {r[0] for r in cheap_rows[1:] if r[-1] == "да"} == {1021}
-        assert 400 in {r[0] for r in ss.sheets["Список"].rows[1:]} and 400 in {r[-1] for r in ss.sheets["Продажи"].rows[1:]}
+        assert 400 in {r[0] for r in ss.sheets["Список"].rows[1:]} and "https://www.vinted.de/items/400" in {r[-1] for r in ss.sheets["Продажи"].rows[1:]}
         list_rows = ss.sheets["Список"].rows
         assert list_rows[0][-2:] == [report.NEW_HEADER, report.FRESH_HEADER] and len(list_rows[0]) == n + 2
         marked = {r[0] for r in list_rows[1:] if r[-2] == "да"}
@@ -230,11 +230,16 @@ def main():
         assert ss.sheets["Сводка"].rows[0][0] == "Обновлено"
         assert "Остальные" in ss.sheets
         sales = ss.sheets["Продажи"].rows
-        assert sales[0] == report.SALES_HEADER and [r[-1] for r in sales[1:]] == [1011, 400, 1010], [r[-1] for r in sales[1:]]
+        ids = [r[-1].rsplit("/", 1)[-1] for r in sales[1:]]
+        assert sales[0] == report.SALES_HEADER and len(sales[0]) == 12 and ids == ["1011", "400", "1010"], ids
         fm2 = dict(zip(report.SALES_HEADER, sales[1]))
-        assert fm2["Модель"] == "Nikon FM2" and fm2["Цена на старте"] == 150.0 and fm2["Цена при продаже"] == 140.0
-        assert fm2["Изменение цены, €"] == -10.0 and fm2["Изменение цены, %"] == -6.7
-        assert fm2["Выставлена"] == "2026-10-16 07:07 – 07:22" and fm2["Висела на сайте"] == "меньше дня"
+        assert fm2["Модель"] == "Nikon FM2" and fm2["Цена при продаже, €"] == 140.0 and fm2["История цены, €"] == "150 → 140"
+        assert fm2["Изменение цены"] == "−10 € (−7 %)", fm2["Изменение цены"]
+        assert fm2["Выставлена"] == "2026-10-16 07:07 – 07:22" and fm2["Висела"] == "меньше дня"
+        assert all("\n" not in str(c) and len(str(c)) <= 150 for r in sales[1:] for c in r[:-1]), "one line per sale"
+        item = {"kit": "with_lens", "kit_details": ["lens", "flash"], "description": "Canon AE-1\n\n" + "sehr gut " * 30}
+        assert report._kit_text(item) == "с объективом: вспышка" and report._one_line(item["description"], 30).endswith("…")
+        assert report._change_text(100.0, 100.0) == "" and report._change_text(80.0, 100.0) == "+20 € (+25 %)"
         fast = ss.sheets["Быстрые продажи"].rows
         assert fast[0][-1] == "Уверенность" and "Группа" not in fast[0], fast[0]
         assert [r[0] for r in fast[1:]] == [1011, 400] and fast[1][-1] == "возможно", "reserved fast, sold 3 h later"

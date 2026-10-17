@@ -202,12 +202,10 @@ def item_rows(items, with_group=False, new_since=None, new_old_listings=False, f
 
 
 SALES_HEADER = [
-    "Модель", "Бренд", "Заголовок", "Цена на старте", "Цена при продаже", "Изменение цены, €", "Изменение цены, %",
-    "История цены", "Выставлена", "Продажа обнаружена", "Висела на сайте", "Висела, дней",
-    "Время продажи макс, мин", "Комплект", "Детали комплекта", "Состояние", "Описание", "Тип", "Формат", "Регион",
-    "Сохранений", "Флаги", "Ссылка", "id",
+    "Модель", "Цена при продаже, €", "История цены, €", "Изменение цены", "Выставлена", "Продана", "Висела",
+    "Комплект", "Состояние", "Сохранений", "Описание (начало)", "Ссылка",
 ]
-DESCRIPTION_LIMIT = 2000  # characters per cell
+SALES_DESCRIPTION_LIMIT = 150  # one line per sale; the full text stays in the data repo
 
 
 def _price_text(value):
@@ -224,25 +222,44 @@ def _listed_text(item):
     return ""
 
 
+def _change_text(start, final):
+    """'−10 € (−7 %)'; empty when the price never changed."""
+    if start is None or final is None or final == start:
+        return ""
+    change = final - start
+    sign = "+" if change > 0 else "−"
+    text = f"{sign}{_price_text(round(abs(change), 2))} €"
+    return f"{text} ({sign}{abs(100 * change / start):.0f} %)" if start else text
+
+
+def _kit_text(item):
+    """'с объективом: вспышка, сумка/чехол' (the lens is already in the kit name)."""
+    kit = item.get("kit")
+    details = [KIT_DETAILS_RU.get(d, d) for d in item.get("kit_details") or [] if not (kit == "with_lens" and d == "lens")]
+    return KIT_RU.get(kit, "") + (": " + ", ".join(details) if details else "")
+
+
+def _one_line(text, limit):
+    text = " ".join((text or "").split())
+    return text if len(text) <= limit else text[:limit - 1].rstrip() + "…"
+
+
 def sales_rows(items):
-    """'Продажи': sold list cameras, newest sale first."""
+    """'Продажи': sold list cameras, newest sale first, one line each."""
     sold = sorted((i for i in items if i.get("group") == "list" and i.get("status") == "sold"),
                   key=lambda i: (i.get("sold_detected_at") or "", i["id"]), reverse=True)
     rows = [SALES_HEADER]
     for i in sold:
         start, final = i.get("price_start"), current_price(i)
-        change = round(final - start, 2) if start is not None and final is not None else None
-        percent = round(100 * change / start, 1) if change is not None and start else None
-        history = " → ".join(_price_text(p["price"]) for p in i.get("price_history") or [] if p.get("price") is not None)
-        days = days_to_sell(i)
+        prices = [p["price"] for p in i.get("price_history") or [] if p.get("price") is not None]
+        if final is not None and (not prices or prices[-1] != final):
+            prices.append(final)
+        history = " → ".join(_price_text(p) for p in prices) if len(set(prices)) > 1 else ""
         rows.append([
-            i.get("model") or "", i.get("brand") or "", i.get("title") or "",
-            _num(start), _num(final), _num(change), _num(percent), history,
-            _listed_text(i), i.get("sold_detected_at") or "", format_days(days), _num(days),
-            _num(i.get("time_to_sell_max")), KIT_RU.get(i.get("kit"), ""), kit_details_text(i),
-            i.get("condition") or "", (i.get("description") or "")[:DESCRIPTION_LIMIT],
-            MECH_RU.get(i.get("mech_type"), ""), FORMAT_RU.get(i.get("format"), ""), REGION_RU.get(i.get("region"), ""),
-            _num(i.get("favourites")), ", ".join(i.get("flags") or []), i.get("url") or "", i["id"],
+            i.get("model") or "", _num(final), history, _change_text(start, final),
+            _listed_text(i), i.get("sold_detected_at") or "", format_days(days_to_sell(i)),
+            _kit_text(i), i.get("condition") or "", _num(i.get("favourites")),
+            _one_line(i.get("description"), SALES_DESCRIPTION_LIMIT), i.get("url") or "",
         ])
     return rows
 
