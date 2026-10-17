@@ -28,7 +28,7 @@ from pathlib import Path
 
 from . import ageest, clock, env, models, report
 from .store import DataStore
-from .vinted import MAX_PAGES, BlockedError, VintedClient, VintedError, age_days
+from .vinted import INSTANT_CATEGORY_ID, MAX_PAGES, BlockedError, VintedClient, VintedError, age_days
 
 WINDOW_START_HOUR = 7  # Berlin; the window ends at midnight
 TICK_PAGES = 2
@@ -337,7 +337,12 @@ def fresh_search(state, client, active, closed, now, stats, changed, quick=False
     if not quick:
         queries += [(n, 1) for n in FRESH_PRIORITY if n in names and n not in due]
     history = state.get("max_seen_history") or []
-    floor, top = (history[0][1] if history else 0), state.get("max_seen_id", 0)
+    # The catalog's top a day ago: the oldest of the history, or of the new cards of the last day.
+    day_ago = clock.stamp(clock.parse(now) - timedelta(hours=FRESH_HOURS))
+    new_ids = [i["id"] for i in active.values()
+               if i["first_seen"] >= day_ago and not {"found", "bumped", "preexisting"} & set(i["flags"])]
+    floor = min(new_ids + [h[1] for h in history[:1]], default=0)
+    top = state.get("max_seen_id", 0)
     skipped = set(state.get(MODEL_SWEEP.key, {}).get("skipped", []))
     for model, pages in queries:
         results, last = [], []
@@ -364,7 +369,10 @@ def fresh_search(state, client, active, closed, now, stats, changed, quick=False
             elif rec_id in closed or rec_id in skipped or not floor <= rec_id <= top:
                 continue
             else:
-                item = new_item(rec, now, previous, [] if previous else ["found"])
+                # Listed after this model's previous query only if its id is above the catalog's top
+                # then; older ones were missed (e.g. under the day floor): listing time unknown.
+                after_previous = previous and rec_id > _top_at(history, previous)
+                item = new_item(rec, now, previous if after_previous else None, [] if after_previous else ["found"])
                 if item["group"] == "list":
                     item["fresh_seen_at"] = now
                     if item.get("model") == model:
@@ -383,6 +391,12 @@ def fresh_search(state, client, active, closed, now, stats, changed, quick=False
                 stats["fresh_missing"] += 1
         if (model, pages) in queries[:len(due)]:
             last_run[model] = now
+
+
+def _top_at(history, stamp):
+    """The catalog's top id at a moment (the last history entry not after it), or 0."""
+    tops = [h[1] for h in history if h[0] <= stamp]
+    return tops[-1] if tops else 0
 
 
 def sweep_state(state, sweep, now):
@@ -614,6 +628,16 @@ def run_tick(store, client, labels=None, now=None, quick=False):
             seen.setdefault(rec["id"], rec)
     tail = [r["id"] for r in last_page[-BOUNDARY_TAIL:] if not r["promoted"]] or [r["id"] for r in last_page]
     boundary = max(tail)
+    # List cameras listed as instant cameras (Polaroid & co stay out): seen like catalog items.
+    misplaced = set()
+    try:
+        for rec in client.catalog_page(1, INSTANT_CATEGORY_ID):
+            cls = models.classify(rec["title"], vinted_brand=rec["brand"])
+            if cls["in_list"] and not SIGNAL_FLAGS & set(cls["flags"]) and rec["id"] not in seen:
+                seen[rec["id"]] = rec
+                misplaced.add(rec["id"])
+    except VintedError:
+        stats["check_errors"] += 1
 
     # ---- seen items: update tracked, create new
     max_seen = state.get("max_seen_id", 0)
@@ -629,6 +653,12 @@ def run_tick(store, client, labels=None, now=None, quick=False):
                 active[rec_id] = item
                 changed.add(rec_id)
                 stats[f"new_{item['group']}"] += 1
+        elif rec_id in misplaced and rec_id not in closed:
+            # An older list camera under 'Sofortbildkameras', never seen: listing time unknown.
+            if not first_run:
+                active[rec_id] = new_item(rec, now, None, ["found"])
+                changed.add(rec_id)
+                stats["found"] += 1
         elif rec_id not in closed:
             # An old listing pushed back to the top. List cameras are tracked
             # from the bump on: it happened between the previous tick and now.

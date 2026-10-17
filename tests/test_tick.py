@@ -24,9 +24,9 @@ class FakeClient:
         self.requests_made += 1
         return self.search.get((text, page), [])
 
-    def catalog_page(self, page):
+    def catalog_page(self, page, category=3076):
         self.requests_made += 1
-        return self.pages.get(page, [])
+        return self.pages.get(page if category == 3076 else (category, page), [])
 
     def item_page(self, item_id):
         self.requests_made += 1
@@ -589,8 +589,18 @@ def main():
         idle = tick.run_tick(store, FakeClient({1: [rec(20_000_000_020, "Nikon FM2 Kamera", 200.0)] + page1[1:]}),
                              now="2026-10-17 10:47", quick=True)
         assert not idle["run"]["list_changed"], "nothing new: the sheet is not written"
+        # 'Sofortbildkameras' page 1: list cameras only, new ones as new, older ones as found.
+        pages = {1: [rec(20_000_000_300, "Kamera", 30.0)] + page1[1:], 2: older(19_000_000_000),
+                 (3077, 1): [rec(20_000_000_301, "Nikon EM Camera met een Nikon Camerariem", 30.0),
+                             rec(20_000_000_302, "Polaroid 600", 25.0), rec(19_500_000_000, "Canon AE-1 alt", 60.0)]}
+        r3077 = tick.run_tick(store, FakeClient(pages), now="2026-10-17 11:07")
+        a = store.load_active()
+        assert a[20_000_000_301]["model"] == "Nikon EM" and a[20_000_000_301]["listed_after"] == "2026-10-17 10:47"
+        assert 20_000_000_302 not in a and a[19_500_000_000]["flags"] == ["found"], r3077["run"]
+
         # Fresh search: a list camera from another category, listed within a day, is tracked.
-        state = {"max_seen_id": 20_000_000_100, "max_seen_history": [["2026-10-16 11:00", 20_000_000_000]],
+        state = {"max_seen_id": 20_000_000_100, "max_seen_history": [["2026-10-16 11:00", 20_000_000_000],
+                                                                    ["2026-10-17 10:30", 20_000_000_040]],
                  "models_sheet": ["Canon AE-1"]}
         fresh = [rec(20_000_000_050, "Canon AE-1 analog", 90.0), rec(20_000_000_051, "Canon AE-1 Tasche", 9.0),
                  rec(20_000_000_200, "Canon AE-1 neu", 99.0), rec(19_000_000_000, "Canon AE-1 alt", 80.0)]
@@ -601,6 +611,7 @@ def main():
         assert cam["fresh_query"] == "Canon AE-1" and cam["fresh_seen_at"] == "2026-10-17 10:52"
         tick.fresh_search(state, client, active, {}, "2026-10-17 11:20", st, set(), quick=True)
         assert st["fresh_pages"] == 1, "each model about once an hour"
+        assert tick._top_at(state["max_seen_history"], "2026-10-17 10:52") == 20_000_000_040
         # Next hour: the camera is gone from its model's page -> its page is opened next tick.
         client.search[("canon ae-1", "fresh")] = fresh[1:]
         tick.fresh_search(state, client, active, {}, "2026-10-17 11:52", st, set(), quick=True)

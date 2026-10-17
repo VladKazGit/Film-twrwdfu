@@ -177,6 +177,8 @@ MODELS = [
     ("Canon", "Canon A-1", ELEC, S35, ["^a 1"], None),
     ("Canon", "Canon AV-1", ELEC, S35, ["av 1"], None),
     ("Canon", "Canon AL-1", ELEC, S35, ["al 1"], None),
+    # right after the brand only: 'shutter at 1/125' in a description is no camera
+    ("Canon", "Canon AT-1", ELEC, S35, ["^at 1"], None),
     ("Canon", "Canon T90", ELEC, S35, ["t 90"], None),
     ("Canon", "Canon EF", ELEC, S35, ["^ef"],
      r"\d|s(?![a-z])|m(?![a-z])|objektiv|obiettiv|objectif|lens|zoom|usm|optik"),
@@ -187,6 +189,7 @@ MODELS = [
     ("Nikon", "Nikon FE2", ELEC, S35, ["fe 2"], None),
     ("Nikon", "Nikon FA", ELEC, S35, ["^fa"], None),
     ("Nikon", "Nikon FG", ELEC, S35, ["fg"], None),
+    ("Nikon", "Nikon FG-20", ELEC, S35, ["fg 20"], None),
     ("Nikon", "Nikon EM", ELEC, S35, ["^em"], None),
     ("Nikon", "Nikon EL2", ELEC, S35, ["el 2"], None),
     ("Pentax", "Pentax LX", ELEC, S35, ["lx"], None),
@@ -249,10 +252,10 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 18
+VERSION = 19
 
 # Models added later: the model search looks for their old listings first (once).
-PRIORITY_SEARCH = ("Canon FX", "Canon FP", "Canon TL", "Canon TLb", "Canon TX")
+PRIORITY_SEARCH = ("Canon FX", "Canon FP", "Canon TL", "Canon TLb", "Canon TX", "Canon AT-1", "Nikon FG-20")
 
 # Models that must not match when the text also contains this pattern.
 MODEL_EXCLUDE = {
