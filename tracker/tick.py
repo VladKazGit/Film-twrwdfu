@@ -843,7 +843,8 @@ def _camera_label(item):
               else " (найдено)" if "found" in flags else " (поднято)" if "bumped" in flags else "")
     price = report.current_price(item)
     price_text = f" — {report._price_text(price)} €" if price is not None else ""
-    return f"{item.get('model') or (item.get('title') or '')[:40]}{price_text}{origin}"
+    # The id finds the row in 'Список' (Ctrl+F); the sheet is private, logs never print it.
+    return f"{item.get('model') or (item.get('title') or '')[:40]}{price_text}{origin}, id {item['id']}"
 
 
 def _finish(store, state, now, started, client, stats, errors, full_scan, pages, rest_enabled, today,

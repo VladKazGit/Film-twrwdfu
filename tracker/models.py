@@ -585,6 +585,8 @@ def accessory_words(title):
     if not hits:
         return []
     head = norm[:hits[0][0]]
+    if _camera_joined(head):
+        return []  # 'Objectif Sigma 28mm + appareil photo argentique Konica Autoreflex TC'
     words = []
     for rx in (_PARTS, _MANUAL, _ACCESSORY_WORDS, _LENS_WORDS):
         for m in rx.finditer(head):

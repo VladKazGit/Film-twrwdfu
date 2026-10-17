@@ -174,7 +174,7 @@ def main():
         assert a[5555]["model"] == "Canon AE-1" and a[5555]["model_source"] == "manual" and a[5555]["group"] == "list"
         assert a[5555]["flags"] == ["found"] and a[5555]["vinted_listed_est"] and a[5555]["price_start"] == 80.0
         assert 5556 not in client.opened and 5557 not in a and store.load_state()["labelled_tries"] == {"5557": 1}
-        assert r_lab["run"]["labelled"] == 1 and "Canon AE-1 — 80 € (разметка)" in r_lab["run"]["added"], r_lab["run"]["added"]
+        assert r_lab["run"]["labelled"] == 1 and "Canon AE-1 — 80 € (разметка), id 5555" in r_lab["run"]["added"], r_lab["run"]["added"]
 
         # Broken catalog: fatal, state keeps the last good tick.
         class Broken(FakeClient):
@@ -281,7 +281,7 @@ def main():
         assert upd.get("new_rows_colors") == ["До 20 €", "Список"], "old flag: only 'До 20 €' added"
         assert upd.get("fresh_rows_colors") == ["До 20 €", "Список"]
         assert ss.sheets["Запуски"].rows[-1][-1] == 1 and upd["cheap_ids"] == [1021], "Zenit E 1021 entered 'До 20 €'"
-        assert ss.sheets["Запуски"].rows[-1][-2].endswith("В «До 20 €» (1): Zenit E — 15 €"), ss.sheets["Запуски"].rows[-1][-2]
+        assert ss.sheets["Запуски"].rows[-1][-2].endswith("В «До 20 €» (1): Zenit E — 15 €, id 1021"), ss.sheets["Запуски"].rows[-1][-2]
         assert "Zenit KM" in upd["models_offered"] and models_ws.rows[-1][0] == "Zenit KM"
         assert [r[0] for r in ss.sheets["До 20 €"].rows[1:]] == [1021], "Cyrillic 'зенит-е' matches Zenit E"
 
@@ -472,7 +472,7 @@ def main():
     # 'Запуски' comment: what entered the list and what sold this tick.
     comment = tick.runs_comment(r2["run"])
     assert "Добавлены (3): " in comment and "Nikon FM2 — 150 €" in comment and "Zenit 12XP — 10 € (поднято)" in comment, comment
-    assert comment.endswith("Проданы (1): Canon AE-1 — 45 €"), comment
+    assert comment.endswith("Проданы (1): Canon AE-1 — 45 €, id 1010"), comment
     assert tick.runs_comment({"added": [f"m{k}" for k in range(45)]}).endswith("m39 … и ещё 5")
     assert "Canon" not in tick.log_line(r2["run"]), "names never reach the Actions log"
 
@@ -537,6 +537,7 @@ def main():
         "Nikon FG Kamera, Tokina AT-X, 28-85mm Objektiv und Zubehör",
         "Zorki 4 - Fotocamera a rullino 35mm pellicola funzionante",
         "Appareil argentique Praktica MTL 5 - objectif 135mm F2.8 monture M42 fonctionnel",
+        "Objectif Sigma 28mm + appareil photo argentique Konica Autoreflex TC",
         "Canon A-1 – Vintage 35mm analog Filmkamera SLR / AE1 Programm 28-85 f1:3.5 Zoom getestet",
     ]
     cards = [card(300 + k, t, 90.0) for k, t in enumerate(reviewed)]
