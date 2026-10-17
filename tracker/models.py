@@ -252,7 +252,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 22
+VERSION = 23
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -422,6 +422,9 @@ _MANUAL = re.compile(
     # 'manuale' alone also means a manual camera: only as a document ('manuale originale in russo')
     r"|^manuale\b|\bmanuale\b(?=\s+(?:originale|di istruzioni|istruzioni|utente|tecnico|in\s|italiano|inglese"
     r"|tedesco|russo|francese))"
+    # 'manuel' is also a manual camera ('appareil photo argentique manuel'): as a document only
+    r"|^manuel\b|\bmanuel\b(?=\s+(?:d.utilisation|d.utilisateur|utilisateur|de l.utilisateur|d.instructions?"
+    r"|original|en\s|francais|anglais|allemand))"
     r"|(?<!fully )(?<!full )\bmanual\b(?!\s*(?:focus|fokus|camera|kamera|slr|exposure|mode))")
 # Spare parts. Preceded by "for/per/für..." it is a camera sold for parts instead.
 _PARTS = re.compile(
@@ -432,7 +435,7 @@ _PARTS = re.compile(
     # de: front plate, top cover, advance lever, frame counter, leatherette
     r"|frontplatte|deckkappe|aufzugshebel|zahlwerk|belederung"
     # en / fr / nl
-    r"|front plate|advance lever|rewind crank|frame counter|leatherette|light seals?\b"
+    r"|front plate|advance lever|rewind crank|frame counter|leatherette"
     r"|\bcapot\b|levier d.armement|\bcompteur\b|\bgainage|\bmousses?\b|bovenkap|onderplaat"
     # badge, battery cap / compartment, eyecup and cap
     r"|etichetta|\btappo\b|\bvano\b|oeilleton|\bcache\b|eyecup|augenmuschel|oculaire"
@@ -444,6 +447,9 @@ _PARTS = re.compile(
     r"|vetrino di messa a fuoco|matglazen|\bmatglas"
     # rewind crank / knob / lever
     r"|manivelle|rembobinage|ruckspul\w*|rewind (?:knob|lever)|manovella|riavvolgimento|terugspoel\w*")
+# Light seals: a part before the model ('Kit guarnizioni luce Canon AE-1 Program'); after it they
+# praise the camera ('Canon AE-1 neue Lichtdichtungen').
+_SEALS = re.compile(r"light ?seals?\b|guarnizion\w*|lichtdichtung\w*|lichtafdichting\w*|joints? (?:de )?(?:mousse|lumiere)")
 _FOR_BEFORE = re.compile(r"\b(?:per|for|pour|fur|als|voor|para)\s+(?:\w+\s+)?$")
 # Words that say the listing is a camera body or kit, not just its manual.
 _KIT_LENS = re.compile(r"objektiv|lens(?:es)?|obiettiv|objectif|lente")
@@ -544,6 +550,8 @@ def _is_accessory(norm, model_span):
         head = norm[:model_span[0]]
         if (_LENS_WORDS.search(head) or _FOR_WORDS.search(head)) and not _CAMERA_WORDS.search(head):
             return True  # "Zoom Vivitar 70/210 per Nikon F"
+        if _SEALS.search(head) and not _camera_joined(head):
+            return True  # "Kit guarnizioni luce Canon AE-1 Program"
     acc = _ACCESSORY_WORDS.search(norm)
     if not acc:
         return False
