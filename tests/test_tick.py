@@ -16,9 +16,9 @@ class FakeClient:
         self.pages, self.item_pages, self.search = pages, item_pages or {}, search or {}
         self.requests_made, self.bytes_received, self.opened = 0, 0, []
 
-    def fresh_page(self, text):
+    def fresh_page(self, text, page=1):
         self.requests_made += 1
-        return self.search.get((text, "fresh"), [])
+        return self.search.get((text, "fresh") if page == 1 else (text, "fresh", page), [])
 
     def search_page(self, text, page, max_price):
         self.requests_made += 1
@@ -595,10 +595,22 @@ def main():
         fresh = [rec(20_000_000_050, "Canon AE-1 analog", 90.0), rec(20_000_000_051, "Canon AE-1 Tasche", 9.0),
                  rec(20_000_000_200, "Canon AE-1 neu", 99.0), rec(19_000_000_000, "Canon AE-1 alt", 80.0)]
         client, active, st = FakeClient({}, search={("canon ae-1", "fresh"): fresh}), {}, Counter()
-        tick.fresh_search(state, client, active, {}, "2026-10-17 10:52", st, set(), 4)
+        tick.fresh_search(state, client, active, {}, "2026-10-17 10:52", st, set(), quick=True)
         assert list(active) == [20_000_000_050] and active[20_000_000_050]["flags"] == ["found"], active
-        tick.fresh_search(state, client, {}, {}, "2026-10-17 11:52", st, set(), 1)
+        cam = active[20_000_000_050]
+        assert cam["fresh_query"] == "Canon AE-1" and cam["fresh_seen_at"] == "2026-10-17 10:52"
+        tick.fresh_search(state, client, active, {}, "2026-10-17 11:20", st, set(), quick=True)
+        assert st["fresh_pages"] == 1, "each model about once an hour"
+        # Next hour: the camera is gone from its model's page -> its page is opened next tick.
+        client.search[("canon ae-1", "fresh")] = fresh[1:]
+        tick.fresh_search(state, client, active, {}, "2026-10-17 11:52", st, set(), quick=True)
         assert state["fresh_search"]["last_run"]["Canon AE-1"] == "2026-10-17 11:52" and st["fresh_pages"] == 2
+        assert cam["needs_check"] and st["fresh_missing"] == 1
+        # A sighting counts as a check, but the page is opened every 5 days.
+        seen = {"group": "list", "flags": ["found"], "last_checked_at": "2026-10-15 10:00",
+                "fresh_seen_at": "2026-10-17 11:00", "first_seen": "2026-10-10 10:00"}
+        assert tick.check_priority(seen, "2026-10-17 12:00", vanished=False) is None
+        assert tick.check_priority({**seen, "last_checked_at": "2026-10-12 09:00"}, "2026-10-17 12:00", False) == tick.P_FOUND
 
         # A listing newer than the catalog pages is new, not an old one found by search.
         sweep = tick.Sweep("model_search", (("q0", None),), None, 10, 1, 4, False, False)

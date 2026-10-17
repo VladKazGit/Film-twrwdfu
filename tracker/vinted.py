@@ -418,9 +418,9 @@ class VintedClient:
             raise BlockedError("search page without data")
         return parse_catalog(resp.text)[0]
 
-    def fresh_page(self, text):
-        """Newest listings for a text in all categories, page 1 (cameras put in another category)."""
-        resp = self.fetch(BASE_URL + "/catalog", {"search_text": text, "order": "newest_first", "page": 1})
+    def fresh_page(self, text, page=1):
+        """Newest listings for a text in all categories (cameras put in another category too)."""
+        resp = self.fetch(BASE_URL + "/catalog", {"search_text": text, "order": "newest_first", "page": page})
         if resp.status_code != 200:
             raise VintedError(f"search http {resp.status_code}")
         if not flight_payload(resp.text):

@@ -39,8 +39,14 @@ LIST_TRACK_MIN = 30 * 1440
 MAX_REQUESTS = 115
 TICK_TIME_BUDGET_S = 9 * 60  # Vinted traffic per tick; the rest goes to the next tick
 QUICK_PAGES, QUICK_TIME_BUDGET_S = 1, 2 * 60  # quick checks between ticks
-# Fresh search: models of 'Модели', newest first in all categories, page 1, per tick / quick check.
-FRESH_PER_TICK, FRESH_PER_QUICK, FRESH_HOURS = 8, 4, 24
+# Fresh search: every model of 'Модели' once an hour, newest first in all categories; one more
+# page per 40 active cameras of the model (up to 4; the key models per 30, up to 6, and their
+# page 1 in every tick too). A page of all categories holds ~40 of the model's cameras.
+FRESH_EVERY_MIN, FRESH_PER_CHECK, FRESH_HOURS = 60, 16, 24
+FRESH_PAGE_ITEMS, FRESH_MAX_PAGES = 40, 4
+FRESH_PRIORITY_PAGE_ITEMS, FRESH_PRIORITY_MAX_PAGES = 30, 6
+FRESH_PRIORITY = ("Canon AE-1", "Yashica FX-3 Super 2000", "Olympus OM-10")
+PAGE_RECHECK_MIN = 5 * 1440  # a camera the fresh search keeps seeing: its page every 5 days
 DAILY_CHECKS_PER_TICK = 25
 DESCRIPTION_CHECKS_PER_TICK = 15
 BOUNDARY_TAIL = 10
@@ -278,8 +284,12 @@ def wants_description(item):
 
 
 def check_priority(item, now, vanished):
-    """Priority for opening the item page this tick, or None if not due."""
-    since = clock.minutes_between(item["last_checked_at"], now)
+    """Priority for opening the item page this tick, or None if not due.
+
+    A sighting in the fresh search counts as a check, but the page is opened at least every 5 days."""
+    since = clock.minutes_between(max(item["last_checked_at"], item.get("fresh_seen_at") or ""), now)
+    if clock.minutes_between(item["last_checked_at"], now) >= PAGE_RECHECK_MIN and item["group"] == "list":
+        since = max(since, PAGE_RECHECK_MIN)
     if item.get("needs_check") and item["group"] == "list" and "found" not in item["flags"]:
         return P_LIST_DUE
     if "found" in item["flags"]:  # old listing: its model's search results show it is still there
@@ -304,35 +314,75 @@ def _can_request(client):
     return client.requests_made < MAX_REQUESTS and getattr(client, "has_time", lambda: True)()
 
 
-def fresh_search(state, client, active, closed, now, stats, changed, count):
-    """Page 1 of the newest listings of `count` models from 'Модели' (in turn), all categories.
-    A list camera the tracker does not know, listed within a day (its id between the catalog's
-    top a day ago and now) but not in the catalog, was put in another category: it is tracked
-    from now on, listed after this model's previous query (or 'found' if it is the first)."""
-    st = state.setdefault("fresh_search", {"cursor": 0, "last_run": {}})
+def fresh_search(state, client, active, closed, now, stats, changed, quick=False):
+    """Newest listings of the 'Модели' models in all categories: each model about once an hour
+    (the longest-waiting first, FRESH_PER_CHECK per tick or quick check), as many pages as its
+    active cameras need; the key models' page 1 in every tick as well.
+
+    - A list camera the tracker does not know, listed within a day (its id between the catalog's
+      top a day ago and now) but not in the catalog, was put in another category: it is tracked,
+      listed after this model's previous query (or 'found' on the first).
+    - A tracked camera in the results is active: a sighting counts as a check (its page is then
+      opened every 5 days only). One that was seen in its model's results before and is missing
+      now, although its id is within the pages read, may be sold: its page is opened next tick.
+    """
+    st = state.setdefault("fresh_search", {"last_run": {}})
     names = state.get("models_sheet") or [m for _, m in MODEL_SWEEP.queries]
+    last_run = st["last_run"]
+    due = sorted((n for n in names if not last_run.get(n) or clock.minutes_between(last_run[n], now) >= FRESH_EVERY_MIN - 5),
+                 key=lambda n: last_run.get(n) or "")[:FRESH_PER_CHECK]
+    live = Counter(i["model"] for i in active.values() if i.get("group") == "list" and i["status"] == "active")
+    queries = [(n, min(FRESH_PRIORITY_MAX_PAGES, 1 + live[n] // FRESH_PRIORITY_PAGE_ITEMS) if n in FRESH_PRIORITY
+                else min(FRESH_MAX_PAGES, 1 + live[n] // FRESH_PAGE_ITEMS)) for n in due]
+    if not quick:
+        queries += [(n, 1) for n in FRESH_PRIORITY if n in names and n not in due]
     history = state.get("max_seen_history") or []
     floor, top = (history[0][1] if history else 0), state.get("max_seen_id", 0)
     skipped = set(state.get(MODEL_SWEEP.key, {}).get("skipped", []))
-    for _ in range(min(count, len(names))):
-        if not _can_request(client):
-            return
-        model = names[st["cursor"] % len(names)]
-        st["cursor"] += 1
-        results = client.fresh_page(model.lower())
-        stats["fresh_pages"] += 1
-        previous = st["last_run"].get(model)
+    for model, pages in queries:
+        results, last = [], []
+        for page in range(1, pages + 1):
+            if not _can_request(client):
+                return
+            last = client.fresh_page(model.lower(), page)
+            stats["fresh_pages"] += 1
+            results += last
+            if len(last) < 96:
+                break
+        previous = last_run.get(model)
+        ids = {rec["id"] for rec in results}
         for rec in results:
             rec_id = rec["id"]
-            # Newer than the catalog's top: the next catalog read takes it (if it is a film camera).
-            if rec_id in active or rec_id in closed or rec_id in skipped or not floor <= rec_id <= top:
-                continue
-            item = new_item(rec, now, previous, [] if previous else ["found"])
-            if item["group"] == "list":
-                active[rec_id] = item
+            if rec_id in active:
+                item = active[rec_id]
+                mark_seen(item, rec, now, checked=False)
+                item["fresh_seen_at"] = now
+                if item.get("model") == model:
+                    item["fresh_query"] = model
                 changed.add(rec_id)
-                stats["fresh_found"] += 1
-        st["last_run"][model] = now
+            # Newer than the catalog's top: the next catalog read takes it (if it is a film camera).
+            elif rec_id in closed or rec_id in skipped or not floor <= rec_id <= top:
+                continue
+            else:
+                item = new_item(rec, now, previous, [] if previous else ["found"])
+                if item["group"] == "list":
+                    item["fresh_seen_at"] = now
+                    if item.get("model") == model:
+                        item["fresh_query"] = model
+                    active[rec_id] = item
+                    changed.add(rec_id)
+                    stats["fresh_found"] += 1
+        # Below the last page's tail the listings go on: absence there says nothing.
+        tail = [r["id"] for r in last[-BOUNDARY_TAIL:] if not r["promoted"]]
+        boundary = max(tail) if len(last) == 96 and tail else 0
+        for item in active.values():
+            if (item.get("fresh_query") == model and item["id"] not in ids and item["id"] >= boundary
+                    and item["status"] == "active" and not item.get("needs_check")):
+                item["needs_check"] = True
+                changed.add(item["id"])
+                stats["fresh_missing"] += 1
+        if (model, pages) in queries[:len(due)]:
+            last_run[model] = now
 
 
 def sweep_state(state, sweep, now):
@@ -674,7 +724,7 @@ def run_tick(store, client, labels=None, now=None, quick=False):
     # ---- newest listings of the 'Модели' models in all categories (cameras listed elsewhere)
     if rest_enabled and not first_run and not full_scan:
         try:
-            fresh_search(state, client, active, closed, now, stats, changed, FRESH_PER_QUICK if quick else FRESH_PER_TICK)
+            fresh_search(state, client, active, closed, now, stats, changed, quick)
         except BlockedError as exc:
             errors.append(f"fresh search: {exc}")
             rest_enabled = False
@@ -788,7 +838,7 @@ def _finish(store, state, now, started, client, stats, errors, full_scan, pages,
         "search_pages": stats["search_pages"], "search_candidates": stats["search_candidates"],
         "found": stats["found"], "search_skipped": stats["search_skipped"], "found_missing": stats["found_missing"],
         "enriched": stats["enriched"], "too_old": stats["too_old"], "labelled": stats["labelled"],
-        "fresh_pages": stats["fresh_pages"], "fresh_found": stats["fresh_found"],
+        "fresh_pages": stats["fresh_pages"], "fresh_found": stats["fresh_found"], "fresh_missing": stats["fresh_missing"],
         "rest_enabled": rest_enabled, "errors": [env.redact(e) for e in errors],
         # Names stay in the private data repo and sheet; log_line() never prints them.
         "added": [_camera_label(i) for i in added], "sold_names": [_camera_label(i) for i in sold],
@@ -822,7 +872,8 @@ def log_line(run):
             f" missing from search {run.get('found_missing', 0)}"
             f" | enriched {run.get('enriched', 0)}, too old {run.get('too_old', 0)}"
             f"{' | from labels ' + str(run['labelled']) if run.get('labelled') else ''}"
-            f" | fresh search: pages {run.get('fresh_pages', 0)}, found {run.get('fresh_found', 0)}"
+            f" | fresh search: pages {run.get('fresh_pages', 0)}, found {run.get('fresh_found', 0)},"
+            f" missing {run.get('fresh_missing', 0)}"
             f"{'' if run['rest_enabled'] else ' | rest disabled today'}"
             f" | errors: {'; '.join(run['errors']) or 'none'}")
 
