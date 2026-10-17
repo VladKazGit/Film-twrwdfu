@@ -252,7 +252,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 21
+VERSION = 22
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -439,7 +439,11 @@ _PARTS = re.compile(
     # body / lens / rear caps
     r"|body ?caps?\b|gehausedeckel|ruckdeckel|lens caps?\b|objektivdeckel"
     # focusing screen; keychains
-    r"|depoli|matglas|porte ?-?cles?\b|keychain|key ?ring|schlusselanhanger|portachiavi|sleutelhanger")
+    r"|depoli|matglas|porte ?-?cles?\b|keychain|key ?ring|schlusselanhanger|portachiavi|sleutelhanger"
+    r"|ecran de visee|verre de visee|mattscheibe|einstellscheibe|focusing screen|schermo di messa a fuoco"
+    r"|vetrino di messa a fuoco|matglazen|\bmatglas"
+    # rewind crank / knob / lever
+    r"|manivelle|rembobinage|ruckspul\w*|rewind (?:knob|lever)|manovella|riavvolgimento|terugspoel\w*")
 _FOR_BEFORE = re.compile(r"\b(?:per|for|pour|fur|als|voor|para)\s+(?:\w+\s+)?$")
 # Words that say the listing is a camera body or kit, not just its manual.
 _KIT_LENS = re.compile(r"objektiv|lens(?:es)?|obiettiv|objectif|lente")
@@ -564,6 +568,12 @@ def _is_accessory(norm, model_span):
     acc = next((a for a in _ACCESSORY_WORDS.finditer(tail) if not _KIT_LENS.fullmatch(a.group(0))), None)
     # "Nikon F Waist Level Finder ... Case": accessory words, no camera, no "with".
     return bool(acc) and not _WITH_WORDS.search(tail[:acc.start()]) and not _CAMERA_WORDS.search(norm)
+
+
+def names_camera(title):
+    """The title says it is a camera or a kit ('Kamera', 'appareil', 'body', 'mit Objektiv')."""
+    norm = normalize(title)
+    return bool(_CAMERA_WORDS.search(norm) or _KIT_WORDS.search(norm))
 
 
 def accessory_words(title):

@@ -18,6 +18,7 @@ BASE_URL = "https://www.vinted.de"
 CATEGORY_ID = 3076  # Filmkameras; 3077 Sofortbildkameras is out of scope
 # ...but sellers put list cameras under 'Sofortbildkameras', 'Andere Kameras' and 'Kamera-Ersatzteile' too
 EXTRA_CATEGORY_IDS = (3077, 3714, 3717)
+PARTS_CATEGORY_ID = 3717  # mostly parts: a camera there must say it is one
 MAX_PAGES = 10  # total_entries is capped at 960 = 10 pages x 96
 
 USER_AGENT = (

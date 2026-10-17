@@ -28,7 +28,7 @@ from pathlib import Path
 
 from . import ageest, clock, env, models, report
 from .store import DataStore
-from .vinted import EXTRA_CATEGORY_IDS, MAX_PAGES, BlockedError, VintedClient, VintedError, age_days
+from .vinted import EXTRA_CATEGORY_IDS, MAX_PAGES, PARTS_CATEGORY_ID, BlockedError, VintedClient, VintedError, age_days
 
 WINDOW_START_HOUR = 7  # Berlin; the window ends at midnight
 TICK_PAGES = 2
@@ -635,6 +635,8 @@ def run_tick(store, client, labels=None, now=None, quick=False):
         try:
             for rec in client.catalog_page(1, category):
                 cls = models.classify(rec["title"], vinted_brand=rec["brand"])
+                if category == PARTS_CATEGORY_ID and not models.names_camera(rec["title"]):
+                    continue  # 'Manivelle rembobinage Olympus OM10'
                 if cls["in_list"] and not SIGNAL_FLAGS & set(cls["flags"]) and rec["id"] not in seen:
                     seen[rec["id"]] = rec
                     misplaced.add(rec["id"])
