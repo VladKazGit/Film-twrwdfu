@@ -39,6 +39,8 @@ LIST_TRACK_MIN = 30 * 1440
 MAX_REQUESTS = 115
 TICK_TIME_BUDGET_S = 9 * 60  # Vinted traffic per tick; the rest goes to the next tick
 QUICK_PAGES, QUICK_TIME_BUDGET_S = 1, 2 * 60  # quick checks between ticks
+# Fresh search: models of 'Модели', newest first in all categories, page 1, per tick / quick check.
+FRESH_PER_TICK, FRESH_PER_QUICK, FRESH_HOURS = 8, 4, 24
 DAILY_CHECKS_PER_TICK = 25
 DESCRIPTION_CHECKS_PER_TICK = 15
 BOUNDARY_TAIL = 10
@@ -302,6 +304,37 @@ def _can_request(client):
     return client.requests_made < MAX_REQUESTS and getattr(client, "has_time", lambda: True)()
 
 
+def fresh_search(state, client, active, closed, now, stats, changed, count):
+    """Page 1 of the newest listings of `count` models from 'Модели' (in turn), all categories.
+    A list camera the tracker does not know, listed within a day (its id between the catalog's
+    top a day ago and now) but not in the catalog, was put in another category: it is tracked
+    from now on, listed after this model's previous query (or 'found' if it is the first)."""
+    st = state.setdefault("fresh_search", {"cursor": 0, "last_run": {}})
+    names = state.get("models_sheet") or [m for _, m in MODEL_SWEEP.queries]
+    history = state.get("max_seen_history") or []
+    floor, top = (history[0][1] if history else 0), state.get("max_seen_id", 0)
+    skipped = set(state.get(MODEL_SWEEP.key, {}).get("skipped", []))
+    for _ in range(min(count, len(names))):
+        if not _can_request(client):
+            return
+        model = names[st["cursor"] % len(names)]
+        st["cursor"] += 1
+        results = client.fresh_page(model.lower())
+        stats["fresh_pages"] += 1
+        previous = st["last_run"].get(model)
+        for rec in results:
+            rec_id = rec["id"]
+            # Newer than the catalog's top: the next catalog read takes it (if it is a film camera).
+            if rec_id in active or rec_id in closed or rec_id in skipped or not floor <= rec_id <= top:
+                continue
+            item = new_item(rec, now, previous, [] if previous else ["found"])
+            if item["group"] == "list":
+                active[rec_id] = item
+                changed.add(rec_id)
+                stats["fresh_found"] += 1
+        st["last_run"][model] = now
+
+
 def sweep_state(state, sweep, now):
     st = state.setdefault(sweep.key, {"query": 0, "page": 1, "done_on": None, "pending": {}, "skipped": []})
     st.setdefault("seen", [])
@@ -556,6 +589,10 @@ def run_tick(store, client, labels=None, now=None, quick=False):
                 changed.add(rec_id)
                 stats["bumped_list"] += 1
     state["max_seen_id"] = max([max_seen, *seen])
+    # The catalog's top id over the last day: the floor of 'fresh' for the fresh search.
+    since = clock.stamp(clock.parse(now) - timedelta(hours=FRESH_HOURS))
+    history = [h for h in state.get("max_seen_history", []) if h[0] >= since] + [[now, state["max_seen_id"]]]
+    state["max_seen_history"] = history
 
     # ---- item page checks, in priority order within the request budget
     queue = []
@@ -633,6 +670,16 @@ def run_tick(store, client, labels=None, now=None, quick=False):
                 set_model(item, cls["model"], "description")
                 stats["description_to_list"] += 1
                 promoted.append(item_id)
+
+    # ---- newest listings of the 'Модели' models in all categories (cameras listed elsewhere)
+    if rest_enabled and not first_run and not full_scan:
+        try:
+            fresh_search(state, client, active, closed, now, stats, changed, FRESH_PER_QUICK if quick else FRESH_PER_TICK)
+        except BlockedError as exc:
+            errors.append(f"fresh search: {exc}")
+            rest_enabled = False
+        except VintedError:
+            stats["check_errors"] += 1
 
     # Found cameras that turned out older than half a year: not tracked at all.
     for item_id in [i for i, it in active.items() if it.get("too_old")]:
@@ -741,6 +788,7 @@ def _finish(store, state, now, started, client, stats, errors, full_scan, pages,
         "search_pages": stats["search_pages"], "search_candidates": stats["search_candidates"],
         "found": stats["found"], "search_skipped": stats["search_skipped"], "found_missing": stats["found_missing"],
         "enriched": stats["enriched"], "too_old": stats["too_old"], "labelled": stats["labelled"],
+        "fresh_pages": stats["fresh_pages"], "fresh_found": stats["fresh_found"],
         "rest_enabled": rest_enabled, "errors": [env.redact(e) for e in errors],
         # Names stay in the private data repo and sheet; log_line() never prints them.
         "added": [_camera_label(i) for i in added], "sold_names": [_camera_label(i) for i in sold],
@@ -774,6 +822,7 @@ def log_line(run):
             f" missing from search {run.get('found_missing', 0)}"
             f" | enriched {run.get('enriched', 0)}, too old {run.get('too_old', 0)}"
             f"{' | from labels ' + str(run['labelled']) if run.get('labelled') else ''}"
+            f" | fresh search: pages {run.get('fresh_pages', 0)}, found {run.get('fresh_found', 0)}"
             f"{'' if run['rest_enabled'] else ' | rest disabled today'}"
             f" | errors: {'; '.join(run['errors']) or 'none'}")
 
@@ -812,6 +861,9 @@ def write_sheets(writer, result, state_flags):
         offered = sorted(models.MODEL_INFO)
         updates["models_offered"] = offered
     names, allowed = writer.sync_models(set(offered))
+    sheet_models = sorted({models.canonical_model(n) or n for n in names} & set(models.MODEL_INFO))
+    if sheet_models and sheet_models != state_flags.get("models_sheet"):
+        updates["models_sheet"] = sheet_models  # the fresh search follows 'Модели' 
     if set(names) - set(offered):
         updates["models_offered"] = sorted(set(offered) | set(names))
 

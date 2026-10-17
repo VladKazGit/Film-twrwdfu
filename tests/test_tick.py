@@ -16,6 +16,10 @@ class FakeClient:
         self.pages, self.item_pages, self.search = pages, item_pages or {}, search or {}
         self.requests_made, self.bytes_received, self.opened = 0, 0, []
 
+    def fresh_page(self, text):
+        self.requests_made += 1
+        return self.search.get((text, "fresh"), [])
+
     def search_page(self, text, page, max_price):
         self.requests_made += 1
         return self.search.get((text, page), [])
@@ -254,7 +258,7 @@ def main():
                        "cheap_ids": updates["cheap_ids"], "models_offered": updates["models_offered"],
                        "status_colors": updates["status_colors"], "new_rows_colors": updates["new_rows_colors"],
                        "fresh_rows_colors": updates["fresh_rows_colors"], "fresh_rows_green": True}
-        assert tick.write_sheets(writer, r5, state_flags) == {"cheap_ids": []}, "Zenit E left 'До 20 €'"
+        assert {k: v for k, v in tick.write_sheets(writer, r5, state_flags).items() if k != "models_sheet"} == {"cheap_ids": []}, "Zenit E left 'До 20 €'"
         assert ss.sheets["Запуски"].rows[-1][-1] == 0
         assert [r[0] for r in ss.sheets["До 20 €"].rows[1:] if r[0] != ""] == [] and ["Zenit E"] not in [r[:1] for r in models_ws.rows]
         assert len(ss.sheets["До 20 €"].rows) == 2 and not any(ss.sheets["До 20 €"].rows[1]), "old data row blanked"
@@ -290,7 +294,7 @@ def main():
             "condition": {"type": "CUSTOM_FORMULA", "values": [{"userEnteredValue": "=$AE2=\"да\""}]},
             "format": {"backgroundColor": {"red": 1, "green": 0.9490196, "blue": 0.8}}}})
         upd = tick.write_sheets(writer, r5, {**state_flags, "fresh_rows_green": None})
-        assert upd == {"fresh_rows_green": True}
+        assert {k: v for k, v in upd.items() if k != "models_sheet"} == {"fresh_rows_green": True}, upd
         assert ss.rules[sid][1]["booleanRule"]["format"]["backgroundColor"] == sheets.LIGHT_GREEN_3
         print("log:", tick.log_line(r4["run"]))
     # Search for older cheap list cameras: half a year limit, list models only.
@@ -577,6 +581,17 @@ def main():
         idle = tick.run_tick(store, FakeClient({1: [rec(20_000_000_020, "Nikon FM2 Kamera", 200.0)] + page1[1:]}),
                              now="2026-10-17 10:47", quick=True)
         assert not idle["run"]["list_changed"], "nothing new: the sheet is not written"
+        # Fresh search: a list camera from another category, listed within a day, is tracked.
+        state = {"max_seen_id": 20_000_000_100, "max_seen_history": [["2026-10-16 11:00", 20_000_000_000]],
+                 "models_sheet": ["Canon AE-1"]}
+        fresh = [rec(20_000_000_050, "Canon AE-1 analog", 90.0), rec(20_000_000_051, "Canon AE-1 Tasche", 9.0),
+                 rec(20_000_000_200, "Canon AE-1 neu", 99.0), rec(19_000_000_000, "Canon AE-1 alt", 80.0)]
+        client, active, st = FakeClient({}, search={("canon ae-1", "fresh"): fresh}), {}, Counter()
+        tick.fresh_search(state, client, active, {}, "2026-10-17 10:52", st, set(), 4)
+        assert list(active) == [20_000_000_050] and active[20_000_000_050]["flags"] == ["found"], active
+        tick.fresh_search(state, client, {}, {}, "2026-10-17 11:52", st, set(), 1)
+        assert state["fresh_search"]["last_run"]["Canon AE-1"] == "2026-10-17 11:52" and st["fresh_pages"] == 2
+
         # A listing newer than the catalog pages is new, not an old one found by search.
         sweep = tick.Sweep("model_search", (("q0", None),), None, 10, 1, 4, False, False)
         state = store.load_state()
