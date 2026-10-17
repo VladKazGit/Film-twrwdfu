@@ -252,7 +252,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 19
+VERSION = 20
 
 # Models added later: the model search looks for their old listings first (once).
 PRIORITY_SEARCH = ("Canon FX", "Canon FP", "Canon TL", "Canon TLb", "Canon TX", "Canon AT-1", "Nikon FG-20")
@@ -435,6 +435,8 @@ _PARTS = re.compile(
     r"|depoli|matglas|porte ?-?cles?\b|keychain|key ?ring|schlusselanhanger|portachiavi|sleutelhanger")
 _FOR_BEFORE = re.compile(r"\b(?:per|for|pour|fur|als|voor|para)\s+(?:\w+\s+)?$")
 # Words that say the listing is a camera body or kit, not just its manual.
+_KIT_LENS = re.compile(r"objektiv|lens(?:es)?|obiettiv|objectif|lente")
+_BUNDLE = re.compile(r"\b(?:lot|lotto|konvolut|bundle|set|kit)\b")
 _KIT_WORDS = re.compile(r"\bbody\b|gehause|boitier|\bcorpo\b|objektiv|\blens|obiettiv|objectif|\bkit\b|\bset\b|\bnur\b")
 # A description that starts with one of these (and names no camera) is about an accessory.
 _LEAD_FILLER = re.compile(
@@ -509,6 +511,14 @@ def kit_of(text):
     return "unklar", []
 
 
+def _camera_joined(head):
+    """'Objectif Sigma 28mm + appareil photo argentique ...': a camera joined to the accessory
+    (not 'Objektiv und Blitz für Kamera ...')."""
+    joined = _WITH_WORDS.search(head)
+    rest = head[joined.end():] if joined else ""
+    return bool(joined and _CAMERA_WORDS.search(rest) and not _FOR_WORDS.search(rest))
+
+
 def _is_accessory(norm, model_span):
     strong = _STRONG_ACCESSORY.search(norm)
     if strong and not _WITH_WORDS.search(norm[:strong.start()]):
@@ -537,10 +547,14 @@ def _is_accessory(norm, model_span):
         return not (_CAMERA_WORDS.search(norm) or _WITH_WORDS.search(head) or _MODEL_NUMBER.search(head))
     start, end = model_span
     head = norm[:start]
-    if _ACCESSORY_WORDS.search(head) or _FOR_WORDS.search(head):
+    if (_ACCESSORY_WORDS.search(head) or _FOR_WORDS.search(head)) and not _camera_joined(head):
         return True  # "Winder für Canon AE-1", "Leica data back R4"
+    if _BUNDLE.search(norm):
+        return False  # "Lot canon Av-1 vintage avaec objects, flash et accessoires": a camera with its kit
     tail = norm[end:]
-    acc = _ACCESSORY_WORDS.search(tail)
+    # A lens after the camera's name is its kit lens ('Canon AE1 Program | canon f1.8 macro lens'):
+    # lenses sold alone name their mount ('Canon FD 50mm'), not a camera.
+    acc = next((a for a in _ACCESSORY_WORDS.finditer(tail) if not _KIT_LENS.fullmatch(a.group(0))), None)
     # "Nikon F Waist Level Finder ... Case": accessory words, no camera, no "with".
     return bool(acc) and not _WITH_WORDS.search(tail[:acc.start()]) and not _CAMERA_WORDS.search(norm)
 
