@@ -555,6 +555,35 @@ def main():
     assert len(report.cheap_cameras([at(20.0), at(19.99), at(20.01)], 20.0)) == 2
     assert not report.cheap_cameras([at(10.0, status=s) for s in ("sold", "deleted", "reserved", "hidden", "unsold_30d")], 20.0)
     assert not report.cheap_cameras([at(10.0, flags=["accessory?"]), at(10.0, group="rest")], 20.0),         "accessories and rest rows are not in 'До 20 €'"
+    # Quick checks between ticks: page 1 only; a new list camera is in at once, a fresh one
+    # gone from page 1 is opened (fast sale); no searches, no labelled ids, no full scan.
+    with tempfile.TemporaryDirectory() as tmp:
+        store = DataStore(tmp)
+        page1 = [rec(20_000_000_010, "Canon AE-1 Program", 120.0)] + older(20_000_000_009)
+        tick.run_tick(store, FakeClient({1: page1[1:], 2: older(19_000_000_000)}), now="2026-10-17 10:22")
+        tick.run_tick(store, FakeClient({1: page1, 2: older(19_000_000_000)}), now="2026-10-17 10:37")
+        client = FakeClient({1: [rec(20_000_000_020, "Nikon FM2 Kamera", 200.0)] + page1[1:], 2: older(19_000_000_000)},
+                            {20_000_000_010: {"status": "sold", "price": 120.0}})
+        rq = tick.run_tick(store, client, labels={5555: "Canon AE-1"}, now="2026-10-17 10:42", quick=True)
+        run = rq["run"]
+        assert run["quick"] and run["pages"] == 1 and not run["full_scan"] and run["search_pages"] == 0, run
+        assert run["new_list"] == 1 and run["sold_list"] == 1 and run["list_changed"], run
+        assert set(client.opened) == {20_000_000_020, 20_000_000_010}, client.opened  # description + vanished
+        a, c = store.load_active(), store.load_closed()
+        assert a[20_000_000_020]["listed_after"] == "2026-10-17 10:37" and c[20_000_000_010]["status"] == "sold"
+        assert c[20_000_000_010]["time_to_sell_max"] == 20, "listed after 10:22, gone at the 10:42 quick check"
+        assert store.load_state()["last_tick_at"] == "2026-10-17 10:42" and tick.runs_row(run)[1] == "быстрая"
+        assert tick.log_line(run).startswith("quick tick 10:42")
+        idle = tick.run_tick(store, FakeClient({1: [rec(20_000_000_020, "Nikon FM2 Kamera", 200.0)] + page1[1:]}),
+                             now="2026-10-17 10:47", quick=True)
+        assert not idle["run"]["list_changed"], "nothing new: the sheet is not written"
+        # A listing newer than the catalog pages is new, not an old one found by search.
+        sweep = tick.Sweep("model_search", (("q0", None),), None, 10, 1, 4, False, False)
+        state = store.load_state()
+        client = FakeClient({}, search={("q0", 1): [rec(30_000_000_000, "Canon AE-1", 100.0)]})
+        tick.search_sweep(sweep, state, client, {}, {}, "2026-10-17 10:52", "2026-10-17", Counter(), set())
+        assert not state["model_search"]["pending"], "left for the catalog"
+
     print("tick tests passed")
 
 

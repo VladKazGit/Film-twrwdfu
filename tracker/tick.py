@@ -1,6 +1,6 @@
 """One tracker tick: catalog -> item checks -> data repo -> Google Sheet.
 
-Run:  python -m tracker.tick [--force] [--local DIR] [--no-sheets] [--max-requests N]
+Run:  python -m tracker.tick [--quick] [--force] [--local DIR] [--no-sheets] [--max-requests N]
 Logs contain aggregates only: no titles, ids or names.
 
 Schedule (CLAUDE.md): every tick reads catalog pages 1-2, every 4 hours pages
@@ -8,6 +8,10 @@ Schedule (CLAUDE.md): every tick reads catalog pages 1-2, every 4 hours pages
 coverage boundary has "vanished" and its page is opened. Items beyond the
 covered pages are checked by age: list items every tick (< 3 h), every 4 h
 (3-24 h), daily (1-30 days); 'rest' items only during their first 3 hours.
+
+Quick checks (--quick) run every 5 minutes between ticks: catalog page 1 only, new
+items, descriptions of new list cameras and pages of fresh list cameras that
+vanished (possible fast sales). The sheet is written only if 'Список' changed.
 """
 import argparse
 import sys
@@ -34,6 +38,7 @@ REST_TRACK_MIN = 180
 LIST_TRACK_MIN = 30 * 1440
 MAX_REQUESTS = 115
 TICK_TIME_BUDGET_S = 9 * 60  # Vinted traffic per tick; the rest goes to the next tick
+QUICK_PAGES, QUICK_TIME_BUDGET_S = 1, 2 * 60  # quick checks between ticks
 DAILY_CHECKS_PER_TICK = 25
 DESCRIPTION_CHECKS_PER_TICK = 15
 BOUNDARY_TAIL = 10
@@ -377,6 +382,8 @@ def search_sweep(sweep, state, client, active, closed, now, today, stats, change
                 cur["seen"].append(rec_id)
             elif rec_id in closed or rec_id in skipped or str(rec_id) in st["pending"]:
                 continue
+            elif state.get("max_seen_id") and rec_id > state["max_seen_id"]:
+                continue  # newer than the catalog pages: a new listing, the next catalog read takes it
             elif rec_id < FOUND_MIN_ID:
                 st["skipped"].append(rec_id)
                 skipped.add(rec_id)
@@ -436,13 +443,15 @@ def _mark_missing(belongs, seen, since, active, stats, changed):
 
 # ---------------------------------------------------------------- tick
 
-def run_tick(store, client, labels=None, now=None):
-    """Process one tick against the data store. Returns a result dict."""
+def run_tick(store, client, labels=None, now=None, quick=False):
+    """Process one tick against the data store (quick: page 1, new and vanished fresh items
+    only). Returns a result dict."""
     started = time.monotonic()
     now = now or clock.stamp()
     today = now[:10]
     state = store.load_state()
     first_run = "first_run_at" not in state
+    quick = quick and not first_run
     first_of_day = not first_run and state.get("last_tick_at", "")[:10] != today
     rest_enabled = state.get("rest_disabled_on") != today
     stats, errors = Counter(), []
@@ -499,9 +508,10 @@ def run_tick(store, client, labels=None, now=None):
             stats["reopened"] += 1
 
     # ---- catalog
-    full_scan = first_run or clock.minutes_between(state.get("last_full_scan_at") or "2000-01-01 00:00", now) >= FULL_SCAN_EVERY_MIN
+    full_scan = not quick and (
+        first_run or clock.minutes_between(state.get("last_full_scan_at") or "2000-01-01 00:00", now) >= FULL_SCAN_EVERY_MIN)
     seen, last_page, pages_read = {}, [], 0
-    for page in range(1, (MAX_PAGES if full_scan else TICK_PAGES) + 1):
+    for page in range(1, (MAX_PAGES if full_scan else QUICK_PAGES if quick else TICK_PAGES) + 1):
         try:
             items = client.catalog_page(page)
         except VintedError as exc:
@@ -510,7 +520,7 @@ def run_tick(store, client, labels=None, now=None):
                 rest_enabled = False
             if page <= TICK_PAGES:
                 return _finish(store, state, now, started, client, stats, errors, full_scan, pages_read,
-                               rest_enabled, today, active, closed, changed, fatal=True)
+                               rest_enabled, today, active, closed, changed, fatal=True, quick=quick)
             full_scan = False  # partial: do not reset the 4-hour timer
             break
         if not items:
@@ -563,6 +573,8 @@ def run_tick(store, client, labels=None, now=None):
         elif wants_description(item):
             queue.append((P_DESCRIPTION, item["first_seen"], item["id"]))
     queue.sort()
+    if quick:  # new cameras' descriptions and fresh list cameras gone from page 1 (fast sales)
+        queue = [q for q in queue if q[0] in (P_LIST_VANISHED, P_DESCRIPTION)]
     daily = descriptions = found_checks = enriched = 0
     enrich_cap = ENRICH_PER_TICK_AFTER_FILL if state.get(MODEL_SWEEP.key, {}).get("passes") else ENRICH_PER_TICK
     promoted = []  # rest items that became list cameras through their description
@@ -609,6 +621,8 @@ def run_tick(store, client, labels=None, now=None):
             item["description_checked"] = True
             stats["descriptions" if priority == P_DESCRIPTION else "enriched"] += 1
         status = apply_page(item, page, now)
+        if item["group"] == "list" and status in ("sold", "deleted", "reserved", "hidden"):
+            stats["list_status_changed"] += 1
         if status == "sold":
             stats[f"sold_{item['group']}"] += 1
         elif status in ("deleted", "reserved", "hidden", "unknown"):
@@ -631,7 +645,8 @@ def run_tick(store, client, labels=None, now=None):
     # ---- cameras the user labelled that the tracker never saw (the model only in the photos,
     # or never on the scanned pages): opened once and tracked like found ones
     tries = state.setdefault("labelled_tries", {})
-    for item_id, model in [(i, m) for i, m in unknown_labelled if tries.get(str(i), 0) < LABELLED_MAX_TRIES][:LABELLED_PER_TICK]:
+    pending = [] if quick else [(i, m) for i, m in unknown_labelled if tries.get(str(i), 0) < LABELLED_MAX_TRIES]
+    for item_id, model in pending[:LABELLED_PER_TICK]:
         if not rest_enabled or not _can_request(client):
             break
         try:
@@ -653,7 +668,7 @@ def run_tick(store, client, labels=None, now=None):
         stats["labelled"] += 1
 
     # ---- searches for older list cameras (lowest priority; skipped on full-scan ticks to avoid peaks)
-    if rest_enabled and not first_run and not full_scan:
+    if rest_enabled and not first_run and not full_scan and not quick:
         estimate = ageest.build_estimator([*active.values(), *closed.values()], state.get("max_seen_id"),
                                           date.fromisoformat(today))
         queue_priority_models(state, now)
@@ -686,8 +701,8 @@ def run_tick(store, client, labels=None, now=None):
     state["last_tick_at"] = now
     state.setdefault("first_run_at", now)
     return _finish(store, state, now, started, client, stats, errors, full_scan, pages_read,
-                   rest_enabled, today, active, closed, changed, fatal=False, daily=first_run or first_of_day,
-                   promoted=promoted)
+                   rest_enabled, today, active, closed, changed, fatal=False,
+                   daily=(first_run or first_of_day) and not quick, promoted=promoted, quick=quick)
 
 
 def _camera_label(item):
@@ -701,7 +716,7 @@ def _camera_label(item):
 
 
 def _finish(store, state, now, started, client, stats, errors, full_scan, pages, rest_enabled, today,
-            active, closed, changed, fatal, daily=False, promoted=()):
+            active, closed, changed, fatal, daily=False, promoted=(), quick=False):
     if not rest_enabled:
         state["rest_disabled_on"] = today
     for item_id in changed:
@@ -713,7 +728,7 @@ def _finish(store, state, now, started, client, stats, errors, full_scan, pages,
     sold = [i for i in closed.values()
             if i.get("group") == "list" and i.get("status") == "sold" and i.get("sold_detected_at") == now]
     run = {
-        "at": now, "full_scan": full_scan, "pages": pages, "requests": client.requests_made,
+        "at": now, "quick": quick, "full_scan": full_scan, "pages": pages, "requests": client.requests_made,
         "mb": round(client.bytes_received / 1e6, 1), "seconds": round(time.monotonic() - started),
         "new_list": stats["new_list"], "new_rest": stats["new_rest"], "bumped": stats["bumped"],
         "bumped_list": stats["bumped_list"],
@@ -729,6 +744,7 @@ def _finish(store, state, now, started, client, stats, errors, full_scan, pages,
         "rest_enabled": rest_enabled, "errors": [env.redact(e) for e in errors],
         # Names stay in the private data repo and sheet; log_line() never prints them.
         "added": [_camera_label(i) for i in added], "sold_names": [_camera_label(i) for i in sold],
+        "list_changed": bool(added or sold or stats["list_status_changed"]),
     }
     store.save_state(state)
     store.append_run(run)
@@ -741,7 +757,8 @@ def _finish(store, state, now, started, client, stats, errors, full_scan, pages,
 
 
 def log_line(run):
-    return (f"tick {run['at'][11:]} | pages {run['pages']}{' (full)' if run['full_scan'] else ''}"
+    return (f"{'quick ' if run.get('quick') else ''}tick {run['at'][11:]} | pages {run['pages']}"
+            f"{' (full)' if run['full_scan'] else ''}"
             f" | requests {run['requests']} ({run['mb']} MB, {run['seconds']} s)"
             f" | new: list {run['new_list']}, rest {run['new_rest']}"
             f" | bumped {run['bumped']} (list tracked {run.get('bumped_list', 0)})"
@@ -763,7 +780,8 @@ def log_line(run):
 
 def runs_row(run, cheap_added=()):
     """One 'Запуски' row; cheap_added: cameras that entered 'До 20 €' in this tick."""
-    return [run["at"], "да" if run["full_scan"] else "", run["pages"], run["requests"], run["mb"], run["seconds"],
+    return [run["at"], "да" if run["full_scan"] else "быстрая" if run.get("quick") else "", run["pages"],
+            run["requests"], run["mb"], run["seconds"],
             run["new_list"], run["new_rest"], run["bumped"], run["checks"], run["sold_list"], run["sold_rest"],
             run["deleted"], run["reserved_hidden"], run["closed_3h"], run["closed_30d"], run["descriptions"],
             run["description_to_list"], run["deferred"], "; ".join(run["errors"]),
@@ -870,6 +888,7 @@ def write_sheets(writer, result, state_flags):
 
 def main():
     parser = argparse.ArgumentParser(description="One tracker tick.")
+    parser.add_argument("--quick", action="store_true", help="quick check: catalog page 1, new and vanished items")
     parser.add_argument("--force", action="store_true", help="run outside the 07:00-00:00 Berlin window")
     parser.add_argument("--local", help="use a local folder as the data store (no git)")
     parser.add_argument("--no-sheets", action="store_true", help="skip Google Sheets")
@@ -892,23 +911,30 @@ def _main(args):
     from . import datarepo, sheets
 
     writer, labels, code = None, {}, 0
-    if not args.no_sheets:
+    if not args.no_sheets and not args.quick:  # a quick check opens the sheet only if 'Список' changed
         try:
             writer = sheets.SheetWriter(sheets.open_spreadsheet())
             labels = writer.manual_labels()
         except Exception as exc:
             print(f"sheets unavailable: {type(exc).__name__}: {env.redact(exc)}")
             writer, code = None, 1
-    client = VintedClient(max_requests=args.max_requests, time_budget=TICK_TIME_BUDGET_S)
+    client = VintedClient(max_requests=args.max_requests,
+                          time_budget=QUICK_TIME_BUDGET_S if args.quick else TICK_TIME_BUDGET_S)
 
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         root = Path(args.local) if args.local else datarepo.clone(Path(tmp) / "data")
         store = DataStore(root)
         state_flags = store.load_state()
-        result = run_tick(store, client, labels)
+        result = run_tick(store, client, labels, quick=args.quick)
         print(log_line(result["run"]))
         if not args.local:
-            datarepo.commit_and_push(root, f"tick {result['run']['at']}")
+            datarepo.commit_and_push(root, f"{'quick ' if args.quick else ''}tick {result['run']['at']}")
+        if args.quick and not args.no_sheets and result["run"]["list_changed"]:
+            try:
+                writer = sheets.SheetWriter(sheets.open_spreadsheet())
+            except Exception as exc:
+                print(f"sheets unavailable: {type(exc).__name__}: {env.redact(exc)}")
+                code = 1
         if writer:
             try:
                 try:
@@ -927,8 +953,8 @@ def _main(args):
             except Exception as exc:
                 print(f"sheets write failed: {type(exc).__name__}: {env.redact(exc)}")
                 code = 1
-    if result["fatal"]:
-        code = 1  # broken catalog: GitHub sends an e-mail
+    if result["fatal"] and not args.quick:
+        code = 1  # broken catalog: GitHub sends an e-mail (the next tick tells, not a quick check)
     return code
 
 

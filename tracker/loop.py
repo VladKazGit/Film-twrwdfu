@@ -2,8 +2,9 @@
 
 GitHub's cron is best-effort (late or skipped runs), so the workflow keeps
 itself going instead: this loop runs ticks at :07, :22, :37, :52 Berlin time
-inside the 07:00-00:00 window, and right before its time budget ends the
-workflow starts the next run, which waits for the next slot.
+inside the 07:00-00:00 window, quick checks (catalog page 1) every 5 minutes in
+between, and right before its time budget ends the workflow starts the next run,
+which waits for the next slot.
 
 Before each tick the latest code from main is fetched, so code changes take
 effect within one tick, not one run.
@@ -19,17 +20,29 @@ from datetime import timedelta, timezone
 from . import env
 
 SLOT_MINUTES = (7, 22, 37, 52)
+QUICK_MINUTES = (2, 12, 17, 27, 32, 42, 47, 57)  # every 5 minutes between the ticks
 WINDOW_START_HOUR = 7
 BUDGET_MIN = 330  # a 6-hour job limit minus one tick and setup
 TICK_TIMEOUT_S = 14 * 60
+QUICK_TIMEOUT_S = 4 * 60
 
 
 def next_slot(now):
-    """Next tick time after now: a slot minute inside the Berlin window."""
+    """Next tick or quick check after now, inside the Berlin window; a day starts with a tick."""
     slot = now.replace(second=0, microsecond=0) + timedelta(minutes=1)
-    while slot.minute not in SLOT_MINUTES or slot.hour < WINDOW_START_HOUR:
+    while not _in_window(slot):
         slot += timedelta(minutes=1)
     return slot
+
+
+def is_quick(slot):
+    return slot.minute in QUICK_MINUTES
+
+
+def _in_window(slot):
+    if slot.minute not in SLOT_MINUTES + QUICK_MINUTES or slot.hour < WINDOW_START_HOUR:
+        return False
+    return not (slot.hour == WINDOW_START_HOUR and slot.minute < SLOT_MINUTES[0])  # no quick check before 07:07
 
 
 def seconds_until(moment, now):
@@ -50,7 +63,7 @@ def run_loop(now_fn, sleep_fn, tick_fn, tick_now=False, budget_min=BUDGET_MIN, l
     failures, ticked = 0, False
     log(f"loop: started, hands over by {deadline:%Y-%m-%d %H:%M} (Berlin)")
     if tick_now:
-        failures += 0 if tick_fn() else 1
+        failures += 0 if tick_fn(False) else 1
         ticked = True
     while True:
         now = now_fn()
@@ -61,9 +74,10 @@ def run_loop(now_fn, sleep_fn, tick_fn, tick_now=False, budget_min=BUDGET_MIN, l
                 _sleep_until(deadline, now_fn, sleep_fn)
             log("loop: handing over to the next run")
             return failures
-        log(f"loop: next tick {slot:%H:%M}")
+        if not is_quick(slot):
+            log(f"loop: next tick {slot:%H:%M}")
         _sleep_until(slot, now_fn, sleep_fn)
-        failures += 0 if tick_fn() else 1
+        failures += 0 if tick_fn(is_quick(slot)) else 1
         ticked = True
 
 
@@ -83,13 +97,13 @@ def _update_code():
             return
 
 
-def _tick(force):
+def _tick(force, quick=False):
     _update_code()
-    cmd = [sys.executable, "-m", "tracker.tick"] + (["--force"] if force else [])
+    cmd = [sys.executable, "-m", "tracker.tick"] + (["--force"] if force else []) + (["--quick"] if quick else [])
     try:
-        return subprocess.run(cmd, timeout=TICK_TIMEOUT_S).returncode == 0
+        return subprocess.run(cmd, timeout=QUICK_TIMEOUT_S if quick else TICK_TIMEOUT_S).returncode == 0
     except subprocess.TimeoutExpired:
-        print("loop: tick timed out")
+        print(f"loop: {'quick check' if quick else 'tick'} timed out")
         return False
 
 
@@ -101,8 +115,8 @@ def main():
 
     first = {"force": args.force}
 
-    def tick():
-        ok = _tick(first.pop("force", False))
+    def tick(quick):
+        ok = _tick(first.pop("force", False), quick)
         sys.stdout.flush()
         return ok
 
