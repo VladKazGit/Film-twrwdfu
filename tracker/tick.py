@@ -38,12 +38,13 @@ REST_TRACK_MIN = 180
 LIST_TRACK_MIN = 30 * 1440
 MAX_REQUESTS = 115
 TICK_TIME_BUDGET_S = 9 * 60  # Vinted traffic per tick; the rest goes to the next tick
-QUICK_PAGES, QUICK_TIME_BUDGET_S = 1, 2 * 60  # quick checks between ticks
+QUICK_PAGES, QUICK_TIME_BUDGET_S = 1, 150  # quick checks between ticks (cheap ones end long before)
 CHEAP_PRICE = 20.0  # the cheap check and 'До 20 €' (sheets.CHEAP_MAX_PRICE)
 # Fresh search: every model of 'Модели' once an hour, newest first in all categories; one more
 # page per 40 active cameras of the model (up to 4; the key models per 30, up to 6, and their
 # page 1 in every tick too). A page of all categories holds ~40 of the model's cameras.
 FRESH_EVERY_MIN, FRESH_PER_CHECK, FRESH_HOURS = 60, 16, 24
+FRESH_PER_CHEAP = 5  # a cheap check takes a few models too, so the round stays within the hour
 FRESH_PAGE_ITEMS, FRESH_MAX_PAGES = 40, 4
 FRESH_PRIORITY_PAGE_ITEMS, FRESH_PRIORITY_MAX_PAGES = 30, 6
 FRESH_PRIORITY = ("Canon AE-1", "Yashica FX-3 Super 2000", "Olympus OM-10")
@@ -322,7 +323,7 @@ def _can_request(client):
     return client.requests_made < MAX_REQUESTS and getattr(client, "has_time", lambda: True)()
 
 
-def fresh_search(state, client, active, closed, now, stats, changed, quick=False):
+def fresh_search(state, client, active, closed, now, stats, changed, quick=False, limit=FRESH_PER_CHECK):
     """Newest listings of the 'Модели' models in all categories: each model about once an hour
     (the longest-waiting first, FRESH_PER_CHECK per tick or quick check), as many pages as its
     active cameras need; the key models' page 1 in every tick as well.
@@ -338,7 +339,7 @@ def fresh_search(state, client, active, closed, now, stats, changed, quick=False
     names = state.get("models_sheet") or [m for _, m in MODEL_SWEEP.queries]
     last_run = st["last_run"]
     due = sorted((n for n in names if not last_run.get(n) or clock.minutes_between(last_run[n], now) >= FRESH_EVERY_MIN - 5),
-                 key=lambda n: last_run.get(n) or "")[:FRESH_PER_CHECK]
+                 key=lambda n: last_run.get(n) or "")[:limit]
     live = Counter(i["model"] for i in active.values() if i.get("group") == "list" and i["status"] == "active")
     queries = [(n, min(FRESH_PRIORITY_MAX_PAGES, 1 + live[n] // FRESH_PRIORITY_PAGE_ITEMS) if n in FRESH_PRIORITY
                 else min(FRESH_MAX_PAGES, 1 + live[n] // FRESH_PAGE_ITEMS)) for n in due]
@@ -915,6 +916,12 @@ def run_cheap(store, client, labels=None, now=None):
                 set_model(item, cls["model"], "description")
                 stats["description_to_list"] += 1
                 promoted.append(item["id"])
+    try:
+        fresh_search(state, client, active, closed, now, stats, changed, quick=True, limit=FRESH_PER_CHEAP)
+    except BlockedError as exc:
+        errors.append(f"fresh search: {exc}")
+    except VintedError:
+        stats["check_errors"] += 1
     state["last_cheap_at"] = now
     return _finish(store, state, now, started, client, stats, errors, False, 1, True, today,
                    active, closed, changed, fatal=False, quick=True, promoted=promoted, cheap=True)
