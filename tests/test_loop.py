@@ -7,11 +7,11 @@ from tracker.loop import BUDGET_MIN, run_loop
 
 
 class FakeClock:
-    """Real time kept in UTC; ticks take 4 minutes, quick checks 1."""
+    """Real time kept in UTC; ticks take 4 minutes, quick checks 1, cheap checks half a minute."""
 
     def __init__(self, berlin_start):
         self.utc = berlin_start.replace(tzinfo=BERLIN).astimezone(timezone.utc)
-        self.ticks, self.quick, self.slept = [], [], 0.0
+        self.ticks, self.quick, self.cheap, self.slept = [], [], [], 0.0
 
     def now(self):
         return self.utc.astimezone(BERLIN)
@@ -20,15 +20,15 @@ class FakeClock:
         self.slept += seconds
         self.utc += timedelta(seconds=seconds)
 
-    def tick(self, ok=True, quick=False):
-        (self.quick if quick else self.ticks).append(self.now())
-        self.utc += timedelta(minutes=1 if quick else 4)
+    def tick(self, ok=True, mode="tick"):
+        {"tick": self.ticks, "quick": self.quick, "cheap": self.cheap}[mode].append(self.now())
+        self.utc += timedelta(minutes={"tick": 4, "quick": 1, "cheap": 0.5}[mode])
         return ok
 
 
 def run(start, tick_now=False, fail=False, seed=1):
     clock = FakeClock(start)
-    failures = run_loop(clock.now, clock.sleep, lambda quick: clock.tick(not fail, quick), tick_now=tick_now,
+    failures = run_loop(clock.now, clock.sleep, lambda mode: clock.tick(not fail, mode), tick_now=tick_now,
                         log=lambda _: None, rng=random.Random(seed))
     return clock, failures
 
@@ -45,8 +45,10 @@ def main():
         assert 18 <= len(c.ticks) <= 26 and all(13 <= g <= 18.01 for g in gaps), gaps
         assert len({round(g, 1) for g in gaps}) > 5 and len({t.second for t in c.ticks}) > 5, "not on the clock"
         assert len(c.quick) == 2 * len(c.ticks), (len(c.quick), len(c.ticks))
-        events = sorted(c.ticks + c.quick)
-        assert all(minutes(a, b) >= 3.5 for a, b in zip(events, events[1:])), "no bunching"
+        # cheap checks every ~2-3 minutes; the one right after a 4-minute tick is late and skipped
+        assert 2 * len(c.ticks) <= len(c.cheap) <= 3 * len(c.ticks), (len(c.cheap), len(c.ticks))
+        events = sorted(c.ticks + c.quick + c.cheap)
+        assert all(minutes(a, b) >= 1.2 for a, b in zip(events, events[1:])), "no bunching"
         assert minutes(c.ticks[0], c.now()) < 330 and f == 0
 
     # Manual evening start: ticks now, then until midnight; nothing at night.
@@ -56,7 +58,7 @@ def main():
 
     # Night run: no tick fits, so it sleeps the whole budget instead of chaining in a tight loop.
     c, f = run(datetime(2026, 10, 16, 23, 58))
-    assert c.ticks == c.quick == [] and c.slept == BUDGET_MIN * 60, (c.ticks, c.slept)
+    assert c.ticks == c.quick == c.cheap == [] and c.slept == BUDGET_MIN * 60, (c.ticks, c.slept)
 
     # Morning run started by the night run: the day starts with a tick at 07:03-07:12, no quick check before.
     for seed in range(5):
@@ -70,7 +72,7 @@ def main():
 
     # Failed ticks are counted (the run fails, GitHub e-mails), the loop goes on.
     c, f = run(datetime(2026, 10, 16, 12, 40), fail=True)
-    assert f == len(c.ticks) + len(c.quick) and len(c.ticks) > 15
+    assert f == len(c.ticks) + len(c.quick) + len(c.cheap) and len(c.ticks) > 15
     print("loop tests passed")
 
 

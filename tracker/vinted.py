@@ -19,6 +19,8 @@ CATEGORY_ID = 3076  # Filmkameras; 3077 Sofortbildkameras is out of scope
 # ...but sellers put list cameras under 'Sofortbildkameras', 'Andere Kameras' and 'Kamera-Ersatzteile' too
 EXTRA_CATEGORY_IDS = (3077, 3714, 3717)
 PARTS_CATEGORY_ID = 3717  # mostly parts: a camera there must say it is one
+# The cheap check: these categories at once (not the parts, nearly all parts at that price)
+CHEAP_CATEGORY_IDS = (CATEGORY_ID, 3077, 3714)
 MAX_PAGES = 10  # total_entries is capped at 960 = 10 pages x 96
 
 USER_AGENT = (
@@ -444,6 +446,16 @@ class VintedClient:
             raise VintedError(f"search http {resp.status_code}")
         if not flight_payload(resp.text):
             raise BlockedError("search page without data")
+        return parse_catalog(resp.text)[0]
+
+    def cheap_page(self, max_price):
+        """Newest listings at max_price or less in the cheap-check categories, page 1."""
+        resp = self.fetch(BASE_URL + "/catalog", {"catalog[]": list(CHEAP_CATEGORY_IDS), "order": "newest_first",
+                                                  "price_to": max_price, "page": 1})
+        if resp.status_code != 200:
+            raise VintedError(f"cheap page http {resp.status_code}")
+        if not flight_payload(resp.text):
+            raise BlockedError("cheap page without data")
         return parse_catalog(resp.text)[0]
 
     def item_page(self, item_id):

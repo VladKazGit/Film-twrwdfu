@@ -39,6 +39,7 @@ LIST_TRACK_MIN = 30 * 1440
 MAX_REQUESTS = 115
 TICK_TIME_BUDGET_S = 9 * 60  # Vinted traffic per tick; the rest goes to the next tick
 QUICK_PAGES, QUICK_TIME_BUDGET_S = 1, 2 * 60  # quick checks between ticks
+CHEAP_PRICE = 20.0  # the cheap check and 'До 20 €' (sheets.CHEAP_MAX_PRICE)
 # Fresh search: every model of 'Модели' once an hour, newest first in all categories; one more
 # page per 40 active cameras of the model (up to 4; the key models per 30, up to 6, and their
 # page 1 in every tick too). A page of all categories holds ~40 of the model's cameras.
@@ -284,6 +285,8 @@ def wants_description(item):
         return False
     if item["group"] == "list":
         return True
+    if item["model"] is None and (report.current_price(item) or CHEAP_PRICE + 1) <= CHEAP_PRICE:
+        return True  # cheap listings are titled carelessly ('Kamera alt'): the model may be in the text
     return item["model"] is None and (
         item["brand"] in LIST_BRANDS or bool(set(models.brands_in(item.get("vinted_brand") or "")) & LIST_BRANDS))
 
@@ -635,7 +638,7 @@ def run_tick(store, client, labels=None, now=None, quick=False):
     boundary = max(tail)
     # List cameras listed as instant cameras, other cameras or spare parts (Polaroids, parts and
     # the like stay out): seen like catalog items.
-    misplaced = set()
+    misplaced, parts_ids = set(), set()
     for category in EXTRA_CATEGORY_IDS:
         try:
             for rec in client.catalog_page(1, category):
@@ -645,6 +648,8 @@ def run_tick(store, client, labels=None, now=None, quick=False):
                 if cls["in_list"] and not SIGNAL_FLAGS & set(cls["flags"]) and rec["id"] not in seen:
                     seen[rec["id"]] = rec
                     misplaced.add(rec["id"])
+                    if category == PARTS_CATEGORY_ID:
+                        parts_ids.add(rec["id"])
         except VintedError:
             stats["check_errors"] += 1
 
@@ -652,12 +657,15 @@ def run_tick(store, client, labels=None, now=None, quick=False):
     max_seen = state.get("max_seen_id", 0)
     extra = ["preexisting"] if first_run else (["night"] if first_of_day else [])
     listed_after = None if first_run else state.get("last_tick_at")
+    # A cheap one (outside the parts) would have shown in the last cheap check: listed after it.
+    cheap_after = listed_after and max(listed_after, state.get("last_cheap_at") or "")
     for rec_id, rec in seen.items():
         if rec_id in active:
             mark_seen(active[rec_id], rec, now)
             changed.add(rec_id)
         elif rec_id > max_seen:
-            item = new_item(rec, now, listed_after, extra)
+            cheap = (rec["price"] or CHEAP_PRICE + 1) <= CHEAP_PRICE and rec_id not in parts_ids
+            item = new_item(rec, now, cheap_after if cheap else listed_after, extra)
             if item["group"] == "list" or (rec["price"] or 0) >= REST_MIN_PRICE:
                 active[rec_id] = item
                 changed.add(rec_id)
@@ -841,6 +849,77 @@ def run_tick(store, client, labels=None, now=None, quick=False):
                    daily=(first_run or first_of_day) and not quick, promoted=promoted, quick=quick)
 
 
+def run_cheap(store, client, labels=None, now=None):
+    """Cheap check between ticks: page 1 of the newest listings at 20 EUR or less (Filmkameras,
+    Sofortbildkameras, Andere Kameras). New ones are carded and their descriptions read at once,
+    so a cheap list camera reaches 'До 20 €' (and the letter) within minutes. Nothing else: a
+    price-filtered page says nothing about vanished items, and the catalog's top id and tick
+    time stay as they are (the next catalog read still judges the other listings)."""
+    started = time.monotonic()
+    now = now or clock.stamp()
+    state = store.load_state()
+    if "first_run_at" not in state:
+        return run_tick(store, client, labels, now, quick=True)
+    today = now[:10]
+    active, closed = store.load_active(), store.load_closed()
+    changed, stats, errors, promoted = set(), Counter(), [], []
+    try:
+        recs = client.cheap_page(CHEAP_PRICE)
+    except VintedError as exc:
+        errors.append(f"cheap page: {exc}")
+        return _finish(store, state, now, started, client, stats, errors, False, 0, True, today,
+                       active, closed, changed, fatal=True, quick=True, cheap=True)
+    max_seen = state.get("max_seen_id", 0)
+    listed_after = max(state.get("last_tick_at") or "", state.get("last_cheap_at") or "") or None
+    fresh = []
+    for rec in recs:
+        rec_id = rec["id"]
+        if rec_id in active:
+            mark_seen(active[rec_id], rec, now)
+            changed.add(rec_id)
+        elif rec_id in closed:
+            continue
+        elif rec_id > max_seen:
+            item = new_item(rec, now, listed_after, [])
+            if item["group"] == "list" or (rec["price"] or 0) >= REST_MIN_PRICE:
+                active[rec_id] = item
+                changed.add(rec_id)
+                stats[f"new_{item['group']}"] += 1
+                fresh.append(item)
+        else:
+            # Older and never seen (in another category, or cheaper now): listing time unknown.
+            item = new_item(rec, now, None, ["found"])
+            if item["group"] == "list":
+                active[rec_id] = item
+                changed.add(rec_id)
+                stats["found"] += 1
+                fresh.append(item)
+    for item in fresh:
+        if not wants_description(item) or not _can_request(client):
+            continue
+        try:
+            page = client.item_page(item["id"])
+        except BlockedError as exc:
+            errors.append(f"item page: {exc}")
+            break
+        except VintedError:
+            stats["check_errors"] += 1
+            continue
+        stats["checks"] += 1
+        stats["descriptions"] += 1
+        item["description_checked"] = True
+        apply_page(item, page, now)
+        if item["description"] and item["model"] is None:
+            cls = models.classify(item["title"], item["description"], item.get("vinted_brand"))
+            if cls["model"]:
+                set_model(item, cls["model"], "description")
+                stats["description_to_list"] += 1
+                promoted.append(item["id"])
+    state["last_cheap_at"] = now
+    return _finish(store, state, now, started, client, stats, errors, False, 1, True, today,
+                   active, closed, changed, fatal=False, quick=True, promoted=promoted, cheap=True)
+
+
 def _camera_label(item):
     """'Canon AE-1 — 120 €' (+ how it came in) for the 'Запуски' comment."""
     flags = set(item.get("flags") or [])
@@ -853,7 +932,7 @@ def _camera_label(item):
 
 
 def _finish(store, state, now, started, client, stats, errors, full_scan, pages, rest_enabled, today,
-            active, closed, changed, fatal, daily=False, promoted=(), quick=False):
+            active, closed, changed, fatal, daily=False, promoted=(), quick=False, cheap=False):
     if not rest_enabled:
         state["rest_disabled_on"] = today
     for item_id in changed:
@@ -865,7 +944,7 @@ def _finish(store, state, now, started, client, stats, errors, full_scan, pages,
     sold = [i for i in closed.values()
             if i.get("group") == "list" and i.get("status") == "sold" and i.get("sold_detected_at") == now]
     run = {
-        "at": now, "quick": quick, "full_scan": full_scan, "pages": pages, "requests": client.requests_made,
+        "at": now, "quick": quick, "cheap": cheap, "full_scan": full_scan, "pages": pages, "requests": client.requests_made,
         "mb": round(client.bytes_received / 1e6, 1), "seconds": round(time.monotonic() - started),
         "new_list": stats["new_list"], "new_rest": stats["new_rest"], "bumped": stats["bumped"],
         "bumped_list": stats["bumped_list"],
@@ -895,7 +974,8 @@ def _finish(store, state, now, started, client, stats, errors, full_scan, pages,
 
 
 def log_line(run):
-    return (f"{'quick ' if run.get('quick') else ''}tick {run['at'][11:]} | pages {run['pages']}"
+    kind = "cheap " if run.get("cheap") else "quick " if run.get("quick") else ""
+    return (f"{kind}tick {run['at'][11:]} | pages {run['pages']}"
             f"{' (full)' if run['full_scan'] else ''}"
             f" | requests {run['requests']} ({run['mb']} MB, {run['seconds']} s)"
             f" | new: list {run['new_list']}, rest {run['new_rest']}"
@@ -920,7 +1000,8 @@ def log_line(run):
 
 def runs_row(run, cheap_added=()):
     """One 'Запуски' row; cheap_added: cameras that entered 'До 20 €' in this tick."""
-    return [run["at"], "да" if run["full_scan"] else "быстрая" if run.get("quick") else "", run["pages"],
+    kind = "да" if run["full_scan"] else "до 20 €" if run.get("cheap") else "быстрая" if run.get("quick") else ""
+    return [run["at"], kind, run["pages"],
             run["requests"], run["mb"], run["seconds"],
             run["new_list"], run["new_rest"], run["bumped"], run["checks"], run["sold_list"], run["sold_rest"],
             run["deleted"], run["reserved_hidden"], run["closed_3h"], run["closed_30d"], run["descriptions"],
@@ -1032,11 +1113,13 @@ def write_sheets(writer, result, state_flags):
 def main():
     parser = argparse.ArgumentParser(description="One tracker tick.")
     parser.add_argument("--quick", action="store_true", help="quick check: catalog page 1, new and vanished items")
+    parser.add_argument("--cheap", action="store_true", help="cheap check: newest listings at 20 EUR or less")
     parser.add_argument("--force", action="store_true", help="run outside the 07:00-00:00 Berlin window")
     parser.add_argument("--local", help="use a local folder as the data store (no git)")
     parser.add_argument("--no-sheets", action="store_true", help="skip Google Sheets")
     parser.add_argument("--max-requests", type=int, default=MAX_REQUESTS + 15)  # hard cap above the plan
     args = parser.parse_args()
+    args.quick = args.quick or args.cheap  # a cheap check is handled like a quick one (sheet only if changed)
 
     if not args.force and env.now_berlin().hour < WINDOW_START_HOUR:
         print("outside the 07:00-00:00 Berlin window, nothing to do")
@@ -1068,7 +1151,7 @@ def _main(args):
         root = Path(args.local) if args.local else datarepo.clone(Path(tmp) / "data")
         store = DataStore(root)
         state_flags = store.load_state()
-        result = run_tick(store, client, labels, quick=args.quick)
+        result = run_cheap(store, client, labels) if args.cheap else run_tick(store, client, labels, quick=args.quick)
         print(log_line(result["run"]))
         if not result["fatal"]:
             try:  # e-mail alerts: a failure must not fail the tick
@@ -1082,7 +1165,8 @@ def _main(args):
             except Exception as exc:
                 print(f"notify failed: {type(exc).__name__}: {env.redact(exc)}")
         if not args.local:
-            datarepo.commit_and_push(root, f"{'quick ' if args.quick else ''}tick {result['run']['at']}")
+            kind = "cheap " if args.cheap else "quick " if args.quick else ""
+            datarepo.commit_and_push(root, f"{kind}tick {result['run']['at']}")
         if args.quick and not args.no_sheets and result["run"]["list_changed"]:
             try:
                 writer = sheets.SheetWriter(sheets.open_spreadsheet())

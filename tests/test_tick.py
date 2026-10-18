@@ -16,6 +16,10 @@ class FakeClient:
         self.pages, self.item_pages, self.search = pages, item_pages or {}, search or {}
         self.requests_made, self.bytes_received, self.opened = 0, 0, []
 
+    def cheap_page(self, max_price):
+        self.requests_made += 1
+        return self.pages.get("cheap", [])
+
     def fresh_page(self, text, page=1):
         self.requests_made += 1
         return self.search.get((text, "fresh") if page == 1 else (text, "fresh", page), [])
@@ -598,6 +602,21 @@ def main():
         a = store.load_active()
         assert a[20_000_000_301]["model"] == "Nikon EM" and a[20_000_000_301]["listed_after"] == "2026-10-17 10:47"
         assert 20_000_000_302 not in a and a[19_500_000_000]["flags"] == ["found"], r3077["run"]
+
+        # Cheap check: a new cheap list camera is carded at once (listed after the last check of
+        # any kind); a cheap listing without a model gets its description read and may join the
+        # list; the catalog's top id and tick time stay; nothing vanishes from a filtered page.
+        state0 = store.load_state()
+        client = FakeClient({"cheap": [rec(30_000_000_001, "Zenit E", 15.0), rec(30_000_000_002, "Kamera alt", 10.0)]},
+                            {30_000_000_002: {"description": "Praktica MTL 5, Verschluss ok"}})
+        rc = tick.run_cheap(store, client, now="2026-10-17 11:10")
+        a, st = store.load_active(), store.load_state()
+        assert rc["run"]["cheap"] and a[30_000_000_001]["model"] == "Zenit E" and a[30_000_000_001]["group"] == "list"
+        assert a[30_000_000_001]["listed_after"] == "2026-10-17 11:07" and st["last_cheap_at"] == "2026-10-17 11:10"
+        assert a[30_000_000_002]["model"] == "Praktica MTL 5" and rc["run"]["description_to_list"] == 1
+        assert st["max_seen_id"] == state0["max_seen_id"] and st["last_tick_at"] == state0["last_tick_at"]
+        assert set(client.opened) <= {30_000_000_001, 30_000_000_002}, client.opened
+        assert tick.log_line(rc["run"]).startswith("cheap tick") and tick.runs_row(rc["run"])[1] == "до 20 €"
 
         # Fresh search: a list camera from another category, listed within a day, is tracked.
         state = {"max_seen_id": 20_000_000_100, "max_seen_history": [["2026-10-16 11:00", 20_000_000_000],

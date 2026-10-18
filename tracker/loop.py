@@ -24,6 +24,7 @@ from . import env
 GAP_MIN, GAP_MAX = 13, 18  # minutes between ticks, at random
 FIRST_TICK_MIN = (3, 12)  # the day's first tick: 07:03-07:12
 QUICK_JITTER_S = 40  # quick checks at ~1/3 and ~2/3 of a gap, give or take
+LATE_S = 30  # a check this late after its time (the previous one overran) is skipped
 WINDOW_START_HOUR = 7
 BUDGET_MIN = 330  # a 6-hour job limit minus one tick and setup
 TICK_TIMEOUT_S = 14 * 60
@@ -39,12 +40,17 @@ def next_tick(after, rng):
     return tick
 
 
+# Between two ticks: quick checks at ~1/3 and ~2/3, cheap checks (listings at 20 EUR or less) in between.
+CHECKS = ((1 / 6, "cheap"), (1 / 3, "quick"), (1 / 2, "cheap"), (2 / 3, "quick"), (5 / 6, "cheap"))
+
+
 def quick_times(last, tick, rng):
-    """Two quick checks between ticks of one evening/day (none across the night)."""
+    """The checks between ticks of one evening/day (none across the night): [(time, mode)]."""
     gap = seconds_until(tick, last)
     if gap > (GAP_MAX + 1) * 60:
         return []
-    return [last + timedelta(seconds=gap * share + rng.uniform(-QUICK_JITTER_S, QUICK_JITTER_S)) for share in (1 / 3, 2 / 3)]
+    return [(last + timedelta(seconds=gap * share + rng.uniform(-QUICK_JITTER_S, QUICK_JITTER_S) / (2 if mode == "cheap" else 1)),
+             mode) for share, mode in CHECKS]
 
 
 def seconds_until(moment, now):
@@ -67,7 +73,7 @@ def run_loop(now_fn, sleep_fn, tick_fn, tick_now=False, budget_min=BUDGET_MIN, l
     failures, ticked, last = 0, False, start
     log(f"loop: started, hands over by {deadline:%Y-%m-%d %H:%M} (Berlin)")
     if tick_now:
-        failures += 0 if tick_fn(False) else 1
+        failures += 0 if tick_fn("tick") else 1
         ticked = True
     while True:
         tick = next_tick(last, rng)
@@ -78,13 +84,14 @@ def run_loop(now_fn, sleep_fn, tick_fn, tick_now=False, budget_min=BUDGET_MIN, l
             log("loop: handing over to the next run")
             return failures
         log(f"loop: next tick {tick:%H:%M:%S}")
-        for quick in quick_times(last, tick, rng):
-            if seconds_until(quick, now_fn()) > -60 and seconds_until(tick, quick) > 60:  # late ones are skipped
-                _sleep_until(quick, now_fn, sleep_fn)
-                failures += 0 if tick_fn(True) else 1
+        for when, mode in quick_times(last, tick, rng):
+            # A check more than half a minute late follows right on the previous one: skipped.
+            if seconds_until(when, now_fn()) > -LATE_S and seconds_until(tick, when) > 60:
+                _sleep_until(when, now_fn, sleep_fn)
+                failures += 0 if tick_fn(mode) else 1
         _sleep_until(tick, now_fn, sleep_fn)
         last = now_fn()  # gaps count from the real start: an overrun tick does not bunch the next ones
-        failures += 0 if tick_fn(False) else 1
+        failures += 0 if tick_fn("tick") else 1
         ticked = True
 
 
@@ -104,13 +111,13 @@ def _update_code():
             return
 
 
-def _tick(force, quick=False):
+def _tick(force, mode="tick"):
     _update_code()
-    cmd = [sys.executable, "-m", "tracker.tick"] + (["--force"] if force else []) + (["--quick"] if quick else [])
+    cmd = [sys.executable, "-m", "tracker.tick"] + (["--force"] if force else []) + ([f"--{mode}"] if mode != "tick" else [])
     try:
-        return subprocess.run(cmd, timeout=QUICK_TIMEOUT_S if quick else TICK_TIMEOUT_S).returncode == 0
+        return subprocess.run(cmd, timeout=TICK_TIMEOUT_S if mode == "tick" else QUICK_TIMEOUT_S).returncode == 0
     except subprocess.TimeoutExpired:
-        print(f"loop: {'quick check' if quick else 'tick'} timed out")
+        print(f"loop: {mode} check timed out")
         return False
 
 
@@ -122,8 +129,8 @@ def main():
 
     first = {"force": args.force}
 
-    def tick(quick):
-        ok = _tick(first.pop("force", False), quick)
+    def tick(mode):
+        ok = _tick(first.pop("force", False), mode)
         sys.stdout.flush()
         return ok
 
