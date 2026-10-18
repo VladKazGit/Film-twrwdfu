@@ -256,7 +256,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 26
+VERSION = 27
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -453,6 +453,8 @@ _PARTS = re.compile(
     # jewellery, magnets and stickers shaped like a camera ('Ciondolo Zenit 122')
     r"|ciondol[oi]|pendentif|kettenanhanger|halskette|necklace|collana|\bcollier\b|orecchin[oi]|ohrring\w*|earrings?\b"
     r"|\bmagnet\b|kuhlschrankmagnet|\baimant\b|calamita|sticker|aufkleber|adesiv[oi]|autocollant"
+    # pin badges and memorabilia ('Vintage Leica Red Logo Pin Badge M6'); not 'pinhole'
+    r"|\bpins?\b(?! ?hole)|\bbadges?\b|anstecker|anstecknadel|\bspilla\b|epinglette|\bpin s\b|memorabilia"
     r"|manivelle|rembobinage|ruckspul\w*|rewind (?:knob|lever)|manovella|riavvolgimento|terugspoel\w*")
 # Light seals: a part before the model ('Kit guarnizioni luce Canon AE-1 Program'); after it they
 # praise the camera ('Canon AE-1 neue Lichtdichtungen').
