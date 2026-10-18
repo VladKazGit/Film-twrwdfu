@@ -40,6 +40,8 @@ MAX_REQUESTS = 115
 TICK_TIME_BUDGET_S = 9 * 60  # Vinted traffic per tick; the rest goes to the next tick
 QUICK_PAGES, QUICK_TIME_BUDGET_S = 1, 150  # quick checks between ticks (cheap ones end long before)
 CHEAP_PRICE = 20.0  # the cheap check and 'До 20 €' (sheets.CHEAP_MAX_PRICE)
+# Extra categories: page 1 per check; on full scans (the morning after the night, then every 4 h) 3 pages
+EXTRA_FULL_PAGES = 3
 # Fresh search: every model of 'Модели' once an hour, newest first in all categories; one more
 # page per 40 active cameras of the model (up to 4; the key models per 30, up to 6, and their
 # page 1 in every tick too). A page of all categories holds ~40 of the model's cameras.
@@ -640,9 +642,11 @@ def run_tick(store, client, labels=None, now=None, quick=False):
     # List cameras listed as instant cameras, other cameras or spare parts (Polaroids, parts and
     # the like stay out): seen like catalog items.
     misplaced, parts_ids = set(), set()
-    for category in EXTRA_CATEGORY_IDS:
+    extra_pages = [(category, page) for category in EXTRA_CATEGORY_IDS
+                   for page in range(1, (EXTRA_FULL_PAGES if full_scan else 1) + 1)]
+    for category, page in extra_pages:
         try:
-            for rec in client.catalog_page(1, category):
+            for rec in client.catalog_page(page, category):
                 cls = models.classify(rec["title"], vinted_brand=rec["brand"])
                 if category == PARTS_CATEGORY_ID and not models.names_camera(rec["title"]):
                     continue  # 'Manivelle rembobinage Olympus OM10'

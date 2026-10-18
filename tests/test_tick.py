@@ -618,6 +618,14 @@ def main():
         assert set(client.opened) <= {30_000_000_001, 30_000_000_002}, client.opened
         assert tick.log_line(rc["run"]).startswith("cheap tick") and tick.runs_row(rc["run"])[1] == "до 20 €"
 
+        # Full scans (the morning after the night) read 3 pages of the extra categories.
+        state = store.load_state()
+        state["last_full_scan_at"] = "2026-10-17 06:00"
+        store.save_state(state)
+        pages = {1: page1, 2: older(19_000_000_000), (3077, 2): [rec(25_000_000_100, "Nikon EM Kamera", 40.0)]}
+        rf = tick.run_tick(store, FakeClient(pages), now="2026-10-17 11:20")
+        assert rf["run"]["full_scan"] and 25_000_000_100 in store.load_active(), rf["run"]
+
         # Fresh search: a list camera from another category, listed within a day, is tracked.
         state = {"max_seen_id": 20_000_000_100, "max_seen_history": [["2026-10-16 11:00", 20_000_000_000],
                                                                     ["2026-10-17 10:30", 20_000_000_040]],
