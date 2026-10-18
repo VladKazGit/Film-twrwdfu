@@ -974,6 +974,14 @@ def _finish(store, state, now, started, client, stats, errors, full_scan, pages,
         "added": [_camera_label(i) for i in added], "sold_names": [_camera_label(i) for i in sold],
         "list_changed": bool(added or sold or stats["list_status_changed"]),
     }
+    # Quick and cheap checks write a 'Запуски' row only when 'Список' changed: the next tick's
+    # row says how many ran in between.
+    between = state.setdefault("checks_since_tick", {"quick": 0, "cheap": 0})
+    if cheap or quick:
+        between["cheap" if cheap else "quick"] += 1
+    elif not fatal:
+        run["between"] = dict(between)
+        state["checks_since_tick"] = {"quick": 0, "cheap": 0}
     store.save_state(state)
     store.append_run(run)
     all_items = list(active.values()) + list(closed.values())
@@ -1017,7 +1025,13 @@ def runs_row(run, cheap_added=()):
             run["new_list"], run["new_rest"], run["bumped"], run["checks"], run["sold_list"], run["sold_rest"],
             run["deleted"], run["reserved_hidden"], run["closed_3h"], run["closed_30d"], run["descriptions"],
             run["description_to_list"], run["deferred"], "; ".join(run["errors"]),
-            runs_comment(run, cheap=[_camera_label(i) for i in cheap_added]), len(cheap_added)]
+            runs_comment(run, cheap=[_camera_label(i) for i in cheap_added]), len(cheap_added), between_text(run)]
+
+
+def between_text(run):
+    """'быстрых 2, до 20 € 3' for a tick's row; empty for the checks' own rows."""
+    between = run.get("between")
+    return f"быстрых {between['quick']}, до 20 € {between['cheap']}" if between else ""
 
 
 def runs_comment(run, limit=40, cheap=()):
@@ -1071,9 +1085,9 @@ def write_sheets(writer, result, state_flags):
     writer.replace(sheets.SALES_SHEET, report.sales_rows(items), links=True)
     writer.replace(sheets.CHECK_SHEET, report.check_rows(items), links=True)
     writer.replace(sheets.SUMMARY_SHEET, report.summary_rows(result["summary"]))
-    if not state_flags.get("runs_header_v3"):  # v3: 'Комментарий' and 'Новых в «До 20 €»'
+    if not state_flags.get("runs_header_v4"):  # v4: 'Проверок между тиками'
         writer.ensure_runs_header()
-        updates["runs_header"] = updates["runs_header_v2"] = updates["runs_header_v3"] = True
+        updates["runs_header"] = updates["runs_header_v2"] = updates["runs_header_v3"] = updates["runs_header_v4"] = True
     writer.append_run(runs_row(result["run"], cheap_added))
     if result["daily"]:
         writer.replace(sheets.REST_SHEET, report.item_rows([i for i in items if i.get("group") == "rest"]), links=True)

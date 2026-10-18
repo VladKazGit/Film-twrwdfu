@@ -223,7 +223,7 @@ def main():
         assert rule["ranges"][0]["startColumnIndex"] == report.ITEM_HEADER.index("Статус")
         runs = ss.sheets["Запуски"].rows
         assert runs[0] == sheets.RUNS_HEADER and runs[1][1] == "check-setup" and len(runs) == 3
-        assert updates["runs_header_v3"] and runs[2][-1] == 0, "first tick: nothing counted as new in 'До 20 €'"
+        assert updates["runs_header_v4"] and runs[2][-2] == 0, "first tick: nothing counted as new in 'До 20 €'"
         assert updates["cheap_ids"] == [1021]
         # Links clickable, other text kept literal.
         fast_ws = ss.sheets["Быстрые продажи"]
@@ -274,26 +274,26 @@ def main():
         # 'До 20 €' follows 'Модели': the user deletes Zenit E, it leaves 'До 20 €' and is not re-added.
         models_ws = ss.sheets["Модели"]
         models_ws.rows = [r for r in models_ws.rows if r[0] != "Zenit E"]
-        state_flags = {"runs_header": True, "runs_header_v2": True, "runs_header_v3": True,
+        state_flags = {"runs_header": True, "runs_header_v2": True, "runs_header_v3": True, "runs_header_v4": True,
                        "cheap_ids": updates["cheap_ids"], "models_offered": updates["models_offered"],
                        "status_colors": updates["status_colors"], "new_rows_colors": updates["new_rows_colors"],
                        "fresh_rows_colors": updates["fresh_rows_colors"], "fresh_rows_green": True}
         assert {k: v for k, v in tick.write_sheets(writer, r5, state_flags).items() if k != "models_sheet"} == {"cheap_ids": []}, "Zenit E left 'До 20 €'"
-        assert ss.sheets["Запуски"].rows[-1][-1] == 0
+        assert ss.sheets["Запуски"].rows[-1][-2] == 0
         assert [r[0] for r in ss.sheets["До 20 €"].rows[1:] if r[0] != ""] == [] and ["Zenit E"] not in [r[:1] for r in models_ws.rows]
         assert len(ss.sheets["До 20 €"].rows) == 2 and not any(ss.sheets["До 20 €"].rows[1]), "old data row blanked"
         # A model new to the dictionary is offered once; spelling in the sheet does not matter.
         models_ws.rows.append(["зенит-е"])
         offered = [m for m in updates["models_offered"] if m != "Zenit KM"]
         models_ws.rows = [r for r in models_ws.rows if r[0] != "Zenit KM"]
-        upd = tick.write_sheets(writer, r5, {"runs_header": True, "runs_header_v2": True, "runs_header_v3": True,
+        upd = tick.write_sheets(writer, r5, {"runs_header": True, "runs_header_v2": True, "runs_header_v3": True, "runs_header_v4": True,
                                              "cheap_ids": [400], "models_offered": offered,
                                              "status_colors": updates["status_colors"], "new_rows_color": True,
                                              "fresh_rows_green": True})
         assert upd.get("new_rows_colors") == ["До 20 €", "Список"], "old flag: only 'До 20 €' added"
         assert upd.get("fresh_rows_colors") == ["До 20 €", "Список"]
-        assert ss.sheets["Запуски"].rows[-1][-1] == 1 and upd["cheap_ids"] == [1021], "Zenit E 1021 entered 'До 20 €'"
-        assert ss.sheets["Запуски"].rows[-1][-2].endswith("В «До 20 €» (1): Zenit E — 15 €, id 1021"), ss.sheets["Запуски"].rows[-1][-2]
+        assert ss.sheets["Запуски"].rows[-1][-2] == 1 and upd["cheap_ids"] == [1021], "Zenit E 1021 entered 'До 20 €'"
+        assert ss.sheets["Запуски"].rows[-1][-3].endswith("В «До 20 €» (1): Zenit E — 15 €, id 1021"), ss.sheets["Запуски"].rows[-1][-3]
         assert "Zenit KM" in upd["models_offered"] and models_ws.rows[-1][0] == "Zenit KM"
         assert [r[0] for r in ss.sheets["До 20 €"].rows[1:]] == [1021], "Cyrillic 'зенит-е' matches Zenit E"
 
@@ -628,6 +628,7 @@ def main():
         assert st["max_seen_id"] == state0["max_seen_id"] and st["last_tick_at"] == state0["last_tick_at"]
         assert set(client.opened) <= {30_000_000_001, 30_000_000_002}, client.opened
         assert tick.log_line(rc["run"]).startswith("cheap tick") and tick.runs_row(rc["run"])[1] == "до 20 €"
+        assert store.load_state()["checks_since_tick"]["cheap"] == 1 and tick.runs_row(rc["run"])[-1] == ""
 
         # Full scans (the morning after the night) read 3 pages of the extra categories.
         state = store.load_state()
@@ -636,6 +637,8 @@ def main():
         pages = {1: page1, 2: older(19_000_000_000), (3077, 2): [rec(25_000_000_100, "Nikon EM Kamera", 40.0)]}
         rf = tick.run_tick(store, FakeClient(pages), now="2026-10-17 11:20")
         assert rf["run"]["full_scan"] and 25_000_000_100 in store.load_active(), rf["run"]
+        assert tick.runs_row(rf["run"])[-1] == "быстрых 0, до 20 € 1", tick.runs_row(rf["run"])[-1]
+        assert store.load_state()["checks_since_tick"] == {"quick": 0, "cheap": 0}
 
         # Fresh search: a list camera from another category, listed within a day, is tracked.
         state = {"max_seen_id": 20_000_000_100, "max_seen_history": [["2026-10-16 11:00", 20_000_000_000],
