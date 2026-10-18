@@ -131,7 +131,7 @@ Cron (каждые 2 ч) — только запасной перезапуск 
 - Konica: FS-1, FC-1, Autoreflex TC
 - Contax: RTS, RTS II, RTS III, 137 MD, 139 Quartz, 159 MT
 - Средний формат: Mamiya RZ67 (Pro, Pro II), Mamiya 645 (M645, 645 Pro)
-- Leica: R3, R4, R5, R7, R8; M7
+- Leica: R3, R4, R5, R-E, R7, R8; M7
 - Hasselblad: 2000FC, 2000FC/M, 2000FCW, 2003FCW, 201F
 - Praktica (B, PB): B200, BMS, BCA, BC1
 - Киев: 10, 15 Tee
