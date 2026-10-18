@@ -228,6 +228,8 @@ MODELS = [
      r"(?:1000 ?s?|super|j|af|afd|df|e|tl)(?![a-z0-9])"),
     ("Leica", "Leica R3", ELEC, S35, ["r3"], None),
     ("Leica", "Leica R4", ELEC, S35, ["r4"], None),
+    # the simplified R4, with its Mod 2 ('R4-S', 'R4s Mod. 2')
+    ("Leica", "Leica R4s", ELEC, S35, ["r4 s", "r4 s mod 2", "r4 s mod2"], None),
     ("Leica", "Leica R5", ELEC, S35, ["r5"], None),
     # the simplified R5; 're' right after the brand only
     ("Leica", "Leica R-E", ELEC, S35, ["^r e"], None),
@@ -254,12 +256,12 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 25
+VERSION = 26
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
 PRIORITY_SEARCH = ("Canon FX", "Canon FP", "Canon TL", "Canon TLb", "Canon TX", "Canon AT-1", "Nikon FG-20",
-                   "Canon AE-1", "Canon AE-1 Program", "Canon AV-1", "Canon F-1", "Canon A-1", "Leica R-E")
+                   "Canon AE-1", "Canon AE-1 Program", "Canon AV-1", "Canon F-1", "Canon A-1", "Leica R-E", "Leica R4s")
 
 # Models that must not match when the text also contains this pattern.
 MODEL_EXCLUDE = {
