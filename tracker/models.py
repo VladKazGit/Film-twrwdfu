@@ -593,6 +593,22 @@ def _is_accessory(norm, model_span):
     return bool(acc) and not _WITH_WORDS.search(tail[:acc.start()]) and not _CAMERA_WORDS.search(norm)
 
 
+# 'Open to offers' (de/fr/it/en/nl): with a price of a few EUR it is a placeholder, not the price.
+_OFFERS = re.compile(
+    r"offen fur (?:angebote|preisvorschlage|vorschlage)|angebote? (?:erwunscht|willkommen|gerne)|preisvorschlag"
+    r"|preis (?:ist )?verhandelbar|verhandlungsbasis|\bvb\b"
+    r"|ouverte? (?:a|aux) (?:offres?|propositions?|negociations?)|faites? (?:moi )?(?:une |vos )?(?:offres?|propositions?)"
+    r"|faire (?:une )?offre|prix a debattre"
+    r"|aperto a (?:offerte|proposte)|accetto (?:offerte|proposte)|fate(?:mi)? (?:un.)?offert[ae]|trattabil[ei]"
+    r"|open (?:to|for) offers|make (?:me )?an offer|best offer|\bobo\b"
+    r"|open voor (?:biedingen|bod)|\bbieden\b|\bbod\b")
+
+
+def asks_for_offers(text):
+    """The seller waits for offers ('Accetto offerte', 'offen für Angebote')."""
+    return bool(text and _OFFERS.search(normalize(text)))
+
+
 def names_camera(title):
     """The title says it is a camera or a kit ('Kamera', 'appareil', 'body', 'mit Objektiv')."""
     norm = normalize(title)

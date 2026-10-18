@@ -8,7 +8,24 @@ from . import clock, models
 # Sale time buckets by the upper estimate (time_to_sell_max), minutes.
 BUCKETS = [(30, "< 30 мин"), (360, "30 мин – 6 ч"), (1440, "6–24 ч"), (10080, "1–7 дн"), (None, "> 7 дн")]
 FAST_MINUTES = 30
-EXCLUDED_FLAGS = {"accessory?", "digital?", "compact?"}
+EXCLUDED_FLAGS = {"accessory?", "digital?", "compact?", "price?"}
+# Placeholder prices: 1 EUR, or up to 5 EUR when the seller waits for offers. Not the real price,
+# so out of the statistics, 'До 20 €', 'Продажи' and the letters; worked out from the current
+# price, so a camera that gets a real price comes back.
+PLACEHOLDER_PRICE, OFFERS_PRICE = 1.0, 5.0
+
+
+def placeholder_price(item):
+    price = current_price(item)
+    if price is None:
+        return False
+    return price <= PLACEHOLDER_PRICE or (price <= OFFERS_PRICE and models.asks_for_offers(item.get("description")))
+
+
+def stat_flags(item):
+    """The item's flags plus 'price?' for a placeholder price."""
+    flags = set(item.get("flags") or [])
+    return flags | {"price?"} if placeholder_price(item) else flags
 GROUP_RU = {"list": "Список", "rest": "Остальные"}
 
 STATUS_RU = {
@@ -159,7 +176,7 @@ def fast_confidence(item):
     (late GitHub runs widen the upper estimate).
     """
     flags = set(item.get("flags") or [])
-    if item.get("status") != "sold" or flags & (EXCLUDED_FLAGS | {"preexisting", "night", "found"}):
+    if item.get("status") != "sold" or stat_flags(item) & (EXCLUDED_FLAGS | {"preexisting", "night", "found"}):
         return None
     if item.get("time_to_sell_max") is not None and item["time_to_sell_max"] <= FAST_MINUTES:
         return "точно"
@@ -193,7 +210,7 @@ def item_row(item):
         bucket(item) or "", KIT_RU.get(item.get("kit"), ""), kit_details_text(item),
         MECH_RU.get(item.get("mech_type"), ""), FORMAT_RU.get(item.get("format"), ""),
         REGION_RU.get(item.get("region"), ""), item.get("brand") or "",
-        SOURCE_RU.get(item.get("model_source"), ""), ", ".join(item.get("flags") or []),
+        SOURCE_RU.get(item.get("model_source"), ""), ", ".join(sorted(stat_flags(item))),
         item.get("condition") or "", item.get("url") or "",
     ]
 
@@ -283,7 +300,7 @@ def _one_line(text, limit):
 
 def sales_rows(items):
     """'Продажи': sold list cameras, newest sale first, one line each."""
-    sold = sorted((i for i in items if i.get("group") == "list" and i.get("status") == "sold"),
+    sold = sorted((i for i in items if i.get("group") == "list" and i.get("status") == "sold" and not placeholder_price(i)),
                   key=lambda i: (i.get("sold_detected_at") or "", i["id"]), reverse=True)
     rows = [SALES_HEADER]
     for i in sold:
@@ -335,7 +352,7 @@ def cheap_cameras(items, max_price):
     less. Sold, deleted, reserved or hidden ones stay in 'Список' / 'Продажи' only."""
     return [i for i in items
             if i.get("group") == "list" and i.get("status") == "active"
-            and not set(i.get("flags") or []) & EXCLUDED_FLAGS
+            and not stat_flags(i) & EXCLUDED_FLAGS
             and current_price(i) is not None and current_price(i) <= max_price]
 
 
@@ -363,7 +380,7 @@ def unsold_days(item, now):
 
 def summarize(items, now):
     """Aggregates for 'Сводка', summary.json and README.md."""
-    counted = [i for i in items if not set(i.get("flags") or []) & EXCLUDED_FLAGS]
+    counted = [i for i in items if not stat_flags(i) & EXCLUDED_FLAGS]
     groups = {"list": [i for i in counted if i.get("group") == "list"],
               "rest": [i for i in counted if i.get("group") == "rest"]}
     totals = {}

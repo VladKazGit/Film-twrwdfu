@@ -253,6 +253,12 @@ def main():
         assert report.on_sale_text({"status": "sold", "flags": ["preexisting"], "first_seen": "2026-10-15 10:00",
                                     "sold_detected_at": "2026-10-17 12:00"}) == "≥ 2 дня"
         assert all("\n" not in str(c) and len(str(c)) <= 150 for r in sales[1:] for c in r[:-1]), "one line per sale"
+        # Placeholder prices: 1 EUR always, a few EUR when the seller waits for offers.
+        one = {"price_start": 1.0, "price_history": [{"at": "x", "price": 1.0}], "description": "Accetto offerte"}
+        three = {"price_start": 3.0, "price_history": [{"at": "x", "price": 3.0}], "description": "Offen für Angebote"}
+        real = {"price_start": 4.0, "price_history": [{"at": "x", "price": 4.0}], "description": "Funktioniert"}
+        assert report.placeholder_price(one) and report.placeholder_price(three) and not report.placeholder_price(real)
+        assert report.cheap_cameras([dict(one, group="list", status="active", flags=[])], 20) == []
         item = {"kit": "with_lens", "kit_details": ["lens", "flash"], "description": "Canon AE-1\n\n" + "sehr gut " * 30}
         assert report._kit_text(item) == "с объективом: вспышка" and report._one_line(item["description"], 30).endswith("…")
         assert report._change_text(100.0, 100.0) == "" and report._change_text(80.0, 100.0) == "+20 € (+25 %)"
