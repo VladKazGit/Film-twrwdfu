@@ -52,6 +52,9 @@ jobs:
           SHEET_ID: ${{ secrets.SHEET_ID }}
           DATA_TOKEN: ${{ secrets.DATA_TOKEN }}
           DATA_REPO: ${{ secrets.DATA_REPO }}
+          MAIL_USER: ${{ secrets.MAIL_USER }}
+          MAIL_APP_PASSWORD: ${{ secrets.MAIL_APP_PASSWORD }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
         run: |
           echo "settings: backup cron ${{ vars.TRACKER_ENABLED == 'true' && 'on' || 'off (TRACKER_ENABLED is not true)' }}, event ${{ github.event_name }}, chained ${{ inputs.chained && 'yes' || 'no' }}"
           python -u -m tracker.loop ${{ (github.event_name == 'workflow_dispatch' && !inputs.chained) && '--tick-now' || '' }} ${{ inputs.force && '--force' || '' }}
