@@ -49,7 +49,7 @@ def message(cameras, now, welcome_count=None):
     """The letter: subject, plain text and HTML."""
     msg = EmailMessage()
     if welcome_count is not None:
-        msg["Subject"] = "Vinted: уведомления «До 20 €» включены"
+        msg["Subject"] = "⚡ Vinted: уведомления «До 20 €» включены"
         intro = (f"Уведомления включены. Сейчас в листе «До 20 €» {welcome_count} камер(ы). Дальше письмо придёт, "
                  "когда в лист попадёт новая камера: новое объявление, найденное старое или подешевевшее до 20 €.")
         text, rows = [intro], [f"<p>{escape(intro)}</p>"]
@@ -57,7 +57,7 @@ def message(cameras, now, welcome_count=None):
         first = cameras[0]
         price = report._price_text(report.current_price(first))
         more = f" и ещё {len(cameras) - 1}" if len(cameras) > 1 else ""
-        msg["Subject"] = f"Vinted «До 20 €»: {first.get('model', '')} — {price} €{more}"
+        msg["Subject"] = f"⚡ Vinted «До 20 €»: {first.get('model', '')} — {price} €{more}"
         text, rows = [], []
     for item in cameras:
         price = report._price_text(report.current_price(item))

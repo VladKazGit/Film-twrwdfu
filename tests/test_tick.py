@@ -236,6 +236,8 @@ def main():
         assert ss.sheets["Список"].rows[0][0] == "id" and len(ss.sheets["Список"].rows) >= 4
         assert ss.sheets["Модели"].rows[0] == sheets.MODELS_HEADER and len(ss.sheets["Модели"].rows) > 150
         assert ss.sheets["Сводка"].rows[0][0] == "Обновлено"
+        model_header = next(r for r in ss.sheets["Сводка"].rows if r[0] == "Модель")
+        assert model_header[3] == "Средняя цена, €", model_header
         assert "Остальные" in ss.sheets
         sales = ss.sheets["Продажи"].rows
         ids = [r[-1].rsplit("/", 1)[-1] for r in sales[1:]]

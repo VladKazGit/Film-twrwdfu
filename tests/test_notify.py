@@ -32,7 +32,7 @@ def main():
         assert notify.run(items, state, "2026-10-18 10:47", sent.append) == 3 and len(sent) == 2
         body = sent[1].get_body(("plain",)).get_content()
         assert "items/3" in body and "items/4" in body and "items/2" in body and "items/5" not in body
-        assert "найдено поиском" in body and sent[1]["Subject"].startswith("Vinted «До 20 €»: Zenit E — 8 € и ещё 2")
+        assert "найдено поиском" in body and sent[1]["Subject"].startswith("⚡ Vinted «До 20 €»: Zenit E — 8 € и ещё 2")
         html = sent[1].get_body(("html",)).get_content()
         assert '<img src="https://images1.vinted.net/p3.jpg"' in html and "Kamera funktioniert" in html and "Kamera funktioniert" in body
         assert notify.run(items, state, "2026-10-18 10:52", sent.append) == 0 and len(sent) == 2, "each camera once"
