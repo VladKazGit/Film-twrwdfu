@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 
 BERLIN = ZoneInfo("Europe/Berlin")
 
-SECRET_NAMES = ("GOOGLE_SA_KEY", "SHEET_ID", "DATA_TOKEN", "DATA_REPO")
+SECRET_NAMES = ("GOOGLE_SA_KEY", "SHEET_ID", "DATA_TOKEN", "DATA_REPO", "MAIL_USER", "MAIL_APP_PASSWORD", "MAIL_TO")
 
 # Long digit runs: item ids, user ids, cloud project numbers.
 _LONG_NUMBER = re.compile(r"\d{6,}")

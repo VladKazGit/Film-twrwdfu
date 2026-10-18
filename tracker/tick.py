@@ -26,7 +26,7 @@ import traceback
 from collections import Counter
 from pathlib import Path
 
-from . import ageest, clock, env, models, report
+from . import ageest, clock, env, models, notify, report
 from .store import DataStore
 from .vinted import EXTRA_CATEGORY_IDS, MAX_PAGES, PARTS_CATEGORY_ID, BlockedError, VintedClient, VintedError, age_days
 
@@ -1065,6 +1065,17 @@ def _main(args):
         state_flags = store.load_state()
         result = run_tick(store, client, labels, quick=args.quick)
         print(log_line(result["run"]))
+        if not result["fatal"]:
+            try:  # e-mail alerts: a failure must not fail the tick
+                state = store.load_state()
+                before = (state.get("mail_welcome"), len(state.get("notified") or []))
+                mailed = notify.run(result["items"], state, result["run"]["at"])
+                if (state.get("mail_welcome"), len(state.get("notified") or [])) != before:
+                    store.save_state(state)  # sent: remember what, before the data commit
+                if mailed:
+                    print(f"notify: mailed {mailed} camera(s)")
+            except Exception as exc:
+                print(f"notify failed: {type(exc).__name__}: {env.redact(exc)}")
         if not args.local:
             datarepo.commit_and_push(root, f"{'quick ' if args.quick else ''}tick {result['run']['at']}")
         if args.quick and not args.no_sheets and result["run"]["list_changed"]:
