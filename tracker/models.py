@@ -88,7 +88,7 @@ MODELS = [
     ("Canon", "Canon TL", MECH, S35, ["^tl", "^tl ql"], None),
     ("Canon", "Canon TLb", MECH, S35, ["tl b", "^tl b"], None),
     ("Canon", "Canon TX", MECH, S35, ["^tx"], None),
-    ("Pentax", "Pentax Spotmatic", MECH, S35, ["spotmatic!", "^sp"], r"(?:ii|iia|2|500|1000)(?![a-z0-9])"),
+    ("Pentax", "Pentax Spotmatic", MECH, S35, ["spotmatic!", "^sp"], r"(?:sp ?)?(?:ii|iia|2|500|1000)(?![a-z0-9])"),
     ("Pentax", "Pentax Spotmatic F", MECH, S35, ["spotmatic f!", "^sp f"], None),
     ("Pentax", "Pentax SV", MECH, S35, ["^sv"], None),
     ("Pentax", "Pentax K1000", MECH, S35, ["k 1000!"], None),
@@ -256,7 +256,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 27
+VERSION = 28
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -455,6 +455,8 @@ _PARTS = re.compile(
     r"|\bmagnet\b|kuhlschrankmagnet|\baimant\b|calamita|sticker|aufkleber|adesiv[oi]|autocollant"
     # pin badges and memorabilia ('Vintage Leica Red Logo Pin Badge M6'); not 'pinhole'
     r"|\bpins?\b(?! ?hole)|\bbadges?\b|anstecker|anstecknadel|\bspilla\b|epinglette|\bpin s\b|memorabilia"
+    # bare 'parts' and dials ('Spotmatic shutter speed ASA dial parts'); 'parts or repair' is a camera
+    r"|\bparts?\b(?!\s*(?:or|/|&|and|\+)\s*repairs?)|\bdials?\b"
     r"|manivelle|rembobinage|ruckspul\w*|rewind (?:knob|lever)|manovella|riavvolgimento|terugspoel\w*")
 # Light seals: a part before the model ('Kit guarnizioni luce Canon AE-1 Program'); after it they
 # praise the camera ('Canon AE-1 neue Lichtdichtungen').
