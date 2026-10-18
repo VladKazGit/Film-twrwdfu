@@ -100,9 +100,12 @@ MODELS = [
     ("Olympus", "Olympus OM-3", MECH, S35, ["om 3!"], None),
     ("Olympus", "Olympus OM-3Ti", MECH, S35, ["om 3 ti!", "om 3 titan!"], None),
     ("Minolta", "Minolta SR-T 101", MECH, S35, ["sr t 101!", "sr t 101 b!"], None),
-    ("Minolta", "Minolta SR-T 102", MECH, S35, ["sr t 102!"], None),
+    # SR-T 303 is the European name of the SR-T 102
+    ("Minolta", "Minolta SR-T 102", MECH, S35, ["sr t 102!", "sr t 303!", "sr t 303 b!"], None),
     ("Minolta", "Minolta SR-T 201", MECH, S35, ["sr t 201!"], None),
     ("Minolta", "Minolta SR-7", MECH, S35, ["sr 7"], None),
+    # with the SR-1s; not a lens marking 'SR 1:1.4'
+    ("Minolta", "Minolta SR-1", MECH, S35, ["sr 1", "sr 1 s"], r"[:,.]\s*\d"),
     ("Konica", "Konica Auto-Reflex", MECH, S35, ["auto reflex"], r"(?:t|tc|t2|t3|t4|a|a1|a3|p)(?![a-z0-9])"),
     ("Konica", "Konica Autoreflex T", MECH, S35, ["auto reflex t!"], None),
     ("Konica", "Konica Autoreflex T2", MECH, S35, ["auto reflex t 2!"], None),
@@ -256,12 +259,13 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 28
+VERSION = 29
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
 PRIORITY_SEARCH = ("Canon FX", "Canon FP", "Canon TL", "Canon TLb", "Canon TX", "Canon AT-1", "Nikon FG-20",
-                   "Canon AE-1", "Canon AE-1 Program", "Canon AV-1", "Canon F-1", "Canon A-1", "Leica R-E", "Leica R4s")
+                   "Canon AE-1", "Canon AE-1 Program", "Canon AV-1", "Canon F-1", "Canon A-1", "Leica R-E", "Leica R4s",
+                   "Minolta SR-1", "Minolta SR-T 102")
 
 # Models that must not match when the text also contains this pattern.
 MODEL_EXCLUDE = {

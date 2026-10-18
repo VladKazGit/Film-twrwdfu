@@ -20,6 +20,7 @@ from .sheets import CHEAP_MAX_PRICE
 
 SMTP_HOST, SMTP_PORT = "smtp.gmail.com", 465
 NOTIFIED_KEEP = 5000
+DESCRIPTION_CHARS = 300
 
 
 def configured():
@@ -61,9 +62,15 @@ def message(cameras, now, welcome_count=None):
     for item in cameras:
         price = report._price_text(report.current_price(item))
         model, title, url, origin = item.get("model") or "", item.get("title") or "", item.get("url") or "", _origin(item)
-        text.append(f"{model} — {price} € ({origin})\n{title}\n{url}\n")
-        rows.append(f'<p><b>{escape(model)} — {escape(price)} €</b> <i>({escape(origin)})</i><br>'
-                    f'<a href="{escape(url)}">{escape(title)}</a></p>')
+        description = report._one_line(item.get("description"), DESCRIPTION_CHARS)
+        text.append(f"{model} — {price} € ({origin})\n{title}\n{description}\n{url}\n".replace("\n\n", "\n"))
+        photo = item.get("photo")
+        image = (f'<td style="vertical-align:top;padding-right:12px"><a href="{escape(url)}">'
+                 f'<img src="{escape(photo)}" width="160" alt="" style="border-radius:6px"></a></td>' if photo else "")
+        rows.append(f'<table style="margin:0 0 16px 0"><tr>{image}<td style="vertical-align:top">'
+                    f'<b>{escape(model)} — {escape(price)} €</b> <i>({escape(origin)})</i><br>'
+                    f'<a href="{escape(url)}">{escape(title)}</a><br>'
+                    f'<span style="color:#555">{escape(description)}</span></td></tr></table>')
     text.append(f"Проверка трекера: {now} (Берлин)")
     rows.append(f"<p><small>Проверка трекера: {escape(now)} (Берлин)</small></p>")
     msg.set_content("\n".join(text))

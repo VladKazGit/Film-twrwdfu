@@ -124,6 +124,7 @@ def new_item(rec, now, listed_after, extra_flags):
         "price_history": [{"at": now, "price": rec["price"]}],
         "favourites": rec.get("favourites"),
         "favourites_history": [] if rec.get("favourites") is None else [{"at": now, "count": rec["favourites"]}],
+        "photo": rec.get("photo"),
         "listed_after": listed_after,
         "first_seen": now,
         "last_seen_active": now,
@@ -162,6 +163,8 @@ def mark_seen(item, rec, now, checked=True):
         item["last_checked_at"] = now
     _set_price(item, rec["price"], now)
     _set_favourites(item, rec.get("favourites"), now)
+    if rec.get("photo") and not item.get("photo"):
+        item["photo"] = rec["photo"]
 
 
 def close(item, status, now, price=None):
@@ -208,6 +211,8 @@ def apply_page(item, page, now):
     item.pop("needs_check", None)
     _remember_vinted_age(item, page.get("uploaded_ago"), now)
     _set_favourites(item, page.get("favourites"), now)
+    if page.get("photo") and not item.get("photo"):
+        item["photo"] = page["photo"]
     if page["description"] and not item.get("description"):
         item["description"] = page["description"]
         _refresh_signal_flags(item)

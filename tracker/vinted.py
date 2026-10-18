@@ -122,11 +122,22 @@ def _price(value):
         return None
 
 
+def _photo(raw):
+    """The first photo of a catalog item (full size), or its thumbnail."""
+    photos = raw.get("photos")
+    if isinstance(photos, list) and photos and isinstance(photos[0], dict):
+        url = photos[0].get("url")
+        if isinstance(url, str) and url.startswith("http"):
+            return url
+    url = raw.get("thumbnailUrl")
+    return url if isinstance(url, str) and url.startswith("http") else None
+
+
 def parse_catalog(html):
     """Items and pagination of a catalog page.
 
     Returns (items, pagination); items are dicts with id, title, url, price,
-    brand, condition, seller_id, promoted, favourites. pagination may be None.
+    brand, condition, seller_id, promoted, favourites, photo. pagination may be None.
     """
     payload = flight_payload(html)
     items, seen = [], set()
@@ -153,6 +164,7 @@ def parse_catalog(html):
             "seller_id": (raw.get("user") or {}).get("id"),
             "promoted": bool(raw.get("isPromoted")),
             "favourites": _count(raw.get("favouriteCount")),
+            "photo": _photo(raw),
         })
     pagination = next((p for p in _values_after(payload, "pagination") if isinstance(p, dict)), None)
     return items, pagination
@@ -228,7 +240,7 @@ def parse_item(html, status_code, final_url, item_id):
     condition, uploaded_ago (relative text like '3 Std.'), favourites
     (users' saves), reason.
     """
-    result = dict.fromkeys(("title", "description", "price", "brand", "condition", "uploaded_ago", "favourites"))
+    result = dict.fromkeys(("title", "description", "price", "brand", "condition", "uploaded_ago", "favourites", "photo"))
     result.update(status="unknown", reason=None)
 
     if status_code in (404, 410):
@@ -262,6 +274,10 @@ def parse_item(html, status_code, final_url, item_id):
         result["description"] = result["description"] or _text(ld.get("description"))
         if result["price"] is None:
             result["price"] = _price((ld.get("offers") or {}).get("price"))
+        image = ld.get("image")
+        image = image[0] if isinstance(image, list) and image else image
+        if isinstance(image, str) and image.startswith("http"):
+            result["photo"] = image
 
     # Sold pages replace the buy buttons with a status banner:
     # buyer_item_status = {"theme": "SUCCESS", "title": "Verkauft"}.
