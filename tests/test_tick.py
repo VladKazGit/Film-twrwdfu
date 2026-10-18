@@ -467,6 +467,9 @@ def main():
                       description="Kamera", description_checked=True, last_checked_at="2026-10-16 12:07")
             store.save(it)
         young, old_one = 9_600_000_001, 9_000_000_001
+        state = store.load_state()  # the models searched first are done already: the pass starts at 'nikon f'
+        tick.sweep_state(state, tick.MODEL_SWEEP, "2026-10-16 12:07")["prioritized"] = list(models.PRIORITY_SEARCH)
+        store.save_state(state)
         search = {("nikon f", 1): [rec(young, "Nikon F Photomic", 150.0), rec(old_one, "Nikon F body", 140.0)]}
         client = FakeClient(base, {young: {"uploaded_ago": "2 Monaten", "description": "Kamera, Prisma"},
                                    old_one: {"uploaded_ago": "7 Monaten"}}, search)

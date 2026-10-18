@@ -99,7 +99,7 @@ Cron (каждые 2 ч) — только запасной перезапуск 
 - аксессуары (winder, Zubehör, accessoires, Tasche/Objektiv only…) без признаков камеры → флаг `accessory?`; печатная продукция (каталоги, проспекты, брошюры, книги, руководства/guide) — тоже `accessory?`; запчасти (ricambio, Ersatzteil, spare part, parts (кроме «parts or repair»), dial, calotta, top cover, фокусировочный экран — écran de visée / Mattscheibe / focusing screen, рулетка перемотки — manivelle / rembobinage / Rückspul…; светоуплотнители — light seals / guarnizioni / Lichtdichtungen, но только *перед* моделью: после неё это реклама камеры; брелоки, украшения, магниты, наклейки и значки в виде камеры — ciondolo, pendentif, collana, magnet, sticker, pin badge, Anstecknadel, spilla, memorabilia…) — `accessory?`, но «на запчасти» (per/für/for … ricambi) — это камера; цифровые (Dimage, digital, Megapixel…, миниатюры Minox «Leica M3») → `digital?`
 - объектив *после* модели — комплект («Canon AE1 Program | canon f1.8 … lens»; объективы отдельно называют байонет, а не камеру); «lot / set / kit / bundle / lotto / konvolut» с моделью — камера с набором; аксессуар перед моделью, но «+ / avec / mit … appareil photo / Kamera» (без «для / pour / für») — тоже камера («Objectif Sigma 28mm + appareil photo argentique Konica Autoreflex TC»)
 - если заголовок помечен `accessory?`/`digital?`, модель в описании не ищется
-- инструкции (Anleitung, notice, manual, libretto, manuel — если заголовок с него начинается или дальше «d'utilisation…»; «appareil … manuel» — механическая камера…) без признаков тушки/комплекта и без «с/mit/+» → `accessory?`; объективы: zoom, Vivitar, Tamron, Sigma, Tokina… и «для/per/für» перед моделью → `accessory?`; заголовок без модели и без слов-камер с производителем объективов, zoom или диапазоном «70-210mm» (объектив или мыльница) — модель из описания не берётся; модели в описании после «passt / compatible / adatto…» (в том же предложении) — совместимость, не сам товар
+- инструкции (Anleitung, notice, manual, libretto, manuel — если заголовок с него начинается или дальше «d'utilisation…»; «appareil … manuel» — механическая камера…) без признаков тушки/комплекта и без «с/mit/+» → `accessory?`; объективы: zoom, Vivitar, Tamron, Sigma, Tokina… и «для/per/für» перед моделью → `accessory?`; заголовок без модели и без слов-камер с производителем объективов, zoom или диапазоном «70-210mm» (объектив или мыльница) — модель из описания не берётся; модели в описании после «passt / compatible / adatto…» (в том же предложении) — совместимость, не сам товар; в заголовке «passend / passt / compatible…» сразу после модели («Canon FD 50mm 1:1.8 T50 passend») — тоже совместимость → `accessory?`; если заголовок называет бренд, модель из описания берётся только этого бренда («Olympus OM2000» с «как Canon T60» в описании — не Canon)
 - описание, которое *начинается* со слова-запчасти или инструкции (coperchio, oeilleton, manuale…), → `accessory?` всегда; со слова-аксессуара (brochure, Objektiv, Tasche…) — если не называет камеру; описание новых камер из списка загружается сразу, а также у любого нового объявления до 20 € без модели (дешёвые подписывают небрежно — «Kamera alt»; модель из описания переводит его в «Список»)
 - признаки мыльницы (встроенная вспышка: flash intégré, eingebauter Blitz…; point & shoot; «Kompaktkamera / compact camera / appareil compact / fotocamera compatta» — тип камеры, не прилагательное) в заголовке или описании → `compact?` (ни у одной камеры списка нет встроенной вспышки)
 - объявления с `accessory?`/`digital?`/`compact?` не входят в «Список» (группа «Остальные»), даже если в заголовке есть модель; ручная разметка снимает флаг
@@ -127,7 +127,7 @@ Cron (каждые 2 ч) — только запасной перезапуск 
 - Киев: 4, 4А, 4М, 4АМ; 88; 60 / 6С
 
 ### Полуавтоматические, гибридные, электронные
-- Canon: AE-1, AE-1 Program, A-1, AV-1, AL-1, AT-1, T90, EF, New F-1
+- Canon: AE-1, AE-1 Program, A-1, AV-1, AL-1, AT-1, T50, T60, T70, T80, T90, EF, New F-1
 - Nikon: F3, F4, FE, FE2, FA, FG, FG-20, EM, EL2
 - Pentax: LX, K2, ME, ME Super, MV, Super A; 67 / 6x7, 67II
 - Olympus: OM-2, OM-2n, OM-2S / OM-2 Spot Program, OM-4, OM-4Ti, OM-10, OM-40
@@ -135,7 +135,7 @@ Cron (каждые 2 ч) — только запасной перезапуск 
 - Konica: FS-1, FC-1, Autoreflex TC
 - Contax: RTS, RTS II, RTS III, 137 MD, 139 Quartz, 159 MT
 - Средний формат: Mamiya RZ67 (Pro, Pro II), Mamiya 645 (M645, 645 Pro)
-- Leica: R3, R4, R4s (и R4s Mod 2), R5, R-E, R7, R8; M7
+- Leica: R3, R4, R4s (и R4s Mod 2), R5, R-E, R7, R8, R9; M7
 - Hasselblad: 2000FC, 2000FC/M, 2000FCW, 2003FCW, 201F
 - Praktica (B, PB): B200, BMS, BCA, BC1
 - Киев: 10, 15 Tee

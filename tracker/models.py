@@ -183,6 +183,11 @@ MODELS = [
     # right after the brand only: 'shutter at 1/125' in a description is no camera
     ("Canon", "Canon AT-1", ELEC, S35, ["^at 1"], None),
     ("Canon", "Canon T90", ELEC, S35, ["t 90"], None),
+    # the rest of the FD-mount T series
+    ("Canon", "Canon T50", ELEC, S35, ["t 50"], None),
+    ("Canon", "Canon T60", ELEC, S35, ["t 60"], None),
+    ("Canon", "Canon T70", ELEC, S35, ["t 70"], None),
+    ("Canon", "Canon T80", ELEC, S35, ["t 80"], None),
     ("Canon", "Canon EF", ELEC, S35, ["^ef"],
      r"\d|s(?![a-z])|m(?![a-z])|objektiv|obiettiv|objectif|lens|zoom|usm|optik"),
     ("Canon", "Canon New F-1", ELEC, S35, ["new f 1"], None),
@@ -238,6 +243,7 @@ MODELS = [
     ("Leica", "Leica R-E", ELEC, S35, ["^r e"], None),
     ("Leica", "Leica R7", ELEC, S35, ["r7"], None),
     ("Leica", "Leica R8", ELEC, S35, ["r8"], None),
+    ("Leica", "Leica R9", ELEC, S35, ["r9"], None),
     ("Leica", "Leica M7", ELEC, S35, ["m7"], None),
     ("Hasselblad", "Hasselblad 2000FC", ELEC, MED, ["2000 fc!"], None),
     ("Hasselblad", "Hasselblad 2000FC/M", ELEC, MED, ["2000 fc m!"], None),
@@ -259,13 +265,13 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 29
+VERSION = 30
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
 PRIORITY_SEARCH = ("Canon FX", "Canon FP", "Canon TL", "Canon TLb", "Canon TX", "Canon AT-1", "Nikon FG-20",
                    "Canon AE-1", "Canon AE-1 Program", "Canon AV-1", "Canon F-1", "Canon A-1", "Leica R-E", "Leica R4s",
-                   "Minolta SR-1", "Minolta SR-T 102")
+                   "Minolta SR-1", "Minolta SR-T 102", "Leica R9", "Canon T50", "Canon T60", "Canon T70", "Canon T80")
 
 # Models that must not match when the text also contains this pattern.
 MODEL_EXCLUDE = {
@@ -467,6 +473,7 @@ _PARTS = re.compile(
 _SEALS = re.compile(r"light ?seals?\b|guarnizion\w*|lichtdichtung\w*|lichtafdichting\w*|joints? (?:de )?(?:mousse|lumiere)")
 _FOR_BEFORE = re.compile(r"\b(?:per|for|pour|fur|als|voor|para)\s+(?:\w+\s+)?$")
 # Words that say the listing is a camera body or kit, not just its manual.
+_COMPATIBLE_AFTER = re.compile(r"\W*(?:passend|passt|kompatibel|compatible|compatibile|fits|adatt[oa]|geeignet)\b")
 _KIT_LENS = re.compile(r"objektiv|lens(?:es)?|obiettiv|objectif|lente")
 _BUNDLE = re.compile(r"\b(?:lot|lotto|konvolut|bundle|set|kit)\b")
 _KIT_WORDS = re.compile(r"\bbody\b|gehause|boitier|\bcorpo\b|objektiv|\blens|obiettiv|objectif|\bkit\b|\bset\b|\bnur\b")
@@ -567,6 +574,8 @@ def _is_accessory(norm, model_span):
             return True  # "Zoom Vivitar 70/210 per Nikon F"
         if _SEALS.search(head) and not _camera_joined(head):
             return True  # "Kit guarnizioni luce Canon AE-1 Program"
+        if _COMPATIBLE_AFTER.match(norm[model_span[1]:]):
+            return True  # "Canon FD 50mm 1:1.8 T50 passend": fits the camera
     acc = _ACCESSORY_WORDS.search(norm)
     if not acc:
         return False
@@ -697,8 +706,11 @@ def classify(title, description=None, vinted_brand=None):
     if model is None and description and not NON_LIST_SERIES.search(norm_title) and not lens_title \
             and not {"accessory?", "digital?", "compact?"} & set(title_flags):
         norm_desc = normalize(description)
-        hits = [h for h in find_models(description, extra + brands_in(title)[:1])
-                if not _COMPATIBLE_BEFORE.search(norm_desc[:h[0]])]
+        title_brands = brands_in(title)
+        # A title naming a brand takes only that brand's models ('Olympus OM2000': '… wie Canon T60').
+        hits = [h for h in find_models(description, extra + title_brands[:1])
+                if not _COMPATIBLE_BEFORE.search(norm_desc[:h[0]])
+                and (not title_brands or MODEL_INFO[h[2]]["brand"] in title_brands)]
         if hits:
             model, source = hits[0][2], "description"
 
