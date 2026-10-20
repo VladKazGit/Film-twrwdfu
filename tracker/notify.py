@@ -45,8 +45,30 @@ def _origin(item):
     return "новое объявление"
 
 
-def message(cameras, now, welcome_count=None):
+def sale_stats(items):
+    """{model: (sales, mean, lowest, highest)} over the sold list cameras in the data
+    (without placeholder prices or flagged listings, as in the statistics)."""
+    prices = {}
+    for i in items:
+        price = report.current_price(i)
+        if (i.get("group") == "list" and i.get("status") == "sold" and price is not None
+                and not report.stat_flags(i) & report.EXCLUDED_FLAGS):
+            prices.setdefault(i.get("model"), []).append(price)
+    return {m: (len(p), round(sum(p) / len(p)), min(p), max(p)) for m, p in prices.items()}
+
+
+def _sales_line(model, stats):
+    """'Продажи Zenit E в базе: в среднем 32 € (от 15 € до 60 €, продаж: 3)'."""
+    if model not in stats:
+        return f"Продажи {model} в базе: пока нет"
+    n, mean, low, high = stats[model]
+    spread = f"от {report._price_text(low)} € до {report._price_text(high)} €, " if n > 1 else ""
+    return f"Продажи {model} в базе: в среднем {mean} € ({spread}продаж: {n})"
+
+
+def message(cameras, now, welcome_count=None, stats=None):
     """The letter: subject, plain text and HTML."""
+    stats = stats or {}
     msg = EmailMessage()
     if welcome_count is not None:
         msg["Subject"] = "⚡ Vinted: уведомления «До 20 €» включены"
@@ -63,12 +85,14 @@ def message(cameras, now, welcome_count=None):
         price = report._price_text(report.current_price(item))
         model, title, url, origin = item.get("model") or "", item.get("title") or "", item.get("url") or "", _origin(item)
         description = report._one_line(item.get("description"), DESCRIPTION_CHARS)
-        text.append(f"{model} — {price} € ({origin})\n{title}\n{description}\n{url}\n".replace("\n\n", "\n"))
+        sales = _sales_line(model, stats)
+        text.append(f"{model} — {price} € ({origin})\n{sales}\n{title}\n{description}\n{url}\n".replace("\n\n", "\n"))
         photo = item.get("photo")
         image = (f'<td style="vertical-align:top;padding-right:12px"><a href="{escape(url)}">'
                  f'<img src="{escape(photo)}" width="160" alt="" style="border-radius:6px"></a></td>' if photo else "")
         rows.append(f'<table style="margin:0 0 16px 0"><tr>{image}<td style="vertical-align:top">'
                     f'<b>{escape(model)} — {escape(price)} €</b> <i>({escape(origin)})</i><br>'
+                    f'<span style="color:#1a7f37">{escape(sales)}</span><br>'
                     f'<a href="{escape(url)}">{escape(title)}</a><br>'
                     f'<span style="color:#555">{escape(description)}</span></td></tr></table>')
     text.append(f"Проверка трекера: {now} (Берлин)")
@@ -102,6 +126,6 @@ def run(items, state, now, send_fn=send):
     new = sorted((i for i in current if i["id"] not in done), key=lambda i: report.current_price(i) or 0)
     if not new:
         return 0
-    send_fn(message(new, now))
+    send_fn(message(new, now, stats=sale_stats(items)))
     state["notified"] = ((state.get("notified") or []) + [i["id"] for i in new])[-NOTIFIED_KEEP:]
     return len(new)

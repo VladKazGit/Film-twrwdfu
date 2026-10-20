@@ -27,7 +27,8 @@ def main():
                   card(4, "Canon AE-1", 19.0, flags=["found"]),
                   card(5, "Canon AE-1", 10.0, flags=["accessory?"]),   # flagged: not in the sheet
                   card(6, "Pentax K1000", 15.0),                       # not in 'Модели'
-                  card(7, "Zenit E", 18.0, status="sold")]             # not on sale
+                  card(7, "Zenit E", 18.0, status="sold"),             # not on sale; a sale in the data
+                  card(8, "Zenit E", 46.0, status="sold")]
         items[1]["price_history"].append({"at": "2026-10-18 10:45", "price": 20.0})
         assert notify.run(items, state, "2026-10-18 10:47", sent.append) == 3 and len(sent) == 2
         body = sent[1].get_body(("plain",)).get_content()
@@ -35,6 +36,8 @@ def main():
         assert "найдено поиском" in body and sent[1]["Subject"].startswith("⚡ Vinted «До 20 €»: Zenit E — 8 € и ещё 2")
         html = sent[1].get_body(("html",)).get_content()
         assert '<img src="https://images1.vinted.net/p3.jpg"' in html and "Kamera funktioniert" in html and "Kamera funktioniert" in body
+        assert "Продажи Zenit E в базе: в среднем 32 € (от 18 € до 46 €, продаж: 2)" in body, body
+        assert "Продажи Canon AE-1 в базе: пока нет" in body and "в среднем 32 €" in html
         assert notify.run(items, state, "2026-10-18 10:52", sent.append) == 0 and len(sent) == 2, "each camera once"
     finally:
         for name in ("MAIL_USER", "MAIL_APP_PASSWORD"):
