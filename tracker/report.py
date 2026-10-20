@@ -450,6 +450,7 @@ TOTAL_ROWS = [
 
 
 TOP_N = 10
+PRICY_PRICE = 100.0  # 'Топ-10': the table of sales above this
 
 
 def top_rows(items, now):
@@ -488,6 +489,22 @@ def top_rows(items, now):
     priced = [m for m in stats if m["mean"] is not None]
     for m in sorted(priced, key=lambda m: (-m["mean"], m["model"]))[:TOP_N]:
         rows.append([m["model"], m["mean"], _num(m["mean_all"]), _num(m["max"]), m["priced"], m["sold"]])
+    rows += [[], [f"Продажи дороже {PRICY_PRICE:.0f} €: сколько были в продаже и почём ушли"],
+             ["Модель", f"Продаж дороже {PRICY_PRICE:.0f} €", "Средняя цена продажи, €", "Были в продаже (медиана)",
+              "Были в продаже (среднее)", "Самая высокая, €"]]
+    pricy = {}
+    for i in counted:
+        price = current_price(i)
+        if i.get("status") == "sold" and price is not None and price > PRICY_PRICE:
+            pricy.setdefault(i.get("model"), []).append(i)
+    pricy_rows = []
+    for model, sold in pricy.items():
+        prices = [current_price(i) for i in sold]
+        days = [d for d in (days_to_sell(i) for i in sold) if d is not None]
+        pricy_rows.append((len(sold), round(statistics.mean(prices)), model, [
+            model, len(sold), round(statistics.mean(prices)), format_on_sale(statistics.median(days) if days else None),
+            format_on_sale(statistics.mean(days) if days else None), max(prices)]))
+    rows += [r for *_, r in sorted(pricy_rows, key=lambda r: (-r[0], -r[1], r[2]))[:TOP_N]]
     rows += [[], [f"Топ-{TOP_N}: самые дорогие проданные камеры"],
              ["Модель", "Цена продажи, €", "Продана", "В продаже", "Заголовок", "Ссылка"]]
     sales = [i for i in counted if i.get("status") == "sold" and current_price(i) is not None]

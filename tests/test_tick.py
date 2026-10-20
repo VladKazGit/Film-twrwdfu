@@ -248,6 +248,8 @@ def main():
         assert top[heads[0] + 2][:6] == ["Canon AE-1", 2, 2, 100, 110, 110], top[heads[0] + 2]
         assert top[heads[1] + 2][:2] == ["Leica M6", 2500] and top[heads[2] + 2][:2] == ["Leica M6", 2500.0]
         assert all(r[0] != "Zenit E" for r in top), "a 1 EUR placeholder is no sale"
+        pricy = next(k for k, r in enumerate(top) if r[0].startswith("Продажи дороже 100"))
+        assert [r[:3] for r in top[pricy + 2:pricy + 4]] == [["Leica M6", 1, 2500], ["Canon AE-1", 1, 120]], top[pricy:pricy + 4]
         model_header = next(r for r in ss.sheets["Сводка"].rows if r[0] == "Модель")
         assert model_header[3] == "Средняя цена, €" and model_header[4] == "Средняя цена продажи (> 40 €), €", model_header
         sold = [{"group": "list", "model": "Nikon FM2", "status": "sold", "flags": [], "price_start": p, "price_final": p,
