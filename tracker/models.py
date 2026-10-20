@@ -145,6 +145,36 @@ MODELS = [
     ("Praktica", "Praktica MTL 3", MECH, S35, ["mtl 3!"], None),
     ("Praktica", "Praktica MTL 5", MECH, S35, ["mtl 5!"], None),
     ("Praktica", "Praktica MTL 5B", MECH, S35, ["mtl 5 b!"], None),
+    # the other mechanical Praktica bodies (M42 and earlier); Super TL1000 stays out
+    ("Praktica", "Praktiflex", MECH, S35, ['praktiflex!'], None),
+    ("Praktica", "Praktica FX", MECH, S35, ['^fx'], None),
+    ("Praktica", "Praktica FX2", MECH, S35, ['^fx 2'], None),
+    ("Praktica", "Praktica FX3", MECH, S35, ['^fx 3'], None),
+    ("Praktica", "Praktica IV", MECH, S35, ['^iv'], None),
+    ("Praktica", "Praktica IVB", MECH, S35, ['^iv b'], None),
+    ("Praktica", "Praktica IVM", MECH, S35, ['^iv m'], None),
+    ("Praktica", "Praktica IVBM", MECH, S35, ['^iv bm'], None),
+    ("Praktica", "Praktica IVF", MECH, S35, ['^iv f'], None),
+    ("Praktica", "Praktica IVFB", MECH, S35, ['^iv fb'], None),
+    ("Praktica", "Praktica V", MECH, S35, ['^v'], None),
+    ("Praktica", "Praktica VF", MECH, S35, ['^v f'], None),
+    ("Praktica", "Praktica Nova", MECH, S35, ['^nova'], None),
+    ("Praktica", "Praktica Nova B", MECH, S35, ['^nova b'], None),
+    ("Praktica", "Praktica Nova I", MECH, S35, ['^nova 1', '^nova i', '^pl nova 1', '^pl nova i'], None),
+    ("Praktica", "Praktica Nova IB", MECH, S35, ['^nova 1 b', '^nova ib', '^pl nova 1 b', '^pl nova ib'], None),
+    ("Praktica", "Praktica Super TL2", MECH, S35, ['super tl 2'], None),
+    ("Praktica", "Praktica Super TL3", MECH, S35, ['super tl 3'], None),
+    ("Praktica", "Praktica L2", MECH, S35, ['^l 2'], None),
+    ("Praktica", "Praktica LTL2", MECH, S35, ['ltl 2'], None),
+    ("Praktica", "Praktica LTL3", MECH, S35, ['ltl 3'], None),
+    ("Praktica", "Praktica LLC", MECH, S35, ['^llc'], None),
+    ("Praktica", "Praktica Mat", MECH, S35, ['^mat'], None),
+    ("Praktica", "Praktica MTL 50", MECH, S35, ['mtl 50!'], None),
+    ("Praktica", "Praktica PLC2", MECH, S35, ['^plc 2'], None),
+    ("Praktica", "Praktica PLC3", MECH, S35, ['^plc 3'], None),
+    ("Praktica", "Praktica VLC", MECH, S35, ['^vlc'], None),
+    ("Praktica", "Praktica VLC2", MECH, S35, ['^vlc 2'], None),
+    ("Praktica", "Praktica VLC3", MECH, S35, ['^vlc 3'], None),
     ("Zenit", "Zenit 3M", MECH, S35, ["^3 m"], None),
     ("Zenit", "Zenit E", MECH, S35, ["^e"], None),
     ("Zenit", "Zenit B", MECH, S35, ["^b", "^v"], None),
@@ -174,6 +204,20 @@ MODELS = [
     ("Kiev", "Kiev 88", MECH, MED, ["^88"], r"(?:cm|sm)(?![a-z0-9])"),
     ("Kiev", "Kiev 60", MECH, MED, ["^60"], None),
     ("Kiev", "Kiev 6C", MECH, MED, ["^6 c", "^6 s"], None),
+    # the other mechanical Kievs: rangefinders, Nikon-mount SLRs, medium format
+    ("Kiev", "Kiev 2", MECH, S35, ['^2'], None),
+    ("Kiev", "Kiev 2A", MECH, S35, ['^2 a'], None),
+    ("Kiev", "Kiev 3", MECH, S35, ['^3'], None),
+    ("Kiev", "Kiev 3A", MECH, S35, ['^3 a'], None),
+    ("Kiev", "Kiev 5", MECH, S35, ['^5'], None),
+    ("Kiev", "Kiev 17", MECH, S35, ['^17'], None),
+    ("Kiev", "Kiev 19", MECH, S35, ['^19'], None),
+    ("Kiev", "Kiev 19M", MECH, S35, ['^19 m'], None),
+    ("Kiev", "Kiev 20", MECH, S35, ['^20'], None),
+    ("Kiev", "Kiev 88CM", MECH, MED, ['^88 cm', '^88 sm'], None),
+    ("Kiev", "Kiev Salut", MECH, MED, ['^salut'], None),
+    ("Kiev", "Kiev Salut-S", MECH, MED, ['^salut s'], None),
+    ("Kiev", "Kiev 90", MECH, MED, ['^90'], None),
     # --- semi-automatic, hybrid, electronic
     ("Canon", "Canon AE-1", ELEC, S35, ["ae 1!"], None),
     ("Canon", "Canon AE-1 Program", ELEC, S35, ["ae 1 program!", "ae 1 programm!", "ae 1 prog!", "ae 1 p!"], None),
@@ -265,13 +309,14 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 31
+VERSION = 32
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
 PRIORITY_SEARCH = ("Canon FX", "Canon FP", "Canon TL", "Canon TLb", "Canon TX", "Canon AT-1", "Nikon FG-20",
                    "Canon AE-1", "Canon AE-1 Program", "Canon AV-1", "Canon F-1", "Canon A-1", "Leica R-E", "Leica R4s",
-                   "Minolta SR-1", "Minolta SR-T 102", "Leica R9", "Canon T50", "Canon T60", "Canon T70", "Canon T80")
+                   "Minolta SR-1", "Minolta SR-T 102", "Leica R9", "Canon T50", "Canon T60", "Canon T70", "Canon T80",
+                   "Praktiflex", "Praktica FX", "Praktica FX2", "Praktica FX3", "Praktica IV", "Praktica IVB", "Praktica IVM", "Praktica IVBM", "Praktica IVF", "Praktica IVFB", "Praktica V", "Praktica VF", "Praktica Nova", "Praktica Nova B", "Praktica Nova I", "Praktica Nova IB", "Praktica Super TL2", "Praktica Super TL3", "Praktica L2", "Praktica LTL2", "Praktica LTL3", "Praktica LLC", "Praktica Mat", "Praktica MTL 50", "Praktica PLC2", "Praktica PLC3", "Praktica VLC", "Praktica VLC2", "Praktica VLC3", "Kiev 2", "Kiev 2A", "Kiev 3", "Kiev 3A", "Kiev 5", "Kiev 17", "Kiev 19", "Kiev 19M", "Kiev 20", "Kiev 88CM", "Kiev Salut", "Kiev Salut-S", "Kiev 90")
 
 # Models that must not match when the text also contains this pattern.
 MODEL_EXCLUDE = {
@@ -410,6 +455,8 @@ _CAMERA_WORDS = re.compile(
     r"|rangefinder|telemetr|sucherkamera|compatta|\bcompact|kompakt|point (?:and|&) shoot")
 _ACCESSORY_WORDS = re.compile(
     r"tasche|\bbag\b|\bcase\b|\betui|\bsac\b|\bborsa|hulle|gurt\b|\bstrap|sangle|tracolla"
+    # cases: it / fr / nl / es ('Custodia in pelle originale Olympus OM series')
+    r"|custodia|astuccio|\bfodero|\bhousse|\bhoes\b|\bfunda\b"
     r"|objektiv|\blens(?:es)?\b|obiettiv|objectif|\blente\b|blitz|\bflash|speedlite"
     r"|winder|motor ?drive|anleitung|(?<!fully )(?<!full )\bmanual\b(?!\s*(?:focus|fokus|camera|kamera|slr|exposure|mode))"
     r"|handbuch|mode d.emploi|istruzioni|handleiding"
