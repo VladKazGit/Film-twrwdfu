@@ -14,6 +14,7 @@ CHECK_SHEET = "Проверка"
 CHEAP_MAX_PRICE = 20.0
 RUNS_SHEET = "Запуски"
 SUMMARY_SHEET = "Сводка"
+TOP_SHEET = "Топ-10"
 MODELS_SHEET = "Модели"
 MANUAL_SHEET = "Ручная разметка"
 

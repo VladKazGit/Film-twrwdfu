@@ -236,6 +236,18 @@ def main():
         assert ss.sheets["Список"].rows[0][0] == "id" and len(ss.sheets["Список"].rows) >= 4
         assert ss.sheets["Модели"].rows[0] == sheets.MODELS_HEADER and len(ss.sheets["Модели"].rows) > 150
         assert ss.sheets["Сводка"].rows[0][0] == "Обновлено"
+        assert ss.sheets["Топ-10"].rows[2][0] == "Топ-10: чаще всего продаются", ss.sheets["Топ-10"].rows[:4]
+        def sale(item_id, model, price):
+            return {"id": item_id, "group": "list", "model": model, "status": "sold", "flags": [], "price_start": price,
+                    "price_final": price, "price_history": [{"at": "x", "price": price}], "title": model,
+                    "url": f"https://www.vinted.de/items/{item_id}", "first_seen": "2026-10-16 10:00",
+                    "sold_detected_at": "2026-10-17 10:00"}
+        top = report.top_rows([sale(1, "Canon AE-1", 120.0), sale(2, "Canon AE-1", 100.0), sale(3, "Leica M6", 2500.0),
+                               sale(4, "Zenit E", 1.0)], "2026-10-17 12:00")
+        heads = [k for k, r in enumerate(top) if r[0].startswith("Топ-10")]
+        assert top[heads[0] + 2][:4] == ["Canon AE-1", 2, 2, 100], top[heads[0] + 2]
+        assert top[heads[1] + 2][:2] == ["Leica M6", 2500] and top[heads[2] + 2][:2] == ["Leica M6", 2500.0]
+        assert all(r[0] != "Zenit E" for r in top), "a 1 EUR placeholder is no sale"
         model_header = next(r for r in ss.sheets["Сводка"].rows if r[0] == "Модель")
         assert model_header[3] == "Средняя цена, €" and model_header[4] == "Средняя цена продажи (> 40 €), €", model_header
         sold = [{"group": "list", "model": "Nikon FM2", "status": "sold", "flags": [], "price_start": p, "price_final": p,

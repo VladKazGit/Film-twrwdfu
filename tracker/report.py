@@ -449,6 +449,51 @@ TOTAL_ROWS = [
 ]
 
 
+TOP_N = 10
+
+
+def top_rows(items, now):
+    """'Топ-10': the models sold most often, the models with the highest sale prices and the most
+    expensive sales. List cameras only, without placeholder prices or flagged listings; sale
+    prices count above SALE_MIN_PRICE (no cheap, broken or parts-only sales)."""
+    counted = [i for i in items if i.get("group") == "list" and not stat_flags(i) & EXCLUDED_FLAGS]
+    by_model = {}
+    for item in counted:
+        by_model.setdefault(item.get("model"), []).append(item)
+    stats = []
+    for model, cameras in by_model.items():
+        sold = [i for i in cameras if i.get("status") == "sold"]
+        if not sold:
+            continue
+        prices = [p for p in (current_price(i) for i in sold) if p is not None and p > SALE_MIN_PRICE]
+        days = [d for d in (days_to_sell(i) for i in sold) if d is not None]
+        stats.append({"model": model, "sold": len(sold), "seen": len(cameras),
+                      "share": round(100 * len(sold) / len(cameras)),
+                      "mean": round(statistics.mean(prices)) if prices else None,
+                      "max": max(prices) if prices else None, "priced": len(prices),
+                      "days": statistics.median(days) if days else None})
+    above = f"> {SALE_MIN_PRICE:.0f} €"
+    rows = [["Обновлено", now], [],
+            [f"Топ-{TOP_N}: чаще всего продаются"],
+            ["Модель", "Продано", "Всего было в продаже", "Продано, %", f"Средняя цена продажи ({above}), €",
+             "Продали за (медиана)"]]
+    for m in sorted(stats, key=lambda m: (-m["sold"], -m["share"], m["model"]))[:TOP_N]:
+        rows.append([m["model"], m["sold"], m["seen"], m["share"], _num(m["mean"]), format_on_sale(m["days"])])
+    rows += [[], [f"Топ-{TOP_N}: самые дорогие модели (средняя цена продажи {above})"],
+             ["Модель", "Средняя цена продажи, €", "Самая высокая, €", "Продаж дороже 40 €", "Продано всего"]]
+    priced = [m for m in stats if m["mean"] is not None]
+    for m in sorted(priced, key=lambda m: (-m["mean"], m["model"]))[:TOP_N]:
+        rows.append([m["model"], m["mean"], _num(m["max"]), m["priced"], m["sold"]])
+    rows += [[], [f"Топ-{TOP_N}: самые дорогие проданные камеры"],
+             ["Модель", "Цена продажи, €", "Продана", "В продаже", "Заголовок", "Ссылка"]]
+    sales = [i for i in counted if i.get("status") == "sold" and current_price(i) is not None]
+    for i in sorted(sales, key=lambda i: (-current_price(i), i["id"]))[:TOP_N]:
+        rows.append([i.get("model") or "", current_price(i), i.get("sold_detected_at") or "", on_sale_text(i),
+                     i.get("title") or "", i.get("url") or ""])
+    width = max(len(r) for r in rows)
+    return [r + [""] * (width - len(r)) for r in rows]
+
+
 def summary_rows(summary):
     lst, rest = summary["groups"]["list"], summary["groups"]["rest"]
     rows = [["Обновлено", summary["updated"]],
