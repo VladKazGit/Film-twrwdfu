@@ -265,7 +265,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 30
+VERSION = 31
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -467,6 +467,12 @@ _PARTS = re.compile(
     r"|\bpins?\b(?! ?hole)|\bbadges?\b|anstecker|anstecknadel|\bspilla\b|epinglette|\bpin s\b|memorabilia"
     # bare 'parts' and dials ('Spotmatic shutter speed ASA dial parts'); 'parts or repair' is a camera
     r"|\bparts?\b(?!\s*(?:or|/|&|and|\+)\s*repairs?)|\bdials?\b"
+    # lens hoods ('Paraluce in gomma Mamiya 80-100 M645')
+    r"|paraluce|gegenlichtblende|streulichtblende|pare ?-?soleil|lens ?hoods?\b|zonnekap"
+    # clothing and shoes ('Splendido abito … Fantasia Zenit e colori')
+    r"|\b(?:abito|vestito|gonna|camicia|maglia|maglietta|felpa|giacca|cappotto|pantaloni|kleid|bluse|pullover"
+    r"|jacke|mantel|robe|jupe|chemise|manteau|pantalon|dress|skirt|t ?shirt|shirt|hoodie|sweater|jacket|trousers|jurk"
+    r"|trui|broek|scarpe|schuhe|chaussures|sneakers)\b"
     r"|manivelle|rembobinage|ruckspul\w*|rewind (?:knob|lever)|manovella|riavvolgimento|terugspoel\w*")
 # Light seals: a part before the model ('Kit guarnizioni luce Canon AE-1 Program'); after it they
 # praise the camera ('Canon AE-1 neue Lichtdichtungen').

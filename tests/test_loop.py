@@ -72,7 +72,7 @@ def main():
 
     # Failed ticks are counted (the run fails, GitHub e-mails), the loop goes on.
     c, f = run(datetime(2026, 10, 16, 12, 40), fail=True)
-    assert f == len(c.ticks) + len(c.quick) + len(c.cheap) and len(c.ticks) > 15
+    assert f == len(c.ticks) and len(c.ticks) > 15, "only ticks count; a slow check does not fail the run"
     print("loop tests passed")
 
 

@@ -88,7 +88,7 @@ def run_loop(now_fn, sleep_fn, tick_fn, tick_now=False, budget_min=BUDGET_MIN, l
             # A check more than half a minute late follows right on the previous one: skipped.
             if seconds_until(when, now_fn()) > -LATE_S and seconds_until(tick, when) > 60:
                 _sleep_until(when, now_fn, sleep_fn)
-                failures += 0 if tick_fn(mode) else 1
+                tick_fn(mode)  # a slow or failed check is not a failed run: the next tick tells
         _sleep_until(tick, now_fn, sleep_fn)
         last = now_fn()  # gaps count from the real start: an overrun tick does not bunch the next ones
         failures += 0 if tick_fn("tick") else 1

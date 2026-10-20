@@ -21,6 +21,7 @@ EXTRA_CATEGORY_IDS = (3077, 3714, 3717)
 PARTS_CATEGORY_ID = 3717  # mostly parts: a camera there must say it is one
 # The cheap check: these categories at once (not the parts, nearly all parts at that price)
 CHEAP_CATEGORY_IDS = (CATEGORY_ID, 3077, 3714)
+CAMERAS_AND_ACCESSORIES_ID = 3054  # the fresh search: every camera category, no clothing
 MAX_PAGES = 10  # total_entries is capped at 960 = 10 pages x 96
 
 USER_AGENT = (
@@ -440,8 +441,10 @@ class VintedClient:
         return parse_catalog(resp.text)[0]
 
     def fresh_page(self, text, page=1):
-        """Newest listings for a text in all categories (cameras put in another category too)."""
-        resp = self.fetch(BASE_URL + "/catalog", {"search_text": text, "order": "newest_first", "page": page})
+        """Newest listings for a text in 'Kameras & Zubehör' and all its subcategories (cameras put in
+        another camera category too; not a dress 'Fantasia Zenit e colori')."""
+        resp = self.fetch(BASE_URL + "/catalog", {"search_text": text, "order": "newest_first", "page": page,
+                                                  "catalog[]": CAMERAS_AND_ACCESSORIES_ID})
         if resp.status_code != 200:
             raise VintedError(f"search http {resp.status_code}")
         if not flight_payload(resp.text):
