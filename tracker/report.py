@@ -465,25 +465,29 @@ def top_rows(items, now):
         sold = [i for i in cameras if i.get("status") == "sold"]
         if not sold:
             continue
-        prices = [p for p in (current_price(i) for i in sold) if p is not None and p > SALE_MIN_PRICE]
+        all_prices = [p for p in (current_price(i) for i in sold) if p is not None]
+        prices = [p for p in all_prices if p > SALE_MIN_PRICE]
         days = [d for d in (days_to_sell(i) for i in sold) if d is not None]
         stats.append({"model": model, "sold": len(sold), "seen": len(cameras),
                       "share": round(100 * len(sold) / len(cameras)),
                       "mean": round(statistics.mean(prices)) if prices else None,
+                      "mean_all": round(statistics.mean(all_prices)) if all_prices else None,
                       "max": max(prices) if prices else None, "priced": len(prices),
                       "days": statistics.median(days) if days else None})
     above = f"> {SALE_MIN_PRICE:.0f} €"
     rows = [["Обновлено", now], [],
             [f"Топ-{TOP_N}: чаще всего продаются"],
-            ["Модель", "Продано", "Всего было в продаже", "Продано, %", f"Средняя цена продажи ({above}), €",
-             "Продали за (медиана)"]]
+            ["Модель", "Продано", "Всего было в продаже", "Продано, %", "Средняя цена продажи (все), €",
+             f"Средняя цена продажи ({above}), €", "Продали за (медиана)"]]
     for m in sorted(stats, key=lambda m: (-m["sold"], -m["share"], m["model"]))[:TOP_N]:
-        rows.append([m["model"], m["sold"], m["seen"], m["share"], _num(m["mean"]), format_on_sale(m["days"])])
+        rows.append([m["model"], m["sold"], m["seen"], m["share"], _num(m["mean_all"]), _num(m["mean"]),
+                     format_on_sale(m["days"])])
     rows += [[], [f"Топ-{TOP_N}: самые дорогие модели (средняя цена продажи {above})"],
-             ["Модель", "Средняя цена продажи, €", "Самая высокая, €", "Продаж дороже 40 €", "Продано всего"]]
+             ["Модель", f"Средняя цена продажи ({above}), €", "Средняя цена продажи (все), €", "Самая высокая, €",
+              f"Продаж {above}", "Продано всего"]]
     priced = [m for m in stats if m["mean"] is not None]
     for m in sorted(priced, key=lambda m: (-m["mean"], m["model"]))[:TOP_N]:
-        rows.append([m["model"], m["mean"], _num(m["max"]), m["priced"], m["sold"]])
+        rows.append([m["model"], m["mean"], _num(m["mean_all"]), _num(m["max"]), m["priced"], m["sold"]])
     rows += [[], [f"Топ-{TOP_N}: самые дорогие проданные камеры"],
              ["Модель", "Цена продажи, €", "Продана", "В продаже", "Заголовок", "Ссылка"]]
     sales = [i for i in counted if i.get("status") == "sold" and current_price(i) is not None]

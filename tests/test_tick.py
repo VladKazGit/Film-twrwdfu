@@ -245,7 +245,7 @@ def main():
         top = report.top_rows([sale(1, "Canon AE-1", 120.0), sale(2, "Canon AE-1", 100.0), sale(3, "Leica M6", 2500.0),
                                sale(4, "Zenit E", 1.0)], "2026-10-17 12:00")
         heads = [k for k, r in enumerate(top) if r[0].startswith("Топ-10")]
-        assert top[heads[0] + 2][:4] == ["Canon AE-1", 2, 2, 100], top[heads[0] + 2]
+        assert top[heads[0] + 2][:6] == ["Canon AE-1", 2, 2, 100, 110, 110], top[heads[0] + 2]
         assert top[heads[1] + 2][:2] == ["Leica M6", 2500] and top[heads[2] + 2][:2] == ["Leica M6", 2500.0]
         assert all(r[0] != "Zenit E" for r in top), "a 1 EUR placeholder is no sale"
         model_header = next(r for r in ss.sheets["Сводка"].rows if r[0] == "Модель")
