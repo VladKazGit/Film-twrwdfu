@@ -13,6 +13,7 @@ EXCLUDED_FLAGS = {"accessory?", "digital?", "compact?", "price?"}
 # so out of the statistics, 'До 20 €', 'Продажи' and the letters; worked out from the current
 # price, so a camera that gets a real price comes back.
 PLACEHOLDER_PRICE, OFFERS_PRICE = 1.0, 5.0
+SALE_MIN_PRICE = 40.0  # 'Сводка': the mean sale price counts sales above this (no cheap or broken ones)
 
 
 def placeholder_price(item):
@@ -405,10 +406,12 @@ def summarize(items, now):
     per_model = {}
     for item in groups["list"]:
         stats = per_model.setdefault(item["model"], {"seen": 0, "sold": 0, "fast": 0, "maybe": 0, "times": [],
-                                                     "favourites": [], "days": [], "unsold_days": [], "prices": []})
+                                                     "favourites": [], "days": [], "unsold_days": [], "prices": [], "sale_prices": []})
         stats["seen"] += 1
         if current_price(item) is not None:
             stats["prices"].append(current_price(item))  # sold: the sale price
+            if item.get("status") == "sold" and current_price(item) > SALE_MIN_PRICE:
+                stats["sale_prices"].append(current_price(item))
         if unsold_days(item, now) is not None:
             stats["unsold_days"].append(unsold_days(item, now))
         if item.get("favourites") is not None:
@@ -429,7 +432,8 @@ def summarize(items, now):
          "mean_favourites": round(statistics.mean(s["favourites"]), 1) if s["favourites"] else None,
          "median_days_to_sell": statistics.median(s["days"]) if s["days"] else None,
          "mean_unsold_days": round(statistics.mean(s["unsold_days"]), 2) if s["unsold_days"] else None,
-         "mean_price": round(statistics.mean(s["prices"])) if s["prices"] else None}
+         "mean_price": round(statistics.mean(s["prices"])) if s["prices"] else None,
+         "mean_sale_price": round(statistics.mean(s["sale_prices"])) if s["sale_prices"] else None}
         for model, s in per_model.items()
     ]
     models.sort(key=lambda m: (-m["sold_under_30"], -m["maybe_under_30"], -m["sold"], -m["seen"], m["model"]))
@@ -456,10 +460,12 @@ def summary_rows(summary):
     rows += [[label, lst["buckets"][label], rest["buckets"][label]] for _, label in BUCKETS]
     rows += [["Возможно < 30 мин (по нижней оценке)", lst["fast_maybe"], rest["fast_maybe"]]]
     rows += [["Продано без оценки (preexisting/night/bumped/found)", lst["sold_without_estimate"], rest["sold_without_estimate"]]]
-    rows += [[], ["Модель", "Появилось", "Продано", "Средняя цена, €", "Продано < 30 мин", "Возможно < 30 мин",
+    rows += [[], ["Модель", "Появилось", "Продано", "Средняя цена, €", f"Средняя цена продажи (> {SALE_MIN_PRICE:.0f} €), €",
+                  "Продано < 30 мин", "Возможно < 30 мин",
                   "Медиана макс. времени продажи, мин", "Сохранений в среднем", "Продали за (медиана)",
                   "Непроданные висят (в среднем)"]]
-    rows += [[m["model"], m["seen"], m["sold"], _num(m.get("mean_price")), m["sold_under_30"], m["maybe_under_30"],
+    rows += [[m["model"], m["seen"], m["sold"], _num(m.get("mean_price")), _num(m.get("mean_sale_price")),
+              m["sold_under_30"], m["maybe_under_30"],
               _num(m["median_max_minutes"]),
               _num(m["mean_favourites"]), format_on_sale(m.get("median_days_to_sell")),
               format_on_sale(m.get("mean_unsold_days"))]

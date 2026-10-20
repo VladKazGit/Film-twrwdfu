@@ -237,7 +237,11 @@ def main():
         assert ss.sheets["Модели"].rows[0] == sheets.MODELS_HEADER and len(ss.sheets["Модели"].rows) > 150
         assert ss.sheets["Сводка"].rows[0][0] == "Обновлено"
         model_header = next(r for r in ss.sheets["Сводка"].rows if r[0] == "Модель")
-        assert model_header[3] == "Средняя цена, €", model_header
+        assert model_header[3] == "Средняя цена, €" and model_header[4] == "Средняя цена продажи (> 40 €), €", model_header
+        sold = [{"group": "list", "model": "Nikon FM2", "status": "sold", "flags": [], "price_start": p, "price_final": p,
+                 "price_history": [{"at": "x", "price": p}], "first_seen": "2026-10-16 10:00"} for p in (30.0, 150.0, 170.0)]
+        fm2 = next(m for m in report.summarize(sold, "2026-10-17 10:00")["models"] if m["model"] == "Nikon FM2")
+        assert fm2["mean_sale_price"] == 160 and fm2["mean_price"] == 117, fm2
         assert "Остальные" in ss.sheets
         sales = ss.sheets["Продажи"].rows
         ids = [r[-1].rsplit("/", 1)[-1] for r in sales[1:]]
