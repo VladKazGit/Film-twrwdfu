@@ -97,6 +97,7 @@ MODELS = [
     ("Pentax", "Pentax KX", MECH, S35, ["^=kx"], None),
     ("Olympus", "Olympus OM-1", MECH, S35, ["om 1!"], None),
     ("Olympus", "Olympus OM-1n", MECH, S35, ["om 1 n!"], None),
+    ("Olympus", "Olympus OM-1 MD", MECH, S35, ["om 1 md!"], None),
     ("Olympus", "Olympus OM-3", MECH, S35, ["om 3!"], None),
     ("Olympus", "Olympus OM-3Ti", MECH, S35, ["om 3 ti!", "om 3 titan!"], None),
     ("Olympus", "Olympus M-1", MECH, S35, ["^m 1"], None),  # the first name of the OM-1 (1972)
@@ -134,6 +135,21 @@ MODELS = [
     ("Leica", "Leica M4-P", MECH, S35, ["m4 p"], None),
     ("Leica", "Leica M5", MECH, S35, ["m5"], None),
     ("Leica", "Leica M6", MECH, S35, ["m6"], None),
+    ("Leica", "Leica CL", MECH, S35, ["^cl"], None),  # Leitz-Minolta, 1973; the digital CL of 2017 is a twin
+    # screw-mount rangefinders (Barnack, 1925-1957): 'Leica IIIf', 'Leica III f', 'Leica 3f', 'Leica II D'
+    ("Leica", "Leica I", MECH, S35, ['^i'], None),
+    ("Leica", "Leica Ic", MECH, S35, ['^i c'], None),
+    ("Leica", "Leica If", MECH, S35, ['^i f'], None),
+    ("Leica", "Leica Ig", MECH, S35, ['^i g'], None),
+    ("Leica", "Leica II", MECH, S35, ['^ii', '^ii d'], None),
+    ("Leica", "Leica IIc", MECH, S35, ['^ii c'], None),
+    ("Leica", "Leica IIf", MECH, S35, ['^ii f'], None),
+    ("Leica", "Leica III", MECH, S35, ['^iii'], None),
+    ("Leica", "Leica IIIa", MECH, S35, ['^iii a', '^3 a'], None),
+    ("Leica", "Leica IIIb", MECH, S35, ['^iii b', '^3 b'], None),
+    ("Leica", "Leica IIIc", MECH, S35, ['^iii c', '^3 c'], None),
+    ("Leica", "Leica IIIf", MECH, S35, ['^iii f', '^3 f'], None),
+    ("Leica", "Leica IIIg", MECH, S35, ['^iii g', '^3 g'], None),
     ("Leica", "Leicaflex", MECH, S35, ["leicaflex!"], None),
     ("Leica", "Leicaflex SL", MECH, S35, ["leicaflex sl!"], None),
     ("Leica", "Leicaflex SL2", MECH, S35, ["leicaflex sl 2!"], None),
@@ -204,6 +220,16 @@ MODELS = [
     ("FED", "FED 5C", MECH, S35, ["^5 c", "^5 s"], None),
     ("Zorki", "Zorki 4", MECH, S35, ["^4"], None),
     ("Zorki", "Zorki 4K", MECH, S35, ["^4 k"], None),
+    # Ihagee Exa (Dresden, 1951-1987): 'Ihagee EXA-I', 'Exa Ia', 'Exa 1b'
+    ("Exakta", "Ihagee Exa", MECH, S35, ['exa!'], None),
+    ("Exakta", "Ihagee Exa I", MECH, S35, ['exa 1!', 'exa i!'], None),
+    ("Exakta", "Ihagee Exa Ia", MECH, S35, ['exa 1 a!', 'exa ia!'], None),
+    ("Exakta", "Ihagee Exa Ib", MECH, S35, ['exa 1 b!', 'exa ib!'], None),
+    ("Exakta", "Ihagee Exa Ic", MECH, S35, ['exa 1 c!', 'exa ic!'], None),
+    ("Exakta", "Ihagee Exa II", MECH, S35, ['exa 2!', 'exa ii!'], None),
+    ("Exakta", "Ihagee Exa IIa", MECH, S35, ['exa 2 a!', 'exa ii a!'], None),
+    ("Exakta", "Ihagee Exa IIb", MECH, S35, ['exa 2 b!', 'exa ii b!'], None),
+    ("Exakta", "Ihagee Exa 500", MECH, S35, ['exa 500!'], None),
     ("Kiev", "Kiev 4", MECH, S35, ["^4"], None),
     ("Kiev", "Kiev 4A", MECH, S35, ["^4 a"], None),
     ("Kiev", "Kiev 4M", MECH, S35, ["^4 m"], None),
@@ -316,7 +342,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 34
+VERSION = 35
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -324,7 +350,8 @@ PRIORITY_SEARCH = ("Canon FX", "Canon FP", "Canon TL", "Canon TLb", "Canon TX", 
                    "Canon AE-1", "Canon AE-1 Program", "Canon AV-1", "Canon F-1", "Canon A-1", "Leica R-E", "Leica R4s",
                    "Minolta SR-1", "Minolta SR-T 102", "Leica R9", "Canon T50", "Canon T60", "Canon T70", "Canon T80",
                    "Praktiflex", "Praktica FX", "Praktica FX2", "Praktica FX3", "Praktica IV", "Praktica IVB", "Praktica IVM", "Praktica IVBM", "Praktica IVF", "Praktica IVFB", "Praktica V", "Praktica VF", "Praktica Nova", "Praktica Nova B", "Praktica Nova I", "Praktica Nova IB", "Praktica Super TL2", "Praktica Super TL3", "Praktica L2", "Praktica LTL2", "Praktica LTL3", "Praktica LLC", "Praktica Mat", "Praktica MTL 50", "Praktica PLC2", "Praktica PLC3", "Praktica VLC", "Praktica VLC2", "Praktica VLC3", "Kiev 2", "Kiev 2A", "Kiev 3", "Kiev 3A", "Kiev 5", "Kiev 17", "Kiev 19", "Kiev 19M", "Kiev 20", "Kiev 88CM", "Kiev Salut", "Kiev Salut-S", "Kiev 90",
-                   "Olympus M-1", "Olympus OM-2000", "Olympus FTL", "Olympus Pen F", "Olympus Pen FT", "Olympus Pen FV")
+                   "Olympus M-1", "Olympus OM-2000", "Olympus FTL", "Olympus Pen F", "Olympus Pen FT", "Olympus Pen FV",
+                   "Olympus OM-1 MD", "Leica CL", "Leica I", "Leica Ic", "Leica If", "Leica Ig", "Leica II", "Leica IIc", "Leica IIf", "Leica III", "Leica IIIa", "Leica IIIb", "Leica IIIc", "Leica IIIf", "Leica IIIg", "Ihagee Exa", "Ihagee Exa I", "Ihagee Exa Ia", "Ihagee Exa Ib", "Ihagee Exa Ic", "Ihagee Exa II", "Ihagee Exa IIa", "Ihagee Exa IIb", "Ihagee Exa 500")
 
 # Models that must not match when the text also contains this pattern.
 MODEL_EXCLUDE = {
@@ -345,6 +372,8 @@ DIGITAL_TWINS = {
     "Olympus Pen F": re.compile(_DIGITAL_TWIN),
     "Olympus M-1": re.compile(_DIGITAL_OM),
     "Olympus OM-1": re.compile(_DIGITAL_OM),
+    # the digital Leica CL of 2017: APS-C, TL lenses
+    "Leica CL": re.compile(_DIGITAL_OM + r"|aps-?c|\btl\b|\btl ?2\b|vario|\b4k\b|ladegerat|caricabatter|chargeur|\bcharger|\bakku"),
 }
 # A title naming one of these series is a known non-list camera: do not look
 # for a list model in its description ('Canon EOS 5000 ... Canon EF Objektiv').
@@ -426,7 +455,7 @@ def _compile_alias(brand, model, alias, not_after):
     if re.search(r"[a-z]$", alias):
         # 'FG-20', 'F 301', 'FM 10' are other models; '50mm', 'f 1.4' are lenses.
         # 'x' is allowed only after one digit ('2x Objektive'), not after a model number ('F-401x').
-        tail += r"(?!\s*-?\s*(?:\d{2,}(?![\d.,:]|\s*mm)|\d" + _NOT_OTHER_MODEL + "))"
+        tail += r"(?!\s*-?\s*(?:(?!1[89]\d\d\b)\d{2,}(?![\d.,:]|\s*mm)|\d" + _NOT_OTHER_MODEL + "))"
     # Mount names: 'Nikon F mount', 'Canon EF Bajonett' are lenses/adapters.
     tail += rf"(?!{SEP}(?:mount|bajonett|bayonet|anschluss|adapter|adaptateur|monture|attacco|innesto|vatting))"
     # 'Canon Kamera F-1', 'Nikon analoge FM': one word naming the camera may sit in between.
@@ -552,6 +581,7 @@ _FOR_BEFORE = re.compile(r"\b(?:per|for|pour|fur|als|voor|para)\s+(?:\w+\s+)?$")
 # Words that say the listing is a camera body or kit, not just its manual.
 _COMPATIBLE_AFTER = re.compile(r"\W*(?:passend|passt|kompatibel|compatible|compatibile|fits|adatt[oa]|geeignet)\b")
 _KIT_LENS = re.compile(r"objektiv|lens(?:es)?|obiettiv|objectif|lente")
+_KIT_PLUS_LENS = re.compile(r"\+\s*(?:[a-z]+\s+){0,2}\d{2,3}\s?mm")
 _BUNDLE = re.compile(r"\b(?:lot|lotto|konvolut|bundle|set|kit)\b")
 _KIT_WORDS = re.compile(r"\bbody\b|gehause|boitier|\bcorpo\b|objektiv|\blens|obiettiv|objectif|\bkit\b|\bset\b|\bnur\b")
 # A description that starts with one of these (and names no camera) is about an accessory.
@@ -675,6 +705,9 @@ def _is_accessory(norm, model_span):
     # A lens after the camera's name is its kit lens ('Canon AE1 Program | canon f1.8 macro lens'):
     # lenses sold alone name their mount ('Canon FD 50mm'), not a camera.
     acc = next((a for a in _ACCESSORY_WORDS.finditer(tail) if not _KIT_LENS.fullmatch(a.group(0))), None)
+    # "Nikon F2 viseur DP1 + Nikon 100mm + Nikon 80-200": a camera sold with its finder and lenses.
+    if _KIT_PLUS_LENS.search(tail):
+        return False
     # "Nikon F Waist Level Finder ... Case": accessory words, no camera, no "with".
     return bool(acc) and not _WITH_WORDS.search(tail[:acc.start()]) and not _CAMERA_WORDS.search(norm)
 

@@ -94,7 +94,7 @@ Cron (каждые 2 ч) — только запасной перезапуск 
 ## Классификация
 
 Порядок: заголовок → описание → бренд + тип по ключевым словам (DE/FR/IT/NL/EN) → бренд Vinted → фото (вручную, раз в неделю, только быстрые продажи без модели) → ручная разметка.
-- длинные названия раньше коротких (AE-1 Program раньше AE-1); регистр, дефисы, пробелы нормализуются; между брендом и моделью может стоять одно слово о камере («Canon Kamera F-1», «Nikon analoge FM2»)
+- длинные названия раньше коротких (AE-1 Program раньше AE-1); год после модели — не номер другой модели («Leica IIIf 1954», «Nikon F 1975»; а «F 801» — другая); видоискатель после модели вместе с объективами через «+» — комплект камеры («Nikon F2 viseur DP1 + Nikon 100mm»); регистр, дефисы, пробелы нормализуются; между брендом и моделью может стоять одно слово о камере («Canon Kamera F-1», «Nikon analoge FM2»)
 - кириллица → латиница: Зенит = Zenit/Zenith, ФЭД = FED, Зоркий = Zorki/Zorkij, Киев = Kiev/Kiew
 - ложные совпадения: «Nikon F» ≠ F55/F60/F-301/F80…; Spotmatic ≠ Spotmatic II / 500 / 1000 / SP1000 / SP500; Pentax KX ≠ цифровая K-x; Pentax KM ≠ цифровая K-m; Canon EF (камера) ≠ объективы «EF 50mm»; «Canon 7» ≠ цифровая 7D / EOS 7; «Canon P» ≠ Prima / PowerShot; OM-1 ≠ OM-10, OM-4 ≠ OM-40; Pentax 67 ≠ 67II; Hasselblad 500C ≠ 500C/M; Yashica Mat-124 ≠ Mat-124G; Spotmatic ≠ Spotmatic F; Minolta SR-7 ≠ SR-T; Olympus Pen F ≠ цифровая PEN-F 2016 г. и M-1 ≠ цифровые E-M1 / OM-D: если в заголовке или описании признаки цифровой (M.Zuiko, Micro Four Thirds, сенсор, мегапиксели, mirrorless, зарядка/аккумулятор, LCD, видео…) — `digital?`; так же OM-1 (и OM-1 MD) ≠ цифровая OM System OM-1 2022 г. / Mark II, но для OM-1 и M-1 — только признаки Micro Four Thirds (M.Zuiko, MFT, мегапиксели, mirrorless, EVF, «OM System OM-1», OM-D, E-M1, Mark II): у плёночной OM-1 в описаниях бывают «hybride», «video», «digital» («pas hybride»)
 - аксессуары (winder, Zubehör, accessoires, Tasche/Objektiv only…) без признаков камеры → флаг `accessory?`; печатная продукция (каталоги, проспекты, брошюры, книги, руководства/guide) — тоже `accessory?`; запчасти (ricambio, Ersatzteil, spare part, parts (кроме «parts or repair»), dial, calotta, top cover, фокусировочный экран — écran de visée / Mattscheibe / focusing screen, рулетка перемотки — manivelle / rembobinage / Rückspul…; светоуплотнители — light seals / guarnizioni / Lichtdichtungen, но только *перед* моделью: после неё это реклама камеры; брелоки, украшения, магниты, наклейки и значки в виде камеры — ciondolo, pendentif, collana, magnet, sticker, pin badge, Anstecknadel, spilla, memorabilia…; бленды — paraluce, Gegenlichtblende, pare-soleil, lens hood; чехлы — custodia, astuccio, housse, hoes, funda (как Tasche/etui); одежда и обувь — abito, vestito, Kleid, robe, dress, giacca, Schuhe…) — `accessory?`, но «на запчасти» (per/für/for … ricambi) — это камера; цифровые (Dimage, digital, Megapixel…, миниатюры Minox «Leica M3») → `digital?`
@@ -113,17 +113,18 @@ Cron (каждые 2 ч) — только запасной перезапуск 
 - Nikon: F, F2, FM, FM2, FM2n, FM2n/T, FM3A, Nikkormat FTn
 - Canon: F-1, F-1n, FTb, FT QL, Pellix, FX, FP, TL, TLb, TX; дальномерные Canon P, Canon 7
 - Pentax: Spotmatic / SP, Spotmatic F, SV, K1000, KM, MX, KX
-- Olympus: OM-1, OM-1n, M-1 (первое имя OM-1), OM-3, OM-3Ti, OM-2000, FTL (M42); полукадровые зеркальные Pen F, Pen FT, Pen FV
+- Olympus: OM-1, OM-1 MD, OM-1n, M-1 (первое имя OM-1), OM-3, OM-3Ti, OM-2000, FTL (M42); полукадровые зеркальные Pen F, Pen FT, Pen FV
 - Minolta: SR-1 (и SR-1s), SR-T 101, SR-T 102 (европейское имя — SR-T 303 / 303b), SR-T 201, SR-7
 - Konica: Auto-Reflex, Autoreflex T / T2 / T3 / T4
 - Yashica: FX-3, FX-3 Super 2000
 - Средний формат: Mamiya C330 / C330f / C330s, Mamiya RB67 (Professional, Pro-S, Pro-SD), Yashica Mat-124, Yashica Mat-124G, Rolleiflex 2.8F
-- Leica: M2, M3, M4, M4-2, M4-P, M5, M6; Leicaflex, Leicaflex SL / SL2, R6, R6.2
+- Leica: M2, M3, M4, M4-2, M4-P, M5, M6; CL (1973; ≠ цифровая CL 2017 г.); винтовые (Barnack): I, Ic, If, Ig, II (II D), IIc, IIf, III, IIIa, IIIb, IIIc, IIIf, IIIg («IIIf», «III f», «3f»); Leicaflex, Leicaflex SL / SL2, R6, R6.2
 - Hasselblad: 500C, 500C/M, 501C, 503CX
 - Rollei: Rolleiflex SL35, SL350, SL35M
 - Praktica (L, M42 и ранние): L, L2, LTL, LTL2, LTL3, LLC, Super TL, Super TL2, Super TL3, Mat, MTL 3, MTL 5, MTL 5B, MTL 50, PLC2, PLC3, VLC, VLC2, VLC3, Nova, Nova B, Nova I (PL Nova I), Nova IB (PL Nova IB), FX, FX2, FX3, IV, IVB, IVM, IVBM, IVF, IVFB, V, VF; Praktiflex
 - Зенит: 3М, Е, В, ЕМ, ЕТ, TTL, 10, 11, 12сд (12CD), 12XP, 122; байонет «Зенит-4»: 4, 5, 6
 - ФЭД: 2, 3, 4, 5 / 5В / 5С
+- Ihagee Exa (ГДР): Exa, Exa I, Ia, Ib, Ic, II, IIa, IIb, 500 (Exakta Varex и др. — не в списке)
 - Зоркий: 4, 4К
 - Киев: дальномеры 2, 2А, 3, 3А, 4, 4А, 4М, 4АМ, 5; зеркальные под Nikon F 17, 19, 19М, 20; средний формат 88, 88СМ, Салют / Салют-С, 90, 60 / 6С (Киев 35А, 30, Вега — не камеры списка)
 
