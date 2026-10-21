@@ -2,6 +2,7 @@
 import re
 import statistics
 from collections import Counter
+from datetime import timedelta
 
 from . import clock, models
 
@@ -258,7 +259,7 @@ def item_rows(items, with_group=False, new_since=None, new_old_listings=False, f
 
 SALES_HEADER = [
     "Модель", "Цена при продаже, €", "История цены, €", "Изменение цены", "Выставлена", "Продана", "В продаже",
-    "Комплект", "Состояние", "Сохранений", "Описание (начало)", "Ссылка",
+    "Перевыставлялась", "Комплект", "Состояние", "Сохранений", "Описание (начало)", "Ссылка",
 ]
 SALES_DESCRIPTION_LIMIT = 150  # one line per sale; the full text stays in the data repo
 
@@ -300,7 +301,9 @@ def _one_line(text, limit):
 
 
 def sales_rows(items):
-    """'Продажи': sold list cameras, newest sale first, one line each."""
+    """'Продажи': sold list cameras, newest sale first, one line each. 'Перевыставлялась': the same
+    seller listed the camera before and took it down unsold (see relist_chains)."""
+    relisted = {chain[-1]["id"]: chain for chain in relist_chains(items) if chain[-1].get("status") == "sold"}
     sold = sorted((i for i in items if i.get("group") == "list" and i.get("status") == "sold" and not placeholder_price(i)),
                   key=lambda i: (i.get("sold_detected_at") or "", i["id"]), reverse=True)
     rows = [SALES_HEADER]
@@ -313,7 +316,7 @@ def sales_rows(items):
         rows.append([
             i.get("model") or "", _num(final), history, _change_text(start, final),
             _listed_text(i), i.get("sold_detected_at") or "", on_sale_text(i),
-            _kit_text(i), i.get("condition") or "", _num(i.get("favourites")),
+            relist_text(relisted[i["id"]]) if i["id"] in relisted else "", _kit_text(i), i.get("condition") or "", _num(i.get("favourites")),
             _one_line(i.get("description"), SALES_DESCRIPTION_LIMIT), i.get("url") or "",
         ])
     return rows
@@ -365,18 +368,76 @@ def unsold_days(item, now):
     """Days an unsold camera has been on sale: from its listing (Vinted's date for old ones,
     the first sight if unknown) to now, or to its closing if deleted / unsold in 30 days.
     None for sold and reserved ones."""
-    status = item.get("status")
-    if status not in ("active", "hidden", "deleted", "unsold_30d"):
+    if item.get("status") not in ("active", "hidden", "deleted", "unsold_30d"):
         return None
-    flags = set(item.get("flags") or [])
-    if item.get("listed_after") and not flags & {"preexisting", "found", "bumped"}:
-        start = item["listed_after"]
-    elif item.get("vinted_listed_est"):
-        start = f"{item['vinted_listed_est']} 00:00"
-    else:
-        start = item.get("first_seen")
-    end = now if status in ("active", "hidden") else (item.get("closed_at") or item.get("last_seen_active") or now)
-    return round(max(0, clock.minutes_between(start, end)) / 1440, 2) if start else None
+    start = listing_start(item)
+    return round(max(0, clock.minutes_between(start, listing_end(item, now))) / 1440, 2) if start else None
+
+
+def listing_start(item):
+    """When the listing went on sale: the tick before a new one showed up, Vinted's upload date
+    for old ones, the first sight if unknown."""
+    if item.get("listed_after") and not set(item.get("flags") or []) & {"preexisting", "found", "bumped"}:
+        return item["listed_after"]
+    if item.get("vinted_listed_est"):
+        return f"{item['vinted_listed_est']} 00:00"
+    return item.get("first_seen")
+
+
+def listing_end(item, now):
+    """When the listing left the market: the detected sale, the closing, or now if still on sale."""
+    status = item.get("status")
+    if status == "sold":
+        return item.get("sold_detected_at") or now
+    if status in ("active", "reserved", "hidden"):
+        return now
+    return item.get("closed_at") or item.get("last_seen_active") or now
+
+
+CLOSED_UNSOLD = {"deleted", "unsold_3h", "unsold_30d"}
+
+
+def relist_chains(items):
+    """Repeated listings of one camera: the same seller and model, each listing first seen after
+    the previous one was last seen on sale, and the previous one closed without a sale (deleted,
+    not sold in 30 days). Never two on sale at once, so a seller with several copies of a model
+    does not chain. The chains of two or more listings, each oldest first."""
+    by_seller = {}
+    for i in items:
+        if i.get("group") == "list" and i.get("seller_id") and i.get("model") and not stat_flags(i) & EXCLUDED_FLAGS:
+            by_seller.setdefault((i["seller_id"], i["model"]), []).append(i)
+    chains = []
+    for cards in by_seller.values():
+        cards.sort(key=lambda i: i["id"])
+        chain = cards[:1]
+        for card in cards[1:]:
+            last = chain[-1]
+            if (last.get("status") in CLOSED_UNSOLD
+                    and (card.get("first_seen") or "") >= (last.get("last_seen_active") or last.get("first_seen") or "")):
+                chain.append(card)
+                continue
+            if len(chain) > 1:
+                chains.append(chain)
+            chain = [card]
+        if len(chain) > 1:
+            chains.append(chain)
+    return chains
+
+
+def chain_days(chain, now):
+    """Days the camera was on the market over all its listings (gaps included)."""
+    start = listing_start(chain[0])
+    return round(max(0, clock.minutes_between(start, listing_end(chain[-1], now))) / 1440, 2) if start else None
+
+
+def relist_text(chain):
+    """'Перевыставлялась' of a sold camera: '2 раза, на рынке всего 3 месяца, первая цена 150 €'."""
+    n, first = len(chain) - 1, chain[0].get("price_start")
+    text = f"{n} {_plural(n, 'раз', 'раза', 'раз')}"
+    days = chain_days(chain, chain[-1].get("sold_detected_at"))
+    if days is not None:
+        text += f", на рынке всего {format_on_sale(days)}"
+    return text + (f", первая цена {_price_text(first)} €" if first is not None else "")
 
 
 def summarize(items, now):
@@ -511,6 +572,146 @@ def top_rows(items, now):
     for i in sorted(sales, key=lambda i: (-current_price(i), i["id"]))[:TOP_N]:
         rows.append([i.get("model") or "", current_price(i), i.get("sold_detected_at") or "", on_sale_text(i),
                      i.get("title") or "", i.get("url") or ""])
+    width = max(len(r) for r in rows)
+    return [r + [""] * (width - len(r)) for r in rows]
+
+
+ANALYTICS_MIN_MODEL = 5  # a model's median price needs this many cameras
+PRICE_GROUPS = [(-30, "на 30 % и больше дешевле"), (-10, "на 10–30 % дешевле"), (10, "±10 %"),
+                (30, "на 10–30 % дороже"), (None, "на 30 % и больше дороже")]
+SAVES_GROUPS = [(0, "0"), (2, "1–2"), (5, "3–5"), (None, "6 и больше")]
+WEEKDAYS_RU = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+CONDITION_ORDER = ["Neu, mit Etikett", "Neu, ohne Etikett", "Sehr gut", "Gut", "Zufriedenstellend"]
+TREND_MODELS, TREND_MONTHS, TREND_SALE_DAYS = 10, 6, 7
+GROUP_COLUMNS = ["Камер", "Продано", "Продано, %", "Продано < 30 мин", "Продали за (медиана)", "Средняя цена продажи, €"]
+
+
+def _new_listing(item):
+    """A listing that went up while the tracker watched (its listing time is known to a tick)."""
+    return bool(item.get("listed_after")) and not set(item.get("flags") or []) & {"preexisting", "found", "bumped", "night"}
+
+
+def _group_row(label, cards):
+    """[label, cameras, sold, sold %, sold < 30 min, median time to sell, mean sale price]."""
+    sold = [i for i in cards if i.get("status") == "sold"]
+    days = [d for d in (days_to_sell(i) for i in sold) if d is not None]
+    prices = [p for p in (current_price(i) for i in sold) if p is not None]
+    return [label, len(cards), len(sold), round(100 * len(sold) / len(cards)) if cards else "",
+            sum(bucket(i) == BUCKETS[0][1] for i in sold), format_on_sale(statistics.median(days) if days else None),
+            round(statistics.mean(prices)) if prices else ""]
+
+
+def _limit_group(value, groups):
+    return next(label for limit, label in groups if limit is None or value <= limit)
+
+
+def saves_in_first_hour(item):
+    """Saves an hour after the camera was first seen (the last count known by then), or None."""
+    history = item.get("favourites_history") or []
+    if not history or not item.get("first_seen"):
+        return None
+    until = clock.stamp(clock.parse(item["first_seen"]) + timedelta(hours=1))
+    known = [p["count"] for p in history if (p.get("at") or "") <= until and p.get("count") is not None]
+    return known[-1] if known else None
+
+
+def analytics_rows(items, now):
+    """'Аналитика': what goes with a quick sale (price against the model's median, the hour and day
+    of listing, condition, kit, early saves), repeated listings and prices by month. List cameras
+    only, without placeholder prices or flagged listings. '< 30 мин' needs a known listing time,
+    so only new listings count there."""
+    counted = [i for i in items if i.get("group") == "list" and not stat_flags(i) & EXCLUDED_FLAGS]
+    new = [i for i in counted if _new_listing(i)]
+    rows = [["Обновлено", now],
+            ["«< 30 мин» — только новые объявления (время выставления известно до тика); «Продали за» — от выставления"],
+            []]
+
+    def table(title, first, groups):
+        rows.extend([[title], [first] + GROUP_COLUMNS] + [_group_row(label, cards) for label, cards in groups] + [[]])
+
+    by_model = {}
+    for i in counted:
+        if i.get("price_start") is not None:
+            by_model.setdefault(i.get("model"), []).append(i["price_start"])
+    medians = {m: statistics.median(p) for m, p in by_model.items() if len(p) >= ANALYTICS_MIN_MODEL}
+    price_groups = {label: [] for _, label in PRICE_GROUPS}
+    for i in counted:
+        median = medians.get(i.get("model"))
+        if median and i.get("price_start") is not None:
+            price_groups[_limit_group(100 * (i["price_start"] / median - 1), PRICE_GROUPS)].append(i)
+    table(f"Цена и скорость: цена объявления против медианы своей модели (модели от {ANALYTICS_MIN_MODEL} камер)",
+          "Цена от медианы модели", price_groups.items())
+
+    hours = {f"{h:02d}:00–{h:02d}:59": [] for h in range(7, 24)}
+    days = {d: [] for d in WEEKDAYS_RU}
+    for i in new:
+        seen = clock.parse(i["first_seen"])
+        hours.setdefault(f"{seen.hour:02d}:00–{seen.hour:02d}:59", []).append(i)
+        days[WEEKDAYS_RU[seen.weekday()]].append(i)
+    table("Когда выставлены (новые объявления, по времени появления)", "Час", hours.items())
+    table("День недели (новые объявления)", "День", days.items())
+
+    conditions = Counter(i.get("condition") or "" for i in counted)
+    order = [c for c in CONDITION_ORDER if c in conditions] + sorted(c for c in conditions if c not in CONDITION_ORDER)
+    table("Состояние", "Состояние", [(c or "не указано", [i for i in counted if (i.get("condition") or "") == c])
+                                     for c in order])
+    table("Комплект", "Комплект", [(label, [i for i in counted if i.get("kit") == kit]) for kit, label in KIT_RU.items()])
+
+    saves = {label: [] for _, label in SAVES_GROUPS}
+    for i in new:
+        count = saves_in_first_hour(i)
+        if count is not None:
+            saves[_limit_group(count, SAVES_GROUPS)].append(i)
+    table("Сохранения за первый час как сигнал (новые объявления)", "Сохранений за час", saves.items())
+
+    chains = relist_chains(counted)
+    rows.extend([["Перевыставления: тот же продавец и модель, прошлое объявление снято без продажи"],
+                 ["Показатель", "Значение"],
+                 ["Камер, которые перевыставляли", len(chains)],
+                 ["Объявлений у них", sum(len(c) for c in chains)],
+                 ["Проданы в итоге", sum(c[-1].get("status") == "sold" for c in chains)]])
+    if chains:
+        spans = [d for d in (chain_days(c, now) for c in chains) if d is not None]
+        changes = [100 * (current_price(c[-1]) / c[0]["price_start"] - 1) for c in chains
+                   if c[0].get("price_start") and current_price(c[-1]) is not None]
+        rows.append(["На рынке всего (в среднем)", format_on_sale(statistics.mean(spans)) if spans else ""])
+        rows.append(["Цена от первого объявления к последнему (в среднем), %", round(statistics.mean(changes)) if changes else ""])
+        per_model = {}
+        for c in chains:
+            per_model.setdefault(c[0].get("model"), []).append(c)
+        rows.extend([[], ["Модель", "Перевыставляли камер", "Проданы в итоге", "Первая цена (в среднем), €",
+                          "Последняя цена (в среднем), €"]])
+        for model, cs in sorted(per_model.items(), key=lambda m: (-len(m[1]), m[0]))[:TOP_N]:
+            first = [c[0]["price_start"] for c in cs if c[0].get("price_start") is not None]
+            last = [p for p in (current_price(c[-1]) for c in cs) if p is not None]
+            rows.append([model, len(cs), sum(c[-1].get("status") == "sold" for c in cs),
+                         round(statistics.mean(first)) if first else "", round(statistics.mean(last)) if last else ""])
+    rows.append([])
+
+    month = clock.parse(now)
+    months = []
+    for _ in range(TREND_MONTHS):
+        months.insert(0, f"{month.year}-{month.month:02d}")
+        month = month.replace(day=1) - timedelta(days=1)
+    recent = clock.stamp(clock.parse(now) - timedelta(days=TREND_SALE_DAYS))
+    before = clock.stamp(clock.parse(now) - timedelta(days=2 * TREND_SALE_DAYS))
+    popular = Counter(i.get("model") for i in counted).most_common(TREND_MODELS)
+    rows.extend([[f"Цены по месяцам выставления: средняя цена объявления, € (топ-{TREND_MODELS} моделей по числу камер;"
+                  " у старых объявлений — цена при обнаружении)"],
+                 ["Модель"] + months + [f"Продажи за {TREND_SALE_DAYS} дней (средняя), €",
+                                          f"Продажи {TREND_SALE_DAYS + 1}–{2 * TREND_SALE_DAYS} дней назад (средняя), €"]])
+    for model, _ in popular:
+        cards = [i for i in counted if i.get("model") == model]
+        by_month = {}
+        for i in cards:
+            start = listing_start(i)
+            if start and i.get("price_start") is not None:
+                by_month.setdefault(start[:7], []).append(i["price_start"])
+        sold = [i for i in cards if i.get("status") == "sold" and current_price(i) is not None]
+        late = [current_price(i) for i in sold if (i.get("sold_detected_at") or "") >= recent]
+        early = [current_price(i) for i in sold if before <= (i.get("sold_detected_at") or "") < recent]
+        rows.append([model] + [round(statistics.mean(by_month[m])) if len(by_month.get(m, [])) >= 2 else "" for m in months]
+                    + [round(statistics.mean(late)) if late else "", round(statistics.mean(early)) if early else ""])
     width = max(len(r) for r in rows)
     return [r + [""] * (width - len(r)) for r in rows]
 

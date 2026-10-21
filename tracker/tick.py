@@ -43,12 +43,13 @@ CHEAP_PRICE = 20.0  # the cheap check and 'До 20 €' (sheets.CHEAP_MAX_PRICE)
 # Extra categories: page 1 per check; on full scans (the morning after the night, then every 4 h) 3 pages
 EXTRA_FULL_PAGES = 3
 # Fresh search: every model of 'Модели' once an hour, newest first in all categories; one more
-# page per 40 active cameras of the model (up to 4; the key models per 30, up to 6, and their
-# page 1 in every tick too). A page of all categories holds ~40 of the model's cameras.
+# page per 35 active cameras of the model (up to 8; the key models per 25, up to 10, and their
+# page 1 in every tick too). A page of all categories holds ~40 of the model's cameras: reading
+# a little past them catches the sales of popular models within the hour (+~13 pages an hour).
 FRESH_EVERY_MIN, FRESH_PER_CHECK, FRESH_HOURS = 60, 16, 24
 FRESH_PER_CHEAP = 5  # a cheap check takes a few models too, so the round stays within the hour
-FRESH_PAGE_ITEMS, FRESH_MAX_PAGES = 40, 4
-FRESH_PRIORITY_PAGE_ITEMS, FRESH_PRIORITY_MAX_PAGES = 30, 6
+FRESH_PAGE_ITEMS, FRESH_MAX_PAGES = 35, 8
+FRESH_PRIORITY_PAGE_ITEMS, FRESH_PRIORITY_MAX_PAGES = 25, 10
 FRESH_PRIORITY = ("Canon AE-1", "Yashica FX-3 Super 2000", "Olympus OM-10")
 PAGE_RECHECK_MIN = 5 * 1440  # a camera the fresh search keeps seeing: its page every 5 days
 DAILY_CHECKS_PER_TICK = 25
@@ -1086,6 +1087,7 @@ def write_sheets(writer, result, state_flags):
     writer.replace(sheets.CHECK_SHEET, report.check_rows(items), links=True)
     writer.replace(sheets.SUMMARY_SHEET, report.summary_rows(result["summary"]))
     writer.replace(sheets.TOP_SHEET, report.top_rows(items, result["run"]["at"]), links=True)
+    writer.replace(sheets.ANALYTICS_SHEET, report.analytics_rows(items, result["run"]["at"]))
     if not state_flags.get("runs_header_v4"):  # v4: 'Проверок между тиками'
         writer.ensure_runs_header()
         updates["runs_header"] = updates["runs_header_v2"] = updates["runs_header_v3"] = updates["runs_header_v4"] = True

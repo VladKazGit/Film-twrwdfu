@@ -237,6 +237,27 @@ def main():
         assert ss.sheets["Модели"].rows[0] == sheets.MODELS_HEADER and len(ss.sheets["Модели"].rows) > 150
         assert ss.sheets["Сводка"].rows[0][0] == "Обновлено"
         assert ss.sheets["Топ-10"].rows[2][0] == "Топ-10: чаще всего продаются", ss.sheets["Топ-10"].rows[:4]
+        assert ss.sheets["Аналитика"].rows[0][0] == "Обновлено" and ss.sheets["Аналитика"].mode == "RAW"
+        # Relists: the same seller and model, the earlier listing taken down unsold before the next one showed up.
+        def listing(item_id, status, first, last, price, seller=7, **extra):
+            return dict({"id": item_id, "group": "list", "model": "Canon AE-1", "seller_id": seller, "status": status,
+                         "flags": [], "price_start": price, "price_final": price if status == "sold" else None,
+                         "price_history": [{"at": first, "price": price}], "first_seen": first, "listed_after": first,
+                         "last_seen_active": last}, **extra)
+        cards = [listing(1, "deleted", "2026-09-01 10:00", "2026-09-10 10:00", 150.0, closed_at="2026-09-11 10:00"),
+                 listing(2, "unsold_30d", "2026-09-12 10:00", "2026-10-12 09:00", 140.0, closed_at="2026-10-12 10:00"),
+                 listing(3, "sold", "2026-10-13 10:00", "2026-10-14 09:00", 120.0, sold_detected_at="2026-10-14 10:00"),
+                 listing(4, "active", "2026-10-01 10:00", "2026-10-17 10:00", 90.0, seller=8),
+                 listing(5, "active", "2026-10-05 10:00", "2026-10-17 10:00", 95.0, seller=8)]  # two at once: no chain
+        chains = report.relist_chains(cards)
+        assert [[i["id"] for i in c] for c in chains] == [[1, 2, 3]], chains
+        relisted = dict(zip(report.SALES_HEADER, report.sales_rows(cards)[1]))["Перевыставлялась"]
+        assert relisted == "2 раза, на рынке всего 1 месяц, первая цена 150 €", relisted
+        analytics = report.analytics_rows(cards, "2026-10-17 12:00")
+        assert ["Камер, которые перевыставляли", 1] == next(r for r in analytics if r[0].startswith("Камер, которые"))[:2]
+        saves = {"first_seen": "2026-10-17 10:00", "favourites_history": [
+            {"at": "2026-10-17 10:00", "count": 0}, {"at": "2026-10-17 10:45", "count": 3}, {"at": "2026-10-17 12:00", "count": 9}]}
+        assert report.saves_in_first_hour(saves) == 3
         def sale(item_id, model, price):
             return {"id": item_id, "group": "list", "model": model, "status": "sold", "flags": [], "price_start": price,
                     "price_final": price, "price_history": [{"at": "x", "price": price}], "title": model,
@@ -259,7 +280,7 @@ def main():
         assert "Остальные" in ss.sheets
         sales = ss.sheets["Продажи"].rows
         ids = [r[-1].rsplit("/", 1)[-1] for r in sales[1:]]
-        assert sales[0] == report.SALES_HEADER and len(sales[0]) == 12 and ids == ["1011", "400", "1010"], ids
+        assert sales[0] == report.SALES_HEADER and len(sales[0]) == 13 and ids == ["1011", "400", "1010"], ids
         fm2 = dict(zip(report.SALES_HEADER, sales[1]))
         assert fm2["Модель"] == "Nikon FM2" and fm2["Цена при продаже, €"] == 140.0 and fm2["История цены, €"] == "150 → 140"
         assert fm2["Изменение цены"] == "−10 € (−7 %)", fm2["Изменение цены"]
