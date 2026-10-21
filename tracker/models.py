@@ -99,6 +99,13 @@ MODELS = [
     ("Olympus", "Olympus OM-1n", MECH, S35, ["om 1 n!"], None),
     ("Olympus", "Olympus OM-3", MECH, S35, ["om 3!"], None),
     ("Olympus", "Olympus OM-3Ti", MECH, S35, ["om 3 ti!", "om 3 titan!"], None),
+    ("Olympus", "Olympus M-1", MECH, S35, ["^m 1"], None),  # the first name of the OM-1 (1972)
+    ("Olympus", "Olympus OM-2000", MECH, S35, ["om 2000!"], None),
+    ("Olympus", "Olympus FTL", MECH, S35, ["^ftl"], None),
+    # half-frame SLRs (1963-1970); the digital PEN-F of 2016 is told apart by DIGITAL_TWINS
+    ("Olympus", "Olympus Pen F", MECH, S35, ["pen f"], None),
+    ("Olympus", "Olympus Pen FT", MECH, S35, ["pen ft"], None),
+    ("Olympus", "Olympus Pen FV", MECH, S35, ["pen fv"], None),
     ("Minolta", "Minolta SR-T 101", MECH, S35, ["sr t 101!", "sr t 101 b!"], None),
     # SR-T 303 is the European name of the SR-T 102
     ("Minolta", "Minolta SR-T 102", MECH, S35, ["sr t 102!", "sr t 303!", "sr t 303 b!"], None),
@@ -309,18 +316,30 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 32
+VERSION = 33
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
 PRIORITY_SEARCH = ("Canon FX", "Canon FP", "Canon TL", "Canon TLb", "Canon TX", "Canon AT-1", "Nikon FG-20",
                    "Canon AE-1", "Canon AE-1 Program", "Canon AV-1", "Canon F-1", "Canon A-1", "Leica R-E", "Leica R4s",
                    "Minolta SR-1", "Minolta SR-T 102", "Leica R9", "Canon T50", "Canon T60", "Canon T70", "Canon T80",
-                   "Praktiflex", "Praktica FX", "Praktica FX2", "Praktica FX3", "Praktica IV", "Praktica IVB", "Praktica IVM", "Praktica IVBM", "Praktica IVF", "Praktica IVFB", "Praktica V", "Praktica VF", "Praktica Nova", "Praktica Nova B", "Praktica Nova I", "Praktica Nova IB", "Praktica Super TL2", "Praktica Super TL3", "Praktica L2", "Praktica LTL2", "Praktica LTL3", "Praktica LLC", "Praktica Mat", "Praktica MTL 50", "Praktica PLC2", "Praktica PLC3", "Praktica VLC", "Praktica VLC2", "Praktica VLC3", "Kiev 2", "Kiev 2A", "Kiev 3", "Kiev 3A", "Kiev 5", "Kiev 17", "Kiev 19", "Kiev 19M", "Kiev 20", "Kiev 88CM", "Kiev Salut", "Kiev Salut-S", "Kiev 90")
+                   "Praktiflex", "Praktica FX", "Praktica FX2", "Praktica FX3", "Praktica IV", "Praktica IVB", "Praktica IVM", "Praktica IVBM", "Praktica IVF", "Praktica IVFB", "Praktica V", "Praktica VF", "Praktica Nova", "Praktica Nova B", "Praktica Nova I", "Praktica Nova IB", "Praktica Super TL2", "Praktica Super TL3", "Praktica L2", "Praktica LTL2", "Praktica LTL3", "Praktica LLC", "Praktica Mat", "Praktica MTL 50", "Praktica PLC2", "Praktica PLC3", "Praktica VLC", "Praktica VLC2", "Praktica VLC3", "Kiev 2", "Kiev 2A", "Kiev 3", "Kiev 3A", "Kiev 5", "Kiev 17", "Kiev 19", "Kiev 19M", "Kiev 20", "Kiev 88CM", "Kiev Salut", "Kiev Salut-S", "Kiev 90",
+                   "Olympus M-1", "Olympus OM-2000", "Olympus FTL", "Olympus Pen F", "Olympus Pen FT", "Olympus Pen FV")
 
 # Models that must not match when the text also contains this pattern.
 MODEL_EXCLUDE = {
     "Canon EF": re.compile(r"\beos\b"),  # 'Canon EF' there is the EOS lens mount, not the 1973 camera
+}
+# Models whose names digital cameras share: a title match is dropped (flag 'digital?') when the
+# title or the description shows the digital one (the Micro Four Thirds PEN-F of 2016, 'E-M1').
+_DIGITAL_TWIN = (r"(?<![a-z])m\.? ?zuiko|\bmft\b|micro ?(?:four|4) ?thirds|\bsensor|auslosungen|shutter count"
+                 r"|declenchements|\bevf\b|\b4k\b|\bibis\b|\d ?mp\b|megapixel|digital|numerique"
+                 # chargers, rechargeable batteries, screens: the half-frame Pen F has no battery at all
+                 r"|mirrorless|spiegellos|hybride|caricabatter|ladegerat|ladekabel|chargeur|\bcharger|\bakku|\blcd\b"
+                 r"|\bwi-?fi\b|\bvideo\b|\bjpe?g\b")
+DIGITAL_TWINS = {
+    "Olympus Pen F": re.compile(_DIGITAL_TWIN),
+    "Olympus M-1": re.compile(_DIGITAL_TWIN + r"|\bom-?d\b|\be-?m ?1\b|mark ?(?:ii|iii|2|3)\b"),
 }
 # A title naming one of these series is a known non-list camera: do not look
 # for a list model in its description ('Canon EOS 5000 ... Canon EF Objektiv').
@@ -766,6 +785,10 @@ def classify(title, description=None, vinted_brand=None):
                 and (not title_brands or MODEL_INFO[h[2]]["brand"] in title_brands)]
         if hits:
             model, source = hits[0][2], "description"
+
+    if model in DIGITAL_TWINS and DIGITAL_TWINS[model].search(normalize(f"{title} {description or ''}")):
+        model, source = None, None
+        title_flags = title_flags + ["digital?"] if "digital?" not in title_flags else title_flags
 
     if model:
         info = MODEL_INFO[model]
