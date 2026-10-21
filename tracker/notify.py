@@ -46,55 +46,71 @@ def _origin(item):
 
 
 def sale_stats(items):
-    """{model: (sales, mean, lowest, highest)} over the sold list cameras in the data
-    (without placeholder prices or flagged listings, as in the statistics)."""
-    prices = {}
+    """{model: (sales, mean price, lowest, highest, mean days to sell or None)} over the sold list
+    cameras in the data (without placeholder prices or flagged listings, as in the statistics)."""
+    sold = {}
     for i in items:
         price = report.current_price(i)
         if (i.get("group") == "list" and i.get("status") == "sold" and price is not None
                 and not report.stat_flags(i) & report.EXCLUDED_FLAGS):
-            prices.setdefault(i.get("model"), []).append(price)
-    return {m: (len(p), round(sum(p) / len(p)), min(p), max(p)) for m, p in prices.items()}
+            sold.setdefault(i.get("model"), []).append(i)
+    stats = {}
+    for model, cameras in sold.items():
+        prices = [report.current_price(i) for i in cameras]
+        days = [d for d in (report.days_to_sell(i) for i in cameras) if d is not None]
+        stats[model] = (len(prices), round(sum(prices) / len(prices)), min(prices), max(prices),
+                        sum(days) / len(days) if days else None)
+    return stats
 
 
-def _sales_line(model, stats):
-    """'Продажи Zenit E в базе: в среднем 32 € (от 15 € до 60 €, продаж: 3)'."""
+def _sales_lines(model, stats):
+    """['Продажи Zenit E в базе: в среднем 32 € (от 15 € до 60 €, продаж: 3)',
+        'Продаются в среднем за: 4 дня']."""
     if model not in stats:
-        return f"Продажи {model} в базе: пока нет"
-    n, mean, low, high = stats[model]
+        return [f"Продажи {model} в базе: пока нет"]
+    n, mean, low, high, days = stats[model]
     spread = f"от {report._price_text(low)} € до {report._price_text(high)} €, " if n > 1 else ""
-    return f"Продажи {model} в базе: в среднем {mean} € ({spread}продаж: {n})"
+    when = report.format_on_sale(days) if days is not None else "пока неизвестно"
+    return [f"Продажи {model} в базе: в среднем {mean} € ({spread}продаж: {n})", f"Продаются в среднем за: {when}"]
 
 
 def message(cameras, now, welcome_count=None, stats=None):
-    """The letter: subject, plain text and HTML."""
+    """The letter: subject, plain text and HTML. Each camera in paragraphs: model and price, its
+    model's sales, the listing, the description."""
     stats = stats or {}
     msg = EmailMessage()
     if welcome_count is not None:
         msg["Subject"] = "⚡ Vinted: уведомления «До 20 €» включены"
         intro = (f"Уведомления включены. Сейчас в листе «До 20 €» {welcome_count} камер(ы). Дальше письмо придёт, "
                  "когда в лист попадёт новая камера: новое объявление, найденное старое или подешевевшее до 20 €.")
-        text, rows = [intro], [f"<p>{escape(intro)}</p>"]
+        text, rows = [intro, ""], [f"<p>{escape(intro)}</p>"]
     else:
         first = cameras[0]
         price = report._price_text(report.current_price(first))
         more = f" и ещё {len(cameras) - 1}" if len(cameras) > 1 else ""
         msg["Subject"] = f"⚡ Vinted «До 20 €»: {first.get('model', '')} — {price} €{more}"
         text, rows = [], []
+    p = 'style="margin:0 0 10px 0"'
     for item in cameras:
         price = report._price_text(report.current_price(item))
         model, title, url, origin = item.get("model") or "", item.get("title") or "", item.get("url") or "", _origin(item)
         description = report._one_line(item.get("description"), DESCRIPTION_CHARS)
-        sales = _sales_line(model, stats)
-        text.append(f"{model} — {price} € ({origin})\n{sales}\n{title}\n{description}\n{url}\n".replace("\n\n", "\n"))
+        sales = _sales_lines(model, stats)
+        text += [f"{model} — {price} €", origin, "", *sales, "", title, url, ""]
+        if description:
+            text += [description, ""]
+        text.append("—" * 20)
         photo = item.get("photo")
-        image = (f'<td style="vertical-align:top;padding-right:12px"><a href="{escape(url)}">'
+        image = (f'<td style="vertical-align:top;padding-right:14px"><a href="{escape(url)}">'
                  f'<img src="{escape(photo)}" width="160" alt="" style="border-radius:6px"></a></td>' if photo else "")
-        rows.append(f'<table style="margin:0 0 16px 0"><tr>{image}<td style="vertical-align:top">'
-                    f'<b>{escape(model)} — {escape(price)} €</b> <i>({escape(origin)})</i><br>'
-                    f'<span style="color:#1a7f37">{escape(sales)}</span><br>'
-                    f'<a href="{escape(url)}">{escape(title)}</a><br>'
-                    f'<span style="color:#555">{escape(description)}</span></td></tr></table>')
+        rows.append(f'<table style="margin:0 0 18px 0;border-bottom:1px solid #ddd;padding-bottom:12px"><tr>{image}'
+                    f'<td style="vertical-align:top">'
+                    f'<p {p}><b style="font-size:16px">{escape(model)} — {escape(price)} €</b><br>'
+                    f'<i>{escape(origin)}</i></p>'
+                    f'<p {p}><span style="color:#1a7f37">{"<br>".join(escape(line) for line in sales)}</span></p>'
+                    f'<p {p}><a href="{escape(url)}">{escape(title)}</a></p>'
+                    + (f'<p style="margin:0;color:#555">{escape(description)}</p>' if description else "")
+                    + '</td></tr></table>')
     text.append(f"Проверка трекера: {now} (Берлин)")
     rows.append(f"<p><small>Проверка трекера: {escape(now)} (Берлин)</small></p>")
     msg.set_content("\n".join(text))
