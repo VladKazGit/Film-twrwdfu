@@ -316,7 +316,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 33
+VERSION = 34
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -337,9 +337,14 @@ _DIGITAL_TWIN = (r"(?<![a-z])m\.? ?zuiko|\bmft\b|micro ?(?:four|4) ?thirds|\bsen
                  # chargers, rechargeable batteries, screens: the half-frame Pen F has no battery at all
                  r"|mirrorless|spiegellos|hybride|caricabatter|ladegerat|ladekabel|chargeur|\bcharger|\bakku|\blcd\b"
                  r"|\bwi-?fi\b|\bvideo\b|\bjpe?g\b")
+# The film OM-1 is sold with words like 'hybride', 'video', 'digital' around it ('pas hybride'),
+# so the OM System OM-1 of 2022 and the E-M1 are told by Micro Four Thirds signs only.
+_DIGITAL_OM = (r"(?<![a-z])m\.? ?zuiko|micro ?(?:four|4) ?thirds|\bmft\b|\d ?mp\b|megapixel|mirrorless|spiegellos"
+               r"|\bevf\b|\bibis\b|\bom system om-?1\b|\bom-?d\b|\be-?m ?1\b|mark ?(?:ii|iii|2|3)\b")
 DIGITAL_TWINS = {
     "Olympus Pen F": re.compile(_DIGITAL_TWIN),
-    "Olympus M-1": re.compile(_DIGITAL_TWIN + r"|\bom-?d\b|\be-?m ?1\b|mark ?(?:ii|iii|2|3)\b"),
+    "Olympus M-1": re.compile(_DIGITAL_OM),
+    "Olympus OM-1": re.compile(_DIGITAL_OM),
 }
 # A title naming one of these series is a known non-list camera: do not look
 # for a list model in its description ('Canon EOS 5000 ... Canon EF Objektiv').

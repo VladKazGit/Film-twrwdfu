@@ -39,6 +39,9 @@ CASES = [
     ("Kiev 35A", None, None),
     ("Kiev Salut-S + Industar", None, "Kiev Salut-S"),
     ("Olympus M-1 mit Zuiko 50mm 1.8", None, "Olympus M-1"),
+    ("OM System OM-1 + MZuiko 12-40mm F2.8 PRO II", None, None),
+    ("OM System OM-1 Mark II Body", None, None),
+    ("Olympus OM-1 MD + Zuiko 50mm", None, "Olympus OM-1"),
     ("Olympus OM-1", None, "Olympus OM-1"),
     ("Olympus OM-D E-M1 Mark II", None, None),
     ("Olympus E-M10", None, None),
@@ -302,6 +305,8 @@ DESC_CASES = [
     ("Olympus PEN-F silber", "Body mit M.Zuiko 17mm, 4K, Micro Four Thirds", None),
     ("Olympus Pen F", "Halbformat-Spiegelreflex von 1963, F.Zuiko 38mm 1.8, ohne Batterie", "Olympus Pen F"),
     ("Olympus M1", "OM-D, Mark II, 20 MP", None),
+    ("OM System OM-1", "Body, 80 MP High Res, Akku und Ladegerät", None),
+    ("Olympus OM-1 + Zuiko 50mm", "Argentique mécanique, pas hybride, fonctionne sans pile", "Olympus OM-1"),
     ("Olympus PEN-F – Corpo macchina + accessori originali", "Caricabatterie originale. Ottima mirrorless compatta", None),
 ]
 
