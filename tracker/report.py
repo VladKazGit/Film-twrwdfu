@@ -48,7 +48,7 @@ def kit_details_text(item):
 SOURCE_RU = {"title": "заголовок", "description": "описание", "brand_only": "только бренд",
              "photo": "фото", "manual": "вручную"}
 NAME_SOURCE_RU = {"title": "название: заголовок", "description": "название: описание",
-                  "photo": "название: надпись на фото"}
+                  "photo": "название: надпись на фото", "more_photos": "название: надпись на 2-3 фото"}
 
 ITEM_HEADER = [
     "id", "Модель", "Заголовок", "Статус", "Цена старт", "Цена финал", "Сохранений", "Выставлен после", "Впервые",
@@ -758,6 +758,29 @@ def photo_rows(items, dropped):
                      i.get("title") or "",
                      _num(current_price(i)), STATUS_RU.get(i.get("status"), i.get("status") or ""), similar,
                      label.get("ocr") or "", label.get("at") or "", i["id"], i.get("url") or ""])
+    return rows
+
+
+UNNAMED_HEADER = ["Фото 1", "Фото 2", "Фото 3", "Похоже на", "Заголовок", "Цена, €", "Статус", "Впервые", "id",
+                  "Ссылка"]
+
+
+def unnamed_rows(items):
+    """'По фото: без названия': kept cards of 'Остальные' whose title, description and three photos
+    name no camera - for the user to name in 'Ручная разметка' (id -> name); newest first."""
+    from . import photos
+
+    rows = [UNNAMED_HEADER]
+    cards = sorted((i for i in items if i.get("group") == "rest" and i.get("name_tried") and not i.get("camera_name")
+                    and i.get("model_source") != "manual"),
+                   key=lambda i: (i.get("first_seen") or "", i["id"]), reverse=True)
+    for i in cards:
+        more = (i.get("photos_more") or []) + ["", ""]
+        similar = ((i.get("photo_label") or {}).get("similar") or "").replace("model:", "").replace("junk:", "мусор: ")
+        rows.append([photos.image_formula(i.get("photo")), photos.image_formula(more[0]), photos.image_formula(more[1]),
+                     similar, i.get("title") or "", _num(current_price(i)),
+                     STATUS_RU.get(i.get("status"), i.get("status") or ""), i.get("first_seen") or "", i["id"],
+                     i.get("url") or ""])
     return rows
 
 

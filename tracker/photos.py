@@ -195,6 +195,75 @@ def run(root, items, budget_s, session=None):
     return changed, stats
 
 
+MORE_PHOTOS = 2  # the 2nd and 3rd photos of a listing whose first photo and text name no camera
+
+
+def more_photo_candidates(items):
+    """Kept cards of 'Остальные' without an exact name, not tried yet; newest first."""
+    return sorted((i for i in items if i.get("group") == "rest" and not i.get("camera_name")
+                   and (i.get("photo_label") or {}).get("verdict", [""])[0] in ("keep", "list")
+                   and "name_tried" not in i and i.get("model_source") != "manual"),
+                  key=lambda i: i["id"], reverse=True)
+
+
+def read_more_photos(items, client, budget_s, session=None):
+    """Open the listings of unnamed kept cards and read the text on their 2nd and 3rd photos
+    (photo_more_ocr; the names come from it in tick.name_step). Returns (changed cards, stats)."""
+    import tempfile
+    from pathlib import Path
+
+    import requests
+    from rapidocr_onnxruntime import RapidOCR
+
+    from .vinted import VintedError
+
+    stats = {"opened": 0, "photos": 0, "named": 0, "errors": 0}
+    todo = more_photo_candidates(items)
+    if not todo:
+        return [], stats
+    started = time.monotonic()
+    ocr = RapidOCR()
+    session = session or requests.Session()
+    session.headers.setdefault("User-Agent", "Mozilla/5.0")
+    changed = []
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "photo.jpg"
+        for item in todo:
+            if time.monotonic() - started > budget_s:
+                break
+            try:
+                page = client.item_page(item["id"])
+            except VintedError:
+                stats["errors"] += 1
+                break  # the budget or Vinted: next tick
+            stats["opened"] += 1
+            item["name_tried"] = clock.stamp()
+            if page.get("description") and not item.get("description"):
+                item["description"] = page["description"]
+            urls = [u for u in (page.get("photos") or [])[1:1 + MORE_PHOTOS] if PHOTO_URL.match(u)]
+            item["photos_more"] = urls
+            texts = []
+            for url in urls:
+                time.sleep(random.uniform(*PAUSE))
+                try:
+                    resp = session.get(url, timeout=30)
+                except requests.RequestException:
+                    continue
+                if resp.status_code != 200 or not resp.headers.get("content-type", "").startswith("image/"):
+                    continue
+                path.write_bytes(resp.content)
+                stats["photos"] += 1
+                result, _ = ocr(str(path))
+                read = " ".join(t for _, t, s in (result or []) if float(s) > OCR_SCORE)
+                texts.append(read[:80])
+                if models.camera_name(read, from_photo=True):
+                    stats["named"] += 1
+                    break
+            item["photo_more_ocr"] = " | ".join(texts)
+            changed.append(item)
+    return changed, stats
+
+
 def is_dropped(item):
     """A card of 'Остальные' the photo check drops (manual labels are never dropped)."""
     label = item.get("photo_label") or {}

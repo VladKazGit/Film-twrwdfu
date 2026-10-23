@@ -299,6 +299,18 @@ def main():
         assert report.item_row(named[0])[1] == "Minolta X300S" and "название" in report.item_row(named[0])[report.ITEM_HEADER.index("Источник модели")]
         sib = report.sibling_rows(named)
         assert [r[1] for r in sib[1:]] == ["Minolta X300S"] and "Minolta X-700" in sib[1][2], sib
+        # No name from the first photo: the 2nd/3rd photos are read; still nothing -> the manual sheet.
+        more = [dict(labelled, id=31, title="Kamera", photo_label={"verdict": ["keep"]}, name_tried="t",
+                     photo_more_ocr="CHINON CE-4 | x", photos_more=[photo, photo]),
+                dict(labelled, id=32, title="Kamera", photo_label={"verdict": ["keep"], "similar": "model:Zenit E"},
+                     name_tried="t", photo_more_ocr="", photos_more=[photo])]
+        assert [i["id"] for i in photos.more_photo_candidates(more + [dict(labelled, id=33, title="Kamera",
+                photo_label={"verdict": ["keep"]})])] == [33], "tried once"
+        tick.name_step(DataStore(tempfile.mkdtemp()), {"items": more})
+        assert more[0]["camera_name"] == "Chinon CE-4" and more[0]["camera_name_source"] == "more_photos"
+        unnamed = report.unnamed_rows(more)
+        assert [r[-2] for r in unnamed[1:]] == [32] and unnamed[1][1] == f'=IMAGE("{photo}")' and unnamed[1][2] == ""
+        assert unnamed[1][3] == "Zenit E"
         # Relists: the same seller and model, the earlier listing taken down unsold before the next one showed up.
         def listing(item_id, status, first, last, price, seller=7, **extra):
             return dict({"id": item_id, "group": "list", "model": "Canon AE-1", "seller_id": seller, "status": status,

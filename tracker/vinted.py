@@ -235,15 +235,24 @@ def age_days(uploaded_ago):
     return next((int(m.group(1)) * days for prefix, days in _AGE_UNITS if unit.startswith(prefix)), None)
 
 
+def _all_photos(payload):
+    """The listing's photos in order (the catalog shows only the first)."""
+    lists = [p for p in _values_after(payload, "photos")
+             if isinstance(p, list) and p and all(isinstance(x, dict) for x in p)]
+    best = max(lists, key=len) if lists else []
+    return [x["url"] for x in best if isinstance(x.get("url"), str) and x["url"].startswith("http")] or None
+
+
 def parse_item(html, status_code, final_url, item_id):
     """Status and details of an item page.
 
     status: active / reserved / hidden / sold / deleted / unknown.
     Other keys (None when absent): title, description, price, brand,
     condition, uploaded_ago (relative text like '3 Std.'), favourites
-    (users' saves), reason.
+    (users' saves), photo (the first), photos (all, in order), reason.
     """
-    result = dict.fromkeys(("title", "description", "price", "brand", "condition", "uploaded_ago", "favourites", "photo"))
+    result = dict.fromkeys(("title", "description", "price", "brand", "condition", "uploaded_ago", "favourites", "photo",
+                            "photos"))
     result.update(status="unknown", reason=None)
 
     if status_code in (404, 410):
@@ -271,6 +280,7 @@ def parse_item(html, status_code, final_url, item_id):
         condition=_text(attributes.get("status")),
         uploaded_ago=_text(attributes.get("upload_date")),
         favourites=_favourites(payload, item_id),
+        photos=_all_photos(payload),
     )
     if ld:
         result["title"] = result["title"] or _text(ld.get("name"))

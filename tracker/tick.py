@@ -1123,19 +1123,23 @@ def write_sheets(writer, result, state_flags):
     writer.replace(sheets.SUMMARY_SHEET, report.summary_rows(result["summary"]))
     writer.replace(sheets.TOP_SHEET, report.top_rows(items, result["run"]["at"]), links=True)
     writer.replace(sheets.ANALYTICS_SHEET, report.analytics_rows(items, result["run"]["at"]))
-    if any(i.get("photo_label") for i in items) or result.get("photo_dropped"):
-        # kept: the cards; dropped: the records of what left the data (only full ticks bring them)
-        pages = [(sheets.PHOTO_KEEP_SHEET, items, False)]
-        if "photo_dropped" in result:
-            pages.append((sheets.PHOTO_DROP_SHEET, result["photo_dropped"], True))
-        for title, rows_from, dropped in pages:
-            writer.replace(title, report.photo_rows(rows_from, dropped), links=True)
-            try:  # cosmetic: room for the photos (rows added by the rewrite are short again)
-                writer.set_row_height(title, PHOTO_ROW_PX)
-            except Exception as exc:
-                print(f"sheets: photo rows not resized: {type(exc).__name__}")
-        if writer.has(sheets.OLD_PHOTO_SHEET):
-            writer.delete(sheets.OLD_PHOTO_SHEET)  # split in two
+    if any(i.get("photo_label") for i in items):
+        writer.replace(sheets.PHOTO_KEEP_SHEET, report.photo_rows(items, dropped=False), links=True)
+        try:  # cosmetic: room for the photos (rows added by the rewrite are short again)
+            writer.set_row_height(sheets.PHOTO_KEEP_SHEET, PHOTO_ROW_PX)
+        except Exception as exc:
+            print(f"sheets: photo rows not resized: {type(exc).__name__}")
+    # What the photo check dropped is gone from the data; its sheet only weighed the table down
+    # (the short records stay in photo_dropped.json). The tracker made both sheets: nothing of the user's.
+    for old in (sheets.OLD_PHOTO_SHEET, sheets.PHOTO_DROP_SHEET):
+        if writer.has(old):
+            writer.delete(old)
+    if any(i.get("name_tried") for i in items):
+        writer.replace(sheets.UNNAMED_SHEET, report.unnamed_rows(items), links=True)
+        try:
+            writer.set_row_height(sheets.UNNAMED_SHEET, PHOTO_ROW_PX)
+        except Exception as exc:
+            print(f"sheets: unnamed rows not resized: {type(exc).__name__}")
     if any(i.get("camera_name") for i in items):
         writer.replace(sheets.SIBLINGS_SHEET, report.sibling_rows(items), links=True)
         try:
@@ -1233,13 +1237,14 @@ def name_step(store, result):
         name, source = None, None
         for source, text, from_photo in (("title", item.get("title"), False),
                                          ("description", (item.get("description") or "")[:300], False),
-                                         ("photo", label.get("ocr"), True)):
+                                         ("photo", label.get("ocr"), True),
+                                         ("more_photos", item.get("photo_more_ocr"), True)):
             name = models.camera_name(text, from_photo=from_photo)
             if name:
                 break
         source = source if name else None
         text = f"{name[0]} {name[1]}" if name else None
-        model = models.list_model_of(*name) if name and source == "photo" else None
+        model = models.list_model_of(*name) if name and source in ("photo", "more_photos") else None
         moved = bool(model and (label.get("verdict") or [""])[0] != "drop"
                      and not SIGNAL_FLAGS & set(item.get("flags") or []))
         if moved:
@@ -1251,6 +1256,26 @@ def name_step(store, result):
             store.save(item)
         counts["named" if name else "unnamed"] += 1
     return counts
+
+
+MORE_PHOTOS_BUDGET_S = 60  # unnamed kept cards: the 2nd and 3rd photos per full tick
+
+
+def more_photos_step(store, result, client, started):
+    """Unnamed kept cards of 'Остальные': read the 2nd and 3rd photos (one listing page each).
+    A failure never fails the tick. Counts only in the log."""
+    from . import photos
+
+    if time.monotonic() - started > PHOTO_START_LIMIT_S or not photos.available(store.root):
+        return
+    try:
+        changed, stats = photos.read_more_photos(result["items"], client, MORE_PHOTOS_BUDGET_S)
+        for item in changed:
+            store.save(item)
+        print(f"more photos: listings {stats['opened']}, photos {stats['photos']}, named {stats['named']},"
+              f" errors {stats['errors']}")
+    except Exception as exc:
+        print(f"more photos failed: {type(exc).__name__}: {env.redact(exc)}")
 
 
 def photo_step(store, result, started):
@@ -1307,6 +1332,7 @@ def _main(args):
         print(log_line(result["run"]))
         if not (args.quick or args.cheap or result["fatal"]):
             photo_step(store, result, started)
+            more_photos_step(store, result, client, started)
             try:  # exact names of 'Остальные'; a failure never fails the tick
                 names = name_step(store, result)
                 print(f"names: named {names['named']}, without a name {names['unnamed']},"
