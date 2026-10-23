@@ -15,7 +15,9 @@ CHEAP_MAX_PRICE = 20.0
 RUNS_SHEET = "Запуски"
 SUMMARY_SHEET = "Сводка"
 TOP_SHEET = "Топ-10"
-PHOTO_SHEET = "По фото (проба)"
+PHOTO_KEEP_SHEET = "По фото: оставить"   # kept by the photo verdict (and the ones for 'Список'), trial
+PHOTO_DROP_SHEET = "По фото: убрать"
+OLD_PHOTO_SHEET = "По фото (проба)"      # the one sheet before the split: removed once
 ANALYTICS_SHEET = "Аналитика"
 MODELS_SHEET = "Модели"
 MANUAL_SHEET = "Ручная разметка"
@@ -102,6 +104,12 @@ class SheetWriter:
 
     def has(self, title):
         return title in self._sheets
+
+    def delete(self, title):
+        """Remove a sheet the tracker made and no longer writes (nothing of the user's is on it)."""
+        ws = self._sheets.pop(title, None)
+        if ws is not None:
+            self.spreadsheet.del_worksheet(ws)
 
     def set_row_height(self, title, pixels):
         """Taller data rows (the header stays), e.g. room for photos."""

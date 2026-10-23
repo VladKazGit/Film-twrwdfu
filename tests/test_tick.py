@@ -115,6 +115,9 @@ class FakeSpreadsheet:
         self.sheets[title] = FakeWorksheet(title)
         return self.sheets[title]
 
+    def del_worksheet(self, ws):
+        del self.sheets[ws.title]
+
 
 def older(start, n=20):
     return [rec(start - k, f"Kamera alt {k}", 20.0) for k in range(n)]
@@ -253,8 +256,18 @@ def main():
                     "price_start": 20.0, "price_history": [], "first_seen": "2026-10-17 10:00", "url": "u",
                     "photo_label": {"verdict": ["list", "Zenit 122", "надпись"], "similar": "model:Zenit E",
                                     "ocr": "ZENIT 122", "at": "2026-10-17 10:05"}}
-        prow = report.photo_rows([labelled, dict(labelled, id=8, photo_label=None)])
-        assert len(prow) == 2 and prow[1][:2] == [f'=IMAGE("{photo}")', "в «Список»: Zenit 122 (по надписи)"], prow
+        dropped = dict(labelled, id=9, photo_label={"verdict": ["drop", "compact"], "at": "x"})
+        kept_older = dict(labelled, id=10, first_seen="2026-10-18 10:00", photo_label={"verdict": ["keep"], "at": "x"})
+        both = [labelled, dict(labelled, id=8, photo_label=None), dropped, kept_older]
+        prow = report.photo_rows(both, dropped=False)
+        assert [r[-2] for r in prow[1:]] == [7, 10], "kept: the ones for 'Список' on top, then newest first"
+        assert prow[1][:2] == [f'=IMAGE("{photo}")', "в «Список»: Zenit 122 (по надписи)"], prow
+        assert [r[-2] for r in report.photo_rows(both, dropped=True)[1:]] == [9]
+        fs = FakeSpreadsheet()
+        fs.sheets[sheets.OLD_PHOTO_SHEET] = FakeWorksheet(sheets.OLD_PHOTO_SHEET)
+        fw = sheets.SheetWriter(fs)
+        fw.delete(sheets.OLD_PHOTO_SHEET)
+        assert sheets.OLD_PHOTO_SHEET not in fs.sheets and not fw.has(sheets.OLD_PHOTO_SHEET)
         assert sheets._as_typed(prow[1][0]) == prow[1][0] and sheets._as_typed('=HYPERLINK("x")').startswith("'")
         assert photos.image_formula('https://images1.vinted.net/a"),HYPERLINK("x') == "" and photos.image_formula("http://x") == ""
         assert photos.verdict_text({"verdict": ["drop", "compact"]}) == "убрать: compact"

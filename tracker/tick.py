@@ -1124,11 +1124,14 @@ def write_sheets(writer, result, state_flags):
     writer.replace(sheets.TOP_SHEET, report.top_rows(items, result["run"]["at"]), links=True)
     writer.replace(sheets.ANALYTICS_SHEET, report.analytics_rows(items, result["run"]["at"]))
     if any(i.get("photo_label") for i in items):
-        writer.replace(sheets.PHOTO_SHEET, report.photo_rows(items), links=True)
-        try:  # cosmetic: room for the photos (rows added by the rewrite are short again)
-            writer.set_row_height(sheets.PHOTO_SHEET, PHOTO_ROW_PX)
-        except Exception as exc:
-            print(f"sheets: photo rows not resized: {type(exc).__name__}")
+        for title, dropped in ((sheets.PHOTO_KEEP_SHEET, False), (sheets.PHOTO_DROP_SHEET, True)):
+            writer.replace(title, report.photo_rows(items, dropped), links=True)
+            try:  # cosmetic: room for the photos (rows added by the rewrite are short again)
+                writer.set_row_height(title, PHOTO_ROW_PX)
+            except Exception as exc:
+                print(f"sheets: photo rows not resized: {type(exc).__name__}")
+        if writer.has(sheets.OLD_PHOTO_SHEET):
+            writer.delete(sheets.OLD_PHOTO_SHEET)  # split in two
     if not state_flags.get("runs_header_v5"):  # v5: 'Новых в «До 20 €»' and 'Комментарий' right after the time
         writer.ensure_runs_header()
         updates["runs_header_v5"] = True

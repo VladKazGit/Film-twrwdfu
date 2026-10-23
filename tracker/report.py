@@ -730,15 +730,21 @@ def analytics_rows(items, now):
 
 PHOTO_HEADER = ["Фото", "Вердикт по фото", "Заголовок", "Цена, €", "Статус", "Похоже на", "Надпись на фото",
                 "Размечено", "id", "Ссылка"]
-PHOTO_ROWS_LIMIT = 1000
+PHOTO_ROWS_LIMIT = 2000
 
 
-def photo_rows(items):
-    """'По фото (проба)': cards of 'Остальные' labelled by photo, newest first (trial: verdicts only)."""
+def photo_rows(items, dropped):
+    """'По фото: убрать' (dropped=True) or 'По фото: оставить': cards of 'Остальные' labelled by
+    photo, newest first; the ones for 'Список' at the top of the kept (trial: verdicts only)."""
     from . import photos
 
-    labelled = sorted((i for i in items if i.get("group") == "rest" and i.get("photo_label")),
-                      key=lambda i: (i.get("first_seen") or "", i["id"]), reverse=True)[:PHOTO_ROWS_LIMIT]
+    def kind(i):
+        return (i["photo_label"].get("verdict") or [""])[0]
+
+    labelled = sorted((i for i in items if i.get("group") == "rest" and i.get("photo_label")
+                       and (kind(i) == "drop") == dropped),
+                      key=lambda i: (kind(i) == "list", i.get("first_seen") or "", i["id"]),
+                      reverse=True)[:PHOTO_ROWS_LIMIT]
     rows = [PHOTO_HEADER]
     for i in labelled:
         label = i["photo_label"]
