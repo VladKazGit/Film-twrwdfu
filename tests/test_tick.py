@@ -311,6 +311,18 @@ def main():
         unnamed = report.unnamed_rows(more)
         assert [r[-2] for r in unnamed[1:]] == [32] and unnamed[1][1] == f'=IMAGE("{photo}")' and unnamed[1][2] == ""
         assert unnamed[1][3] == "Zenit E"
+        # Each card on one sheet: named outside the list -> 'Предложение' (the most frequent model first),
+        # near a list model -> 'Братья', tried without a name -> 'без названия', the rest -> 'оставить'.
+        cards = [dict(labelled, id=41, camera_name="Chinon CE-4", first_seen="2026-10-17 09:00"),
+                 dict(labelled, id=42, camera_name="Agfa Selecta", first_seen="2026-10-17 11:00"),
+                 dict(labelled, id=43, camera_name="Chinon CE-4", first_seen="2026-10-17 12:00"),
+                 dict(labelled, id=44, camera_name="Minolta X-300"),
+                 dict(labelled, id=45, name_tried="t"), dict(labelled, id=46)]
+        prop = report.proposal_rows(cards)
+        assert [(r[1], r[2], r[-2]) for r in prop[1:]] == [("Chinon CE-4", 2, 43), ("Chinon CE-4", 2, 41),
+                                                           ("Agfa Selecta", 1, 42)], prop
+        assert [r[-2] for r in report.sibling_rows(cards)[1:]] == [44]
+        assert [r[-2] for r in report.photo_rows(cards, dropped=False)[1:]] == [46]
         # Relists: the same seller and model, the earlier listing taken down unsold before the next one showed up.
         def listing(item_id, status, first, last, price, seller=7, **extra):
             return dict({"id": item_id, "group": "list", "model": "Canon AE-1", "seller_id": seller, "status": status,

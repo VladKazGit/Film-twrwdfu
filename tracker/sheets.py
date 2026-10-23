@@ -19,6 +19,7 @@ PHOTO_KEEP_SHEET = "По фото: оставить"   # kept by the photo verdi
 PHOTO_DROP_SHEET = "По фото: убрать"     # no longer written: removed once to lighten the table
 OLD_PHOTO_SHEET = "По фото (проба)"
 UNNAMED_SHEET = "По фото: без названия"  # no name after three photos: for 'Ручная разметка'
+PROPOSAL_SHEET = "Предложение"  # named cameras outside the list: for the user to pick new list models
 SIBLINGS_SHEET = "Братья моделей списка"  # cameras outside the list next to list models, for the user      # the one sheet before the split: removed once
 ANALYTICS_SHEET = "Аналитика"
 MODELS_SHEET = "Модели"

@@ -1141,6 +1141,11 @@ def write_sheets(writer, result, state_flags):
         except Exception as exc:
             print(f"sheets: unnamed rows not resized: {type(exc).__name__}")
     if any(i.get("camera_name") for i in items):
+        writer.replace(sheets.PROPOSAL_SHEET, report.proposal_rows(items), links=True)
+        try:
+            writer.set_row_height(sheets.PROPOSAL_SHEET, PHOTO_ROW_PX)
+        except Exception as exc:
+            print(f"sheets: proposal rows not resized: {type(exc).__name__}")
         writer.replace(sheets.SIBLINGS_SHEET, report.sibling_rows(items), links=True)
         try:
             writer.set_row_height(sheets.SIBLINGS_SHEET, PHOTO_ROW_PX)

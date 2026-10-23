@@ -746,8 +746,10 @@ def photo_rows(items, dropped):
     def kind(i):
         return (i["photo_label"].get("verdict") or [""])[0]
 
+    # A card with a name sits on 'Предложение' or 'Братья моделей списка', one tried without luck on
+    # 'По фото: без названия': here only the cards not sorted out yet.
     labelled = sorted((i for i in items if i.get("group") == "rest" and i.get("photo_label")
-                       and (kind(i) == "drop") == dropped),
+                       and (kind(i) == "drop") == dropped and not i.get("camera_name") and not i.get("name_tried")),
                       key=lambda i: (kind(i) == "list", i.get("first_seen") or "", i["id"]),
                       reverse=True)[:PHOTO_ROWS_LIMIT]
     rows = [PHOTO_HEADER]
@@ -788,18 +790,46 @@ SIBLINGS_HEADER = ["Фото", "Камера", "Братья в списке", "
                    "Впервые", "id", "Ссылка"]
 
 
+def near_list_models(item):
+    """List models next to a named camera of 'Остальные' (same brand and series), or []."""
+    name = item.get("camera_name") or ""
+    brand = next((b for b in sorted(models.BRANDS, key=len, reverse=True) if name.startswith(b + " ")), None)
+    return models.siblings(brand, name[len(brand) + 1:]) if brand else []
+
+
+PROPOSAL_HEADER = ["Фото", "Камера", "Таких объявлений", "Откуда название", "Заголовок", "Цена, €", "Статус",
+                   "Впервые", "id", "Ссылка"]
+
+
+def proposal_rows(items):
+    """'Предложение': cards of 'Остальные' with an exact name outside the list (not near a list model:
+    those are on 'Братья моделей списка'), for the user to pick models for the list. The models seen
+    most often first, the same model together, newest first within it."""
+    from . import photos
+
+    cards = [i for i in items if i.get("group") == "rest" and i.get("camera_name") and not near_list_models(i)]
+    seen = Counter(i["camera_name"] for i in cards)
+    cards.sort(key=lambda i: (i.get("first_seen") or "", i["id"]), reverse=True)  # newest first ...
+    cards.sort(key=lambda i: (-seen[i["camera_name"]], i["camera_name"]))       # ... within each model
+    rows = [PROPOSAL_HEADER]
+    for i in cards:
+        rows.append([photos.image_formula(i.get("photo")), i["camera_name"], seen[i["camera_name"]],
+                     NAME_SOURCE_RU.get(i.get("camera_name_source"), ""), i.get("title") or "",
+                     _num(current_price(i)), STATUS_RU.get(i.get("status"), i.get("status") or ""),
+                     i.get("first_seen") or "", i["id"], i.get("url") or ""])
+    return rows
+
+
 def sibling_rows(items):
     """'Братья моделей списка': cards of 'Остальные' whose exact name is a near model of the list
     (same brand and series: Minolta X-300 next to X-700), for the user to decide; newest first."""
     from . import photos
 
-    brands = sorted(models.BRANDS, key=len, reverse=True)
     found = []
     for i in items:
         if i.get("group") != "rest" or not i.get("camera_name"):
             continue
-        brand = next((b for b in brands if i["camera_name"].startswith(b + " ")), None)
-        near = models.siblings(brand, i["camera_name"][len(brand) + 1:]) if brand else []
+        near = near_list_models(i)
         if near:
             found.append((i, near))
     found.sort(key=lambda f: (f[0].get("first_seen") or "", f[0]["id"]), reverse=True)
