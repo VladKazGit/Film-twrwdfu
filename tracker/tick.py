@@ -1122,6 +1122,12 @@ def write_sheets(writer, result, state_flags):
     writer.replace(sheets.SUMMARY_SHEET, report.summary_rows(result["summary"]))
     writer.replace(sheets.TOP_SHEET, report.top_rows(items, result["run"]["at"]), links=True)
     writer.replace(sheets.ANALYTICS_SHEET, report.analytics_rows(items, result["run"]["at"]))
+    if any(i.get("photo_label") for i in items):
+        writer.replace(sheets.PHOTO_SHEET, report.photo_rows(items), links=True)
+        try:  # cosmetic: room for the photos (rows added by the rewrite are short again)
+            writer.set_row_height(sheets.PHOTO_SHEET, PHOTO_ROW_PX)
+        except Exception as exc:
+            print(f"sheets: photo rows not resized: {type(exc).__name__}")
     if not state_flags.get("runs_header_v4"):  # v4: 'Проверок между тиками'
         writer.ensure_runs_header()
         updates["runs_header"] = updates["runs_header_v2"] = updates["runs_header_v3"] = updates["runs_header_v4"] = True
@@ -1195,9 +1201,35 @@ def main():
         return 1
 
 
+PHOTO_TIME_BUDGET_S = 90   # photo labeling of new 'Остальные' per full tick (trial)
+PHOTO_START_LIMIT_S = 9 * 60  # a tick that already ran this long skips it
+PHOTO_ROW_PX = 110
+
+
+def photo_step(store, result, started):
+    """Trial mode: label new cards of 'Остальные' by photo and take the archive verdicts in.
+    Only records 'photo_label'; a failure never fails the tick. Counts only in the log."""
+    from . import photos
+
+    if time.monotonic() - started > PHOTO_START_LIMIT_S or not photos.available(store.root):
+        return
+    try:
+        state = store.load_state()
+        archive = photos.apply_backfill(store.root, result["items"], state)
+        store.save_state(state)
+        fresh, stats = photos.run(store.root, result["items"], PHOTO_TIME_BUDGET_S)
+        for item in archive + fresh:
+            store.save(item)
+        print(f"photos: labelled {stats['labelled']} (drop {stats['drop']}, list {stats['list']}, keep {stats['keep']},"
+              f" gone {stats['gone']}), archive {len(archive)}, errors {stats['errors']}")
+    except Exception as exc:
+        print(f"photos failed: {type(exc).__name__}: {env.redact(exc)}")
+
+
 def _main(args):
     from . import datarepo, sheets
 
+    started = time.monotonic()
     writer, labels, code = None, {}, 0
     if not args.no_sheets and not args.quick:  # a quick check opens the sheet only if 'Список' changed
         try:
@@ -1215,6 +1247,8 @@ def _main(args):
         state_flags = store.load_state()
         result = run_cheap(store, client, labels) if args.cheap else run_tick(store, client, labels, quick=args.quick)
         print(log_line(result["run"]))
+        if not (args.quick or args.cheap or result["fatal"]):
+            photo_step(store, result, started)
         if not result["fatal"]:
             try:  # e-mail alerts: a failure must not fail the tick
                 state = store.load_state()

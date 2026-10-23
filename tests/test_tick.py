@@ -1,5 +1,6 @@
 """Tick logic on a fake Vinted and a fake spreadsheet. Run: python -m tests.test_tick"""
 import tempfile
+import time
 from collections import Counter
 
 from tracker import models, report, tick
@@ -55,6 +56,10 @@ class FakeWorksheet:
 
     def resize(self, rows=None, cols=None):
         self.size = (rows if rows is not None else self.size[0], cols if cols is not None else self.size[1])
+
+    @property
+    def row_count(self):
+        return self.size[0]
 
     def freeze(self, rows):
         pass
@@ -238,6 +243,19 @@ def main():
         assert ss.sheets["Сводка"].rows[0][0] == "Обновлено"
         assert ss.sheets["Топ-10"].rows[2][0] == "Топ-10: чаще всего продаются", ss.sheets["Топ-10"].rows[:4]
         assert ss.sheets["Аналитика"].rows[0][0] == "Обновлено" and ss.sheets["Аналитика"].mode == "RAW"
+        # Photo labels (trial): a sheet with the photo as a formula, nothing else becomes one.
+        from tracker import photos
+        photo = "https://images1.vinted.net/t/abc/f800/123.jpeg"
+        labelled = {"id": 7, "group": "rest", "status": "active", "title": "Appareil photo", "photo": photo,
+                    "price_start": 20.0, "price_history": [], "first_seen": "2026-10-17 10:00", "url": "u",
+                    "photo_label": {"verdict": ["list", "Zenit 122", "надпись"], "similar": "model:Zenit E",
+                                    "ocr": "ZENIT 122", "at": "2026-10-17 10:05"}}
+        prow = report.photo_rows([labelled, dict(labelled, id=8, photo_label=None)])
+        assert len(prow) == 2 and prow[1][:2] == [f'=IMAGE("{photo}")', "в «Список»: Zenit 122 (по надписи)"], prow
+        assert sheets._as_typed(prow[1][0]) == prow[1][0] and sheets._as_typed('=HYPERLINK("x")').startswith("'")
+        assert photos.image_formula('https://images1.vinted.net/a"),HYPERLINK("x') == "" and photos.image_formula("http://x") == ""
+        assert photos.verdict_text({"verdict": ["drop", "compact"]}) == "убрать: compact"
+        tick.photo_step(DataStore(tempfile.mkdtemp()), {"items": [labelled]}, time.monotonic())  # no gallery: off
         # Relists: the same seller and model, the earlier listing taken down unsold before the next one showed up.
         def listing(item_id, status, first, last, price, seller=7, **extra):
             return dict({"id": item_id, "group": "list", "model": "Canon AE-1", "seller_id": seller, "status": status,

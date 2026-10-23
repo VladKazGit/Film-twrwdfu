@@ -1,0 +1,4 @@
+# Photo labeling of 'Остальные' (trial, tracker/photos.py). torch and torchvision come from
+# the CPU-only PyTorch index (the workflow installs them first); without these the step is off.
+open_clip_torch>=3.0
+rapidocr-onnxruntime>=1.3

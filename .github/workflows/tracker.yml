@@ -42,9 +42,26 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-photos.txt
 
       - name: Install dependencies
         run: pip install -q -r requirements.txt
+
+      # Photo labeling of 'Остальные' (trial): CPU-only torch, CLIP and OCR. A failure here
+      # only turns the photo step off; the tracker runs as before.
+      - name: Install photo labeling
+        continue-on-error: true
+        run: |
+          pip install -q torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install -q -r requirements-photos.txt
+
+      - name: Cache the photo model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: clip-vit-l-14-laion2b-s32b-b82k
 
       - name: Ticks
         env:

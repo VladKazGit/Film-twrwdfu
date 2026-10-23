@@ -716,6 +716,27 @@ def analytics_rows(items, now):
     return [r + [""] * (width - len(r)) for r in rows]
 
 
+PHOTO_HEADER = ["Фото", "Вердикт по фото", "Заголовок", "Цена, €", "Статус", "Похоже на", "Надпись на фото",
+                "Размечено", "id", "Ссылка"]
+PHOTO_ROWS_LIMIT = 1000
+
+
+def photo_rows(items):
+    """'По фото (проба)': cards of 'Остальные' labelled by photo, newest first (trial: verdicts only)."""
+    from . import photos
+
+    labelled = sorted((i for i in items if i.get("group") == "rest" and i.get("photo_label")),
+                      key=lambda i: (i.get("first_seen") or "", i["id"]), reverse=True)[:PHOTO_ROWS_LIMIT]
+    rows = [PHOTO_HEADER]
+    for i in labelled:
+        label = i["photo_label"]
+        similar = (label.get("similar") or "").replace("model:", "").replace("junk:", "мусор: ")
+        rows.append([photos.image_formula(i.get("photo")), photos.verdict_text(label), i.get("title") or "",
+                     _num(current_price(i)), STATUS_RU.get(i.get("status"), i.get("status") or ""), similar,
+                     label.get("ocr") or "", label.get("at") or "", i["id"], i.get("url") or ""])
+    return rows
+
+
 def summary_rows(summary):
     lst, rest = summary["groups"]["list"], summary["groups"]["rest"]
     rows = [["Обновлено", summary["updated"]],

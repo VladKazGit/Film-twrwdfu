@@ -15,6 +15,7 @@ CHEAP_MAX_PRICE = 20.0
 RUNS_SHEET = "Запуски"
 SUMMARY_SHEET = "Сводка"
 TOP_SHEET = "Топ-10"
+PHOTO_SHEET = "По фото (проба)"
 ANALYTICS_SHEET = "Аналитика"
 MODELS_SHEET = "Модели"
 MANUAL_SHEET = "Ручная разметка"
@@ -40,6 +41,8 @@ def _same_color(a, b):
 def _as_typed(cell):
     """Text stays literal under USER_ENTERED; links become clickable."""
     if not isinstance(cell, str) or not cell or cell.startswith(("http://", "https://")):
+        return cell
+    if cell.startswith('=IMAGE("https://images'):  # the photo column of 'По фото (проба)' (photos.image_formula)
         return cell
     return "'" + cell
 
@@ -94,6 +97,15 @@ class SheetWriter:
 
     def has(self, title):
         return title in self._sheets
+
+    def set_row_height(self, title, pixels):
+        """Taller data rows (the header stays), e.g. room for photos."""
+        ws = self._get(title)
+        if ws.row_count < 2:
+            return
+        self.spreadsheet.batch_update({"requests": [{"updateDimensionProperties": {
+            "range": {"sheetId": ws.id, "dimension": "ROWS", "startIndex": 1, "endIndex": ws.row_count},
+            "properties": {"pixelSize": pixels}, "fields": "pixelSize"}}]})
 
     def color_active_status(self, titles, column):
         """Light green 3 background for 'активен' in the status column (conditional format,
