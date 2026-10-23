@@ -378,6 +378,22 @@ DESC_FLAG_CASES = [
 ]
 
 
+# (text, from a photo, expected exact name): cameras outside the list too
+NAME_CASES = [
+    ("Bellissima macchina fotografica minolta x300s", False, ("Minolta", "X300S")),
+    ("Zeiss Ikon Contessa LK Germany 35mm", False, ("Zeiss Ikon", "Contessa LK")),
+    ("Kodak Retina Ia (Type 015) vintage", False, ("Kodak", "Retina IA")),
+    ("Agfa Selecta mit Olympus PS 10", False, ("Agfa", "Selecta")),
+    ("Hasselblad 500 EL/M", False, ("Hasselblad", "500 EL")),
+    ("Canon anni 80/90", False, None),
+    ("Nikon camera met lens, statief en tas", False, None),
+    ("Pentax 28-80 mm zoom", False, None),
+    ("Appareil photo", False, None),
+    ("PRAKTICA 22161184 8111622", True, None),
+    ("RICOH KR-10x RICOH KR-10X", True, ("Ricoh", "KR-10X")),
+]
+
+
 def main():
     bad = 0
     for title, desc, flags in DESC_FLAG_CASES:
@@ -405,7 +421,16 @@ def main():
         if got != expected:
             bad += 1
             print(f"FAIL: {title!r}: expected junk {expected}, got {got}")
-    total = len(CASES) + len(FLAG_CASES) + len(DESC_CASES) + len(DESC_FLAG_CASES) + len(JUNK_CASES)
+    from tracker.models import camera_name, siblings
+    for text, from_photo, expected in NAME_CASES:
+        got = camera_name(text, from_photo=from_photo)
+        if got != expected:
+            bad += 1
+            print(f"FAIL: name {text!r}: expected {expected}, got {got}")
+    if siblings("Minolta", "X-300") != ["Minolta X-1", "Minolta X-700", "Minolta X-500"] or siblings("Canon", "AE-1"):
+        bad += 1
+        print("FAIL: siblings", siblings("Minolta", "X-300"), siblings("Canon", "AE-1"))
+    total = len(CASES) + len(FLAG_CASES) + len(DESC_CASES) + len(DESC_FLAG_CASES) + len(JUNK_CASES) + len(NAME_CASES) + 1
     print(f"{total - bad}/{total} passed")
 
 if __name__ == "__main__":

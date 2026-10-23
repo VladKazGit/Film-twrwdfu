@@ -47,6 +47,8 @@ def kit_details_text(item):
     return ", ".join(KIT_DETAILS_RU.get(d, d) for d in item.get("kit_details") or [])
 SOURCE_RU = {"title": "заголовок", "description": "описание", "brand_only": "только бренд",
              "photo": "фото", "manual": "вручную"}
+NAME_SOURCE_RU = {"title": "название: заголовок", "description": "название: описание",
+                  "photo": "название: надпись на фото"}
 
 ITEM_HEADER = [
     "id", "Модель", "Заголовок", "Статус", "Цена старт", "Цена финал", "Сохранений", "Выставлен после", "Впервые",
@@ -201,8 +203,10 @@ def fast_rows(items):
 
 
 def item_row(item):
+    """A row of the item sheets; outside the list the model column holds the exact camera name."""
+    named = not item.get("model") and item.get("camera_name")
     return [
-        item["id"], item.get("model") or "", item.get("title") or "",
+        item["id"], item.get("model") or item.get("camera_name") or "", item.get("title") or "",
         STATUS_RU.get(item.get("status"), item.get("status") or ""),
         _num(item.get("price_start")), _num(item.get("price_final")), _num(item.get("favourites")),
         item.get("listed_after") or "", item.get("first_seen") or "", _vinted_age_text(item),
@@ -212,7 +216,8 @@ def item_row(item):
         bucket(item) or "", KIT_RU.get(item.get("kit"), ""), kit_details_text(item),
         MECH_RU.get(item.get("mech_type"), ""), FORMAT_RU.get(item.get("format"), ""),
         REGION_RU.get(item.get("region"), ""), item.get("brand") or "",
-        SOURCE_RU.get(item.get("model_source"), ""), ", ".join(sorted(stat_flags(item))),
+        NAME_SOURCE_RU.get(item.get("camera_name_source"), "") if named else SOURCE_RU.get(item.get("model_source"), ""),
+        ", ".join(sorted(stat_flags(item))),
         item.get("condition") or "", item.get("url") or "",
     ]
 
@@ -728,8 +733,8 @@ def analytics_rows(items, now):
     return [r + [""] * (width - len(r)) for r in rows]
 
 
-PHOTO_HEADER = ["Фото", "Вердикт по фото", "Заголовок", "Цена, €", "Статус", "Похоже на", "Надпись на фото",
-                "Размечено", "id", "Ссылка"]
+PHOTO_HEADER = ["Фото", "Камера", "Вердикт по фото", "Заголовок", "Цена, €", "Статус", "Похоже на",
+                "Надпись на фото", "Размечено", "id", "Ссылка"]
 PHOTO_ROWS_LIMIT = 2000
 
 
@@ -749,9 +754,38 @@ def photo_rows(items, dropped):
     for i in labelled:
         label = i["photo_label"]
         similar = (label.get("similar") or "").replace("model:", "").replace("junk:", "мусор: ")
-        rows.append([photos.image_formula(i.get("photo")), photos.verdict_text(label), i.get("title") or "",
+        rows.append([photos.image_formula(i.get("photo")), i.get("camera_name") or "", photos.verdict_text(label),
+                     i.get("title") or "",
                      _num(current_price(i)), STATUS_RU.get(i.get("status"), i.get("status") or ""), similar,
                      label.get("ocr") or "", label.get("at") or "", i["id"], i.get("url") or ""])
+    return rows
+
+
+SIBLINGS_HEADER = ["Фото", "Камера", "Братья в списке", "Откуда название", "Заголовок", "Цена, €", "Статус",
+                   "Впервые", "id", "Ссылка"]
+
+
+def sibling_rows(items):
+    """'Братья моделей списка': cards of 'Остальные' whose exact name is a near model of the list
+    (same brand and series: Minolta X-300 next to X-700), for the user to decide; newest first."""
+    from . import photos
+
+    brands = sorted(models.BRANDS, key=len, reverse=True)
+    found = []
+    for i in items:
+        if i.get("group") != "rest" or not i.get("camera_name"):
+            continue
+        brand = next((b for b in brands if i["camera_name"].startswith(b + " ")), None)
+        near = models.siblings(brand, i["camera_name"][len(brand) + 1:]) if brand else []
+        if near:
+            found.append((i, near))
+    found.sort(key=lambda f: (f[0].get("first_seen") or "", f[0]["id"]), reverse=True)
+    rows = [SIBLINGS_HEADER]
+    for i, near in found:
+        rows.append([photos.image_formula(i.get("photo")), i["camera_name"], ", ".join(near[:4]),
+                     NAME_SOURCE_RU.get(i.get("camera_name_source"), ""), i.get("title") or "",
+                     _num(current_price(i)), STATUS_RU.get(i.get("status"), i.get("status") or ""),
+                     i.get("first_seen") or "", i["id"], i.get("url") or ""])
     return rows
 
 

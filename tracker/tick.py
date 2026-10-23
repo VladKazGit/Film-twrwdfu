@@ -604,7 +604,7 @@ def run_tick(store, client, labels=None, now=None, quick=False):
     if state.get("models_version") != models.VERSION:
         stats["models_version_changed"] = 1
         for item in [*active.values(), *closed.values()]:
-            if item.get("model_source") == "manual":
+            if item.get("model_source") in ("manual", "photo"):  # a model from the photo stays too
                 continue
             cls = models.classify(item["title"], item.get("description"), item.get("vinted_brand"))
             signal = sorted(SIGNAL_FLAGS & set(cls["flags"]))
@@ -1136,6 +1136,12 @@ def write_sheets(writer, result, state_flags):
                 print(f"sheets: photo rows not resized: {type(exc).__name__}")
         if writer.has(sheets.OLD_PHOTO_SHEET):
             writer.delete(sheets.OLD_PHOTO_SHEET)  # split in two
+    if any(i.get("camera_name") for i in items):
+        writer.replace(sheets.SIBLINGS_SHEET, report.sibling_rows(items), links=True)
+        try:
+            writer.set_row_height(sheets.SIBLINGS_SHEET, PHOTO_ROW_PX)
+        except Exception as exc:
+            print(f"sheets: sibling rows not resized: {type(exc).__name__}")
     if not state_flags.get("runs_header_v5"):  # v5: 'Новых в «До 20 €»' and 'Комментарий' right after the time
         writer.ensure_runs_header()
         updates["runs_header_v5"] = True
@@ -1215,6 +1221,38 @@ PHOTO_START_LIMIT_S = 9 * 60  # a tick that already ran this long skips it
 PHOTO_ROW_PX = 110
 
 
+def name_step(store, result):
+    """An exact camera name for every card of 'Остальные' (camera_name): from the title, the
+    description, then the text read on its photo. A list model read on the photo of a kept card
+    moves it to 'Список' (model_source 'photo'). Returns the counts."""
+    counts = Counter()
+    for item in result["items"]:
+        if item.get("group") != "rest":
+            continue
+        label = item.get("photo_label") or {}
+        name, source = None, None
+        for source, text, from_photo in (("title", item.get("title"), False),
+                                         ("description", (item.get("description") or "")[:300], False),
+                                         ("photo", label.get("ocr"), True)):
+            name = models.camera_name(text, from_photo=from_photo)
+            if name:
+                break
+        source = source if name else None
+        text = f"{name[0]} {name[1]}" if name else None
+        model = models.list_model_of(*name) if name and source == "photo" else None
+        moved = bool(model and (label.get("verdict") or [""])[0] != "drop"
+                     and not SIGNAL_FLAGS & set(item.get("flags") or []))
+        if moved:
+            set_model(item, model, "photo")
+            item["group"] = group_of(item)  # closed ones too: the next tick reopens and checks them
+            counts["to_list"] += 1
+        if moved or (item.get("camera_name"), item.get("camera_name_source")) != (text, source):
+            item["camera_name"], item["camera_name_source"] = text, source
+            store.save(item)
+        counts["named" if name else "unnamed"] += 1
+    return counts
+
+
 def photo_step(store, result, started):
     """Label new cards of 'Остальные' by photo, take the verdicts labelled outside the tracker in,
     and drop from the data what the photo check rejects (a short record stays for 'По фото: убрать').
@@ -1269,6 +1307,12 @@ def _main(args):
         print(log_line(result["run"]))
         if not (args.quick or args.cheap or result["fatal"]):
             photo_step(store, result, started)
+            try:  # exact names of 'Остальные'; a failure never fails the tick
+                names = name_step(store, result)
+                print(f"names: named {names['named']}, without a name {names['unnamed']},"
+                      f" to the list by photo {names['to_list']}")
+            except Exception as exc:
+                print(f"names failed: {type(exc).__name__}: {env.redact(exc)}")
         if not result["fatal"]:
             try:  # e-mail alerts: a failure must not fail the tick
                 state = store.load_state()

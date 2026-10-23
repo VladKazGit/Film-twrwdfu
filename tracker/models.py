@@ -787,6 +787,141 @@ def flags_of(title, model_span=None):
     return flags
 
 
+# ---------------------------------------------------------------- exact camera names outside the list
+
+# Camera makers for names outside the list (display name -> spellings); the list brands come too.
+NAME_BRANDS = {
+    "Zeiss Ikon": ["zeiss ikon"], "Carl Zeiss": ["carl zeiss"], "Ihagee": ["ihagee"], "Exakta": ["exakta"],
+    "Hanimex": ["hanimex"], "Porst": ["porst"], "Revue": ["revue"], "Edixa": ["edixa"], "Balda": ["balda"],
+    "Bilora": ["bilora"], "Ferrania": ["ferrania"], "Bencini": ["bencini"], "Beirette": ["beirette"],
+    "Certo": ["certo"], "Welta": ["welta"], "Dacora": ["dacora"], "Wirgin": ["wirgin"], "Iloca": ["iloca"],
+    "Braun": ["braun"], "Regula": ["regula"], "Adox": ["adox"], "Haking": ["haking"], "Halina": ["halina"],
+    "Seagull": ["seagull"], "Vivitar": ["vivitar"], "Kowa": ["kowa"], "Minox": ["minox"], "Ensign": ["ensign"],
+    "Argus": ["argus"], "Graflex": ["graflex"], "Plaubel": ["plaubel"], "Linhof": ["linhof"], "Sigma": ["sigma"],
+    "Samsung": ["samsung"], "Kyocera": ["kyocera"], "Olympia": ["olympia"], "Photax": ["photax"],
+    "Beroflex": ["beroflex"], "Yashica": ["yashica"], "Voigtländer": ["voigtlander", "voigtlaender"],
+}
+# Model names without a digit that are real models ('Zeiss Ikon Contaflex', 'Kodak Retina Ia').
+_NAMED_MODELS = {
+    "contaflex", "contessa", "contina", "contarex", "ikoflex", "icarex", "comet", "retina", "retinette", "spotmatic",
+    "nikkormat", "unirex", "vito", "vitessa", "vitoret", "bessa", "bessamatic", "prominent", "silette", "isolette",
+    "ambi", "karat", "electro", "trip", "pen", "canonet", "demi", "rapid", "sokol", "praktiflex", "varex",
+    "werra", "penti", "paxette", "retinax", "colorsnap", "rolleicord", "flexaret", "autocord", "minoltacord",
+    "yashicamat", "ricohflex", "primoflex", "dynax", "maxxum", "lubitel", "smena", "vega", "start", "topcon",
+    "auto", "super", "program", "quartz", "spot", "electronic", "mat", "sport", "nova",
+}
+_NAME_FILLER = re.compile(
+    r"^(?:kamera|camera|fotocamera|appareil|photo|foto|fotoapparat|fototoestel|toestel|argentique|analog\w*|vintage"
+    r"|reflex|slr|spiegelreflex\w*|macchina|macchinetta|fotografica|retro|ancien\w*|alte|alter|old|35mm|24x36|film"
+    r"|messsucher\w*|rangefinder|telemetro|body|gehause|boitier|corpo|black|chrome|silver|noir|noire|schwarz|nero"
+    r"|biottica|bi-objectif|tlr|wetzlar|germany|japan|made|in|kleinbild\w*|mittelformat\w*|sucherkamera)$")
+_NAME_STOP = re.compile(
+    r"^(?:mit|with|avec|con|und|and|et|e|met|y|\+|&|objektiv\w*|obiettiv\w*|objectif|lens|lente|lenzen|f|mm|"
+    r"\d+mm|\d+[.,]\d|\d+/\d+|\d{2,3}-\d{2,3}(?:mm)?|f=\S*|de|da|di|del|della|du|per|pour|for|fur|incl\w*|plus"
+    r"|set|lot|kit|-|–|—|\||/|,|completa"
+    r"|complet|komplett|funktion\w*|fonctionne\w*|funzionante|testet|teste|testato|tested|vendu|pas|anni|annees"
+    r"|jahre|years|model|modell|modele|modello|type|typ|tipo|neuf|nuovo|new|neu|gebraucht|usato|avec|sans|ohne"
+    r"|a|al|il|la|le|les|the|un|une|en|im|zu|zum|appareil|kamera|camera|fotocamera|macchina"
+    # serial numbers read on a photo, condition words, lens names
+    r"|\d{5,}\w*|ottim[eoia]|buon[oa]|gut\w*|sehr|top|mint|excellent\w*|etat|bon|tres|perfekt\w*|perfett\w*"
+    r"|rokkor|nikkor|zuiko|takumar|hexanon|yashinon|tessar|pancolar|helios|industar|jupiter|summicron|elmar|planar"
+    r"|sonnar|xenar|skopar|cosinon|fujinon|serenar|color)$")
+
+
+def _name_brand_rx():
+    spellings = {}
+    for brand, (_, aliases) in BRANDS.items():
+        for alias in aliases:
+            spellings[alias] = brand
+    for brand, aliases in NAME_BRANDS.items():
+        for alias in aliases:
+            spellings[alias] = brand
+    pattern = "|".join(re.escape(s) for s in sorted(spellings, key=len, reverse=True))
+    return re.compile(r"(?<![a-z0-9])(" + pattern + r")(?![a-z0-9])"), spellings
+
+
+_NAME_BRAND_RX, _NAME_SPELLINGS = _name_brand_rx()
+
+
+def _model_token(token, raw, first, from_photo):
+    """A token that can be (part of) a model name: has a digit, is a known model word, was written
+    in capitals ('LB', 'SFX', 'GSN'), or - right after the brand in a seller's text - starts with a
+    capital ('Agfa Selecta'). Text read on a photo is all capitals and noisy: digits need company."""
+    if re.search(r"\d", token):
+        return not from_photo or (len(token) >= 2 and token.isascii())
+    if token in _NAMED_MODELS or re.fullmatch(r"i{1,3}[abcdfg]?|iv[a-z]?|v[a-z]?", token):  # 'Retina IIa', 'Leica IIIf'
+        return True
+    if not raw or not raw.isalpha():
+        return False
+    if raw.isupper() and len(raw) == 1:
+        return not first  # 'Rollei 35 S'
+    if len(set(raw.lower())) < 2:
+        return False
+    if raw.isupper():
+        return 1 < len(raw) <= 5
+    return first and not from_photo and raw[0].isupper() and len(raw) >= 3
+
+
+def _pretty(token):
+    return token.upper() if re.search(r"\d", token) or len(token) <= 3 else token.capitalize()
+
+
+def camera_name(text, from_photo=False):
+    """The exact camera named in a text, as (brand, model): 'minolta x300s' -> ('Minolta', 'X300S'),
+    'Zeiss Ikon Contaflex' -> ('Zeiss Ikon', 'Contaflex'). None without a brand followed by a model.
+    from_photo: the text was read on the photo (stricter)."""
+    if not text:
+        return None
+    text = re.sub(r"[+&/]", " + ", text)
+    raw_tokens = {}
+    for raw in re.findall(r"[\w\-]+", text):
+        raw_tokens.setdefault(normalize(raw), raw)
+    norm = re.sub(r"[(),;:!?\"'«»*•’‘`´.]", " ", normalize(text))
+    for match in _NAME_BRAND_RX.finditer(norm):
+        brand = _NAME_SPELLINGS[match.group(1)]
+        model = []
+        for token in norm[match.end():].split():
+            if _NAME_STOP.match(token) or _NAME_BRAND_RX.fullmatch(token) or re.fullmatch(r"(?:18|19|20)\d\d", token):
+                break
+            if _NAME_FILLER.match(token):
+                if model:
+                    break
+                continue
+            if not _model_token(token, raw_tokens.get(token), not model, from_photo):
+                break
+            model.append(token)
+            if len(model) == 3:
+                break
+        if model:
+            return brand, " ".join(_pretty(t) for t in model)
+    return None
+
+
+def _series(model_text):
+    """The letters a model name starts with: 'X-700' -> 'x', 'FM2n' -> 'fm', 'OM-10' -> 'om', '122' -> ''."""
+    return re.match(r"[a-z]*", normalize(model_text).replace(" ", "").replace("-", "")).group(0)
+
+
+_LIST_SERIES = {}
+for _m, _info in MODEL_INFO.items():
+    _rest = _m[len(_info["brand"]):].strip() if _m.startswith(_info["brand"]) else _m
+    _LIST_SERIES.setdefault((_info["brand"], _series(_rest)), []).append(_m)
+
+
+def list_model_of(brand, model_text):
+    """The list model a named camera is, or None ('Canon', 'AE-1 PROGRAM' -> 'Canon AE-1 Program')."""
+    hits = find_models(f"{brand} {model_text}")
+    return hits[0][2] if hits else None
+
+
+def siblings(brand, model_text):
+    """List models of the same brand and series as a camera outside the list ('Minolta', 'X-300'
+    -> ['Minolta X-1', 'Minolta X-500', 'Minolta X-700']); [] if it is a list model itself."""
+    if list_model_of(brand, model_text):
+        return []
+    return _LIST_SERIES.get((brand, _series(model_text)), [])
+
+
 # ---------------------------------------------------------------- not worth tracking
 
 # Listings outside the list that are of no interest at all: kept out of the data ('Остальные'

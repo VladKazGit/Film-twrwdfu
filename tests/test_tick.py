@@ -263,7 +263,7 @@ def main():
         both = [labelled, dict(labelled, id=8, photo_label=None), dropped, kept_older]
         prow = report.photo_rows(both, dropped=False)
         assert [r[-2] for r in prow[1:]] == [7, 10], "kept: the ones for 'Список' on top, then newest first"
-        assert prow[1][:2] == [f'=IMAGE("{photo}")', "в «Список»: Zenit 122 (по надписи)"], prow
+        assert prow[1][:3] == [f'=IMAGE("{photo}")', "", "в «Список»: Zenit 122 (по надписи)"], prow
         assert [r[-2] for r in report.photo_rows(both, dropped=True)[1:]] == [9]
         fs = FakeSpreadsheet()
         fs.sheets[sheets.OLD_PHOTO_SHEET] = FakeWorksheet(sheets.OLD_PHOTO_SHEET)
@@ -286,6 +286,19 @@ def main():
         state, cards = {}, [dict(labelled)]
         assert photos.apply_backfill(root, cards, state) == cards and cards[0]["photo_label"]["verdict"] == ["drop", "compact"]
         assert photos.apply_backfill(root, cards, state) == [], "once per file"
+        # Exact names outside the list; a list model read on the photo moves the card to 'Список';
+        # near models of the list go to 'Братья моделей списка'.
+        named = [dict(labelled, id=21, title="Bellissima macchina fotografica minolta x300s", photo_label={"verdict": ["keep"]}),
+                 dict(labelled, id=22, title="Appareil photo", photo_label={"verdict": ["keep"], "ocr": "ZENIT 122"},
+                      closed_at="2026-10-17 13:00", status="unsold_3h"),
+                 dict(labelled, id=23, title="Appareil photo", photo_label={"verdict": ["keep"], "ocr": "xx"})]
+        counts = tick.name_step(DataStore(tempfile.mkdtemp()), {"items": named})
+        assert counts["named"] == 2 and counts["unnamed"] == 1 and counts["to_list"] == 1, counts
+        assert named[0]["camera_name"] == "Minolta X300S" and named[0]["camera_name_source"] == "title"
+        assert named[1]["model"] == "Zenit 122" and named[1]["model_source"] == "photo" and named[1]["group"] == "list"
+        assert report.item_row(named[0])[1] == "Minolta X300S" and "название" in report.item_row(named[0])[report.ITEM_HEADER.index("Источник модели")]
+        sib = report.sibling_rows(named)
+        assert [r[1] for r in sib[1:]] == ["Minolta X300S"] and "Minolta X-700" in sib[1][2], sib
         # Relists: the same seller and model, the earlier listing taken down unsold before the next one showed up.
         def listing(item_id, status, first, last, price, seller=7, **extra):
             return dict({"id": item_id, "group": "list", "model": "Canon AE-1", "seller_id": seller, "status": status,
