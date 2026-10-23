@@ -1055,12 +1055,11 @@ def log_line(run):
 def runs_row(run, cheap_added=()):
     """One 'Запуски' row; cheap_added: cameras that entered 'До 20 €' in this tick."""
     kind = "да" if run["full_scan"] else "до 20 €" if run.get("cheap") else "быстрая" if run.get("quick") else ""
-    return [run["at"], kind, run["pages"],
-            run["requests"], run["mb"], run["seconds"],
+    return [run["at"], len(cheap_added), runs_comment(run, cheap=[_camera_label(i) for i in cheap_added]),
+            kind, run["pages"], run["requests"], run["mb"], run["seconds"],
             run["new_list"], run["new_rest"], run["bumped"], run["checks"], run["sold_list"], run["sold_rest"],
             run["deleted"], run["reserved_hidden"], run["closed_3h"], run["closed_30d"], run["descriptions"],
-            run["description_to_list"], run["deferred"], "; ".join(run["errors"]),
-            runs_comment(run, cheap=[_camera_label(i) for i in cheap_added]), len(cheap_added), between_text(run)]
+            run["description_to_list"], run["deferred"], "; ".join(run["errors"]), between_text(run)]
 
 
 def between_text(run):
@@ -1128,9 +1127,9 @@ def write_sheets(writer, result, state_flags):
             writer.set_row_height(sheets.PHOTO_SHEET, PHOTO_ROW_PX)
         except Exception as exc:
             print(f"sheets: photo rows not resized: {type(exc).__name__}")
-    if not state_flags.get("runs_header_v4"):  # v4: 'Проверок между тиками'
+    if not state_flags.get("runs_header_v5"):  # v5: 'Новых в «До 20 €»' and 'Комментарий' right after the time
         writer.ensure_runs_header()
-        updates["runs_header"] = updates["runs_header_v2"] = updates["runs_header_v3"] = updates["runs_header_v4"] = True
+        updates["runs_header_v5"] = True
     writer.append_run(runs_row(result["run"], cheap_added))
     if result["daily"]:
         writer.replace(sheets.REST_SHEET, report.item_rows([i for i in items if i.get("group") == "rest"]), links=True)

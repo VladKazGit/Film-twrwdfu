@@ -20,12 +20,17 @@ ANALYTICS_SHEET = "Аналитика"
 MODELS_SHEET = "Модели"
 MANUAL_SHEET = "Ручная разметка"
 
-RUNS_HEADER = [
+# The order before v5; rows written then are moved into the current order once.
+RUNS_HEADER_V4 = [
     "Время", "Полный обход", "Страниц", "Запросов", "МБ", "Секунд", "Новых: список", "Новых: остальные",
     "Поднятых старых", "Проверено страниц товара", "Продано: список", "Продано: остальные", "Удалено",
     "Резерв/скрыт", "Закрыто 3 ч", "Закрыто 30 дн", "Описаний", "Описание → список", "Отложено", "Ошибки",
     "Комментарий", "Новых в «До 20 €»", "Проверок между тиками",
 ]
+# v5: what changed comes first, right after the time
+RUNS_FRONT = ["Новых в «До 20 €»", "Комментарий"]
+RUNS_HEADER = RUNS_HEADER_V4[:1] + RUNS_FRONT + [c for c in RUNS_HEADER_V4[1:] if c not in RUNS_FRONT]
+_RUNS_FROM_V4 = [RUNS_HEADER_V4.index(c) for c in RUNS_HEADER]
 MANUAL_HEADER = ["id (или ссылка)", "Модель", "Комментарий"]
 MODELS_HEADER = ["Модель", "Бренд", "Тип", "Формат", "Регион"]
 LIGHT_GREEN_3 = {"red": 217 / 255, "green": 234 / 255, "blue": 211 / 255}  # #d9ead3
@@ -167,15 +172,23 @@ class SheetWriter:
         ws.update(range_name="A1", values=rows, value_input_option="USER_ENTERED" if links else "RAW")
 
     def ensure_runs_header(self):
-        """'Запуски' may start with the check-setup test row (header goes on top) or
-        with an older, shorter header (it is replaced)."""
+        """'Запуски' may start with the check-setup test row (header goes on top) or with
+        an older header of the v4 order, maybe shorter: then every row moves into the
+        current order (numbers stay numbers)."""
         ws = self._get(RUNS_SHEET, RUNS_HEADER)
         first = ws.row_values(1)
         if first == RUNS_HEADER:
             return
         ws.resize(cols=max(len(RUNS_HEADER), 5))
-        if first and first == RUNS_HEADER[:len(first)]:
-            ws.update(range_name="A1", values=[RUNS_HEADER], value_input_option="RAW")
+        if first and first == RUNS_HEADER_V4[:len(first)]:
+            rows = ws.get_values(value_render_option="UNFORMATTED_VALUE")
+            moved = [[r[i] if i < len(r) else "" for i in _RUNS_FROM_V4] for r in rows]
+            moved[0] = list(RUNS_HEADER)
+            ws.update(range_name="A1", values=moved, value_input_option="RAW")
+            # the comment now sits in column C: give it room
+            self.spreadsheet.batch_update({"requests": [{"updateDimensionProperties": {
+                "range": {"sheetId": ws.id, "dimension": "COLUMNS", "startIndex": 2, "endIndex": 3},
+                "properties": {"pixelSize": 450}, "fields": "pixelSize"}}]})
         else:
             ws.insert_row(RUNS_HEADER, 1, value_input_option="RAW")
 

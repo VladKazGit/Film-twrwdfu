@@ -76,6 +76,9 @@ class FakeWorksheet:
     def get_all_values(self):
         return self.rows
 
+    def get_values(self, value_render_option=None):
+        return [list(r) for r in self.rows]
+
     def col_values(self, n):
         return [r[n - 1] if len(r) >= n else "" for r in self.rows]
 
@@ -196,7 +199,7 @@ def main():
         ss = FakeSpreadsheet()
         writer = sheets.SheetWriter(ss)
         updates = tick.write_sheets(writer, r5, {})
-        assert updates["runs_header"] and "Zenit E" in updates["models_offered"]
+        assert updates["runs_header_v5"] and "Zenit E" in updates["models_offered"]
         assert set(updates["status_colors"]) == {"Список", "Остальные", "До 20 €", "Быстрые продажи"}
         rules = [f["addConditionalFormatRule"] for f in ss.formats]
         assert len(rules) == 8, len(rules)  # 4 green + blue and yellow on 2 sheets
@@ -228,7 +231,7 @@ def main():
         assert rule["ranges"][0]["startColumnIndex"] == report.ITEM_HEADER.index("Статус")
         runs = ss.sheets["Запуски"].rows
         assert runs[0] == sheets.RUNS_HEADER and runs[1][1] == "check-setup" and len(runs) == 3
-        assert updates["runs_header_v4"] and runs[2][-2] == 0, "first tick: nothing counted as new in 'До 20 €'"
+        assert updates["runs_header_v5"] and runs[2][1] == 0, "first tick: nothing counted as new in 'До 20 €'"
         assert updates["cheap_ids"] == [1021]
         # Links clickable, other text kept literal.
         fast_ws = ss.sheets["Быстрые продажи"]
@@ -331,26 +334,26 @@ def main():
         # 'До 20 €' follows 'Модели': the user deletes Zenit E, it leaves 'До 20 €' and is not re-added.
         models_ws = ss.sheets["Модели"]
         models_ws.rows = [r for r in models_ws.rows if r[0] != "Zenit E"]
-        state_flags = {"runs_header": True, "runs_header_v2": True, "runs_header_v3": True, "runs_header_v4": True,
+        state_flags = {"runs_header_v5": True,
                        "cheap_ids": updates["cheap_ids"], "models_offered": updates["models_offered"],
                        "status_colors": updates["status_colors"], "new_rows_colors": updates["new_rows_colors"],
                        "fresh_rows_colors": updates["fresh_rows_colors"], "fresh_rows_green": True}
         assert {k: v for k, v in tick.write_sheets(writer, r5, state_flags).items() if k != "models_sheet"} == {"cheap_ids": []}, "Zenit E left 'До 20 €'"
-        assert ss.sheets["Запуски"].rows[-1][-2] == 0
+        assert ss.sheets["Запуски"].rows[-1][1] == 0
         assert [r[0] for r in ss.sheets["До 20 €"].rows[1:] if r[0] != ""] == [] and ["Zenit E"] not in [r[:1] for r in models_ws.rows]
         assert len(ss.sheets["До 20 €"].rows) == 2 and not any(ss.sheets["До 20 €"].rows[1]), "old data row blanked"
         # A model new to the dictionary is offered once; spelling in the sheet does not matter.
         models_ws.rows.append(["зенит-е"])
         offered = [m for m in updates["models_offered"] if m != "Zenit KM"]
         models_ws.rows = [r for r in models_ws.rows if r[0] != "Zenit KM"]
-        upd = tick.write_sheets(writer, r5, {"runs_header": True, "runs_header_v2": True, "runs_header_v3": True, "runs_header_v4": True,
+        upd = tick.write_sheets(writer, r5, {"runs_header_v5": True,
                                              "cheap_ids": [400], "models_offered": offered,
                                              "status_colors": updates["status_colors"], "new_rows_color": True,
                                              "fresh_rows_green": True})
         assert upd.get("new_rows_colors") == ["До 20 €", "Список"], "old flag: only 'До 20 €' added"
         assert upd.get("fresh_rows_colors") == ["До 20 €", "Список"]
-        assert ss.sheets["Запуски"].rows[-1][-2] == 1 and upd["cheap_ids"] == [1021], "Zenit E 1021 entered 'До 20 €'"
-        assert ss.sheets["Запуски"].rows[-1][-3].endswith("В «До 20 €» (1): Zenit E — 15 €, id 1021"), ss.sheets["Запуски"].rows[-1][-3]
+        assert ss.sheets["Запуски"].rows[-1][1] == 1 and upd["cheap_ids"] == [1021], "Zenit E 1021 entered 'До 20 €'"
+        assert ss.sheets["Запуски"].rows[-1][2].endswith("В «До 20 €» (1): Zenit E — 15 €, id 1021"), ss.sheets["Запуски"].rows[-1][2]
         assert "Zenit KM" in upd["models_offered"] and models_ws.rows[-1][0] == "Zenit KM"
         assert [r[0] for r in ss.sheets["До 20 €"].rows[1:]] == [1021], "Cyrillic 'зенит-е' matches Zenit E"
 
@@ -550,9 +553,21 @@ def main():
 
     # An older, shorter 'Запуски' header is replaced, not duplicated.
     ss2 = FakeSpreadsheet()
-    ss2.sheets["Запуски"].rows = [sheets.RUNS_HEADER[:-1], ["2026-10-16 07:07"]]
+    ss2.sheets["Запуски"].rows = [sheets.RUNS_HEADER_V4[:-1], ["2026-10-16 07:07"]]
     sheets.SheetWriter(ss2).ensure_runs_header()
     assert ss2.sheets["Запуски"].rows[0] == sheets.RUNS_HEADER and len(ss2.sheets["Запуски"].rows) == 2
+    # Rows of the old order (v4, or shorter v3): 'Новых в «До 20 €»' and 'Комментарий' move to the front.
+    old = ["2026-10-16 07:07", "да", 2, 40, 0.0, 300] + [0] * 14 + ["Добавлены (1): Zenit E — 15 €", 3]
+    ss2.sheets["Запуски"].rows = [sheets.RUNS_HEADER_V4[:-1], old, ["2026-10-16 07:22", "", 2]]
+    sheets.SheetWriter(ss2).ensure_runs_header()
+    moved = ss2.sheets["Запуски"].rows
+    assert moved[0] == sheets.RUNS_HEADER and moved[1][:5] == ["2026-10-16 07:07", 3, "Добавлены (1): Zenit E — 15 €", "да", 2], moved[1]
+    assert moved[2][:5] == ["2026-10-16 07:22", "", "", "", 2] and len(moved[1]) == len(sheets.RUNS_HEADER)
+    run_row = tick.runs_row({"at": "t", "full_scan": False, "pages": 1, "requests": 1, "mb": 0, "seconds": 1,
+                             **{k: 0 for k in ("new_list", "new_rest", "bumped", "checks", "sold_list", "sold_rest",
+                                               "deleted", "reserved_hidden", "closed_3h", "closed_30d", "descriptions",
+                                               "description_to_list", "deferred")}, "errors": []})
+    assert len(run_row) == len(sheets.RUNS_HEADER)
 
     # Vinted's German upload age, in Russian.
     assert [report.uploaded_ago_ru(t) for t in ("5 Monaten", "1 Monat", "2 Wochen", "1 Woche", "3 Tagen", "1 Tag",
@@ -659,7 +674,7 @@ def main():
         a, c = store.load_active(), store.load_closed()
         assert a[20_000_000_020]["listed_after"] == "2026-10-17 10:37" and c[20_000_000_010]["status"] == "sold"
         assert c[20_000_000_010]["time_to_sell_max"] == 20, "listed after 10:22, gone at the 10:42 quick check"
-        assert store.load_state()["last_tick_at"] == "2026-10-17 10:42" and tick.runs_row(run)[1] == "быстрая"
+        assert store.load_state()["last_tick_at"] == "2026-10-17 10:42" and tick.runs_row(run)[sheets.RUNS_HEADER.index("Полный обход")] == "быстрая"
         assert tick.log_line(run).startswith("quick tick 10:42")
         idle = tick.run_tick(store, FakeClient({1: [rec(20_000_000_020, "Nikon FM2 Kamera", 200.0)] + page1[1:]}),
                              now="2026-10-17 10:47", quick=True)
@@ -686,7 +701,7 @@ def main():
         assert a[30_000_000_002]["model"] == "Praktica MTL 5" and rc["run"]["description_to_list"] == 1
         assert st["max_seen_id"] == state0["max_seen_id"] and st["last_tick_at"] == state0["last_tick_at"]
         assert set(client.opened) <= {30_000_000_001, 30_000_000_002}, client.opened
-        assert tick.log_line(rc["run"]).startswith("cheap tick") and tick.runs_row(rc["run"])[1] == "до 20 €"
+        assert tick.log_line(rc["run"]).startswith("cheap tick") and tick.runs_row(rc["run"])[sheets.RUNS_HEADER.index("Полный обход")] == "до 20 €"
         assert store.load_state()["checks_since_tick"]["cheap"] == 1 and tick.runs_row(rc["run"])[-1] == ""
 
         # Full scans (the morning after the night) read 3 pages of the extra categories.
