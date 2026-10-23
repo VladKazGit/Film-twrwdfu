@@ -27,6 +27,9 @@ QUICK_JITTER_S = 40  # quick checks at ~1/3 and ~2/3 of a gap, give or take
 LATE_S = 30  # a check this late after its time (the previous one overran) is skipped
 WINDOW_START_HOUR = 7
 BUDGET_MIN = 330  # a 6-hour job limit minus one tick and setup
+# Ticks failing in a row hand over early: the next run gets a new GitHub machine and address
+# (Vinted now and then refuses one: 'home page http 403' on every request).
+FAILED_IN_ROW_MAX = 2
 TICK_TIMEOUT_S = 14 * 60
 QUICK_TIMEOUT_S = 4 * 60
 
@@ -65,16 +68,27 @@ def run_loop(now_fn, sleep_fn, tick_fn, tick_now=False, budget_min=BUDGET_MIN, l
     next run has time to start (it counts its first gap from its own start, a
     minute after the last tick). A run that has not ticked yet (night) sleeps
     until its budget ends instead, so runs never chain in a tight loop.
+    FAILED_IN_ROW_MAX failed ticks in a row hand over at once (a new machine).
     """
     rng = rng or random.Random()
     start = now_fn()
     # Real minutes, not wall-clock: the DST night must not stretch the run past the job limit.
     deadline = (start.astimezone(timezone.utc) + timedelta(minutes=budget_min)).astimezone(start.tzinfo)
-    failures, ticked, last = 0, False, start
+    failures, in_row, ticked, last = 0, 0, False, start
     log(f"loop: started, hands over by {deadline:%Y-%m-%d %H:%M} (Berlin)")
+
+    def full_tick():
+        nonlocal failures, in_row
+        ok = tick_fn("tick")
+        failures += 0 if ok else 1
+        in_row = 0 if ok else in_row + 1
+        return in_row >= FAILED_IN_ROW_MAX
+
     if tick_now:
-        failures += 0 if tick_fn("tick") else 1
         ticked = True
+        if full_tick():
+            log(f"loop: {in_row} ticks failed in a row; handing over to a new run (a new machine)")
+            return failures
     while True:
         tick = next_tick(last, rng)
         if seconds_until(tick, deadline) > 0:
@@ -91,8 +105,10 @@ def run_loop(now_fn, sleep_fn, tick_fn, tick_now=False, budget_min=BUDGET_MIN, l
                 tick_fn(mode)  # a slow or failed check is not a failed run: the next tick tells
         _sleep_until(tick, now_fn, sleep_fn)
         last = now_fn()  # gaps count from the real start: an overrun tick does not bunch the next ones
-        failures += 0 if tick_fn("tick") else 1
         ticked = True
+        if full_tick():
+            log(f"loop: {in_row} ticks failed in a row; handing over to a new run (a new machine)")
+            return failures
 
 
 def _sleep_until(moment, now_fn, sleep_fn):

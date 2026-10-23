@@ -27,9 +27,14 @@ class FakeClock:
 
 
 def run(start, tick_now=False, fail=False, seed=1):
+    """fail: True (every tick fails) or the numbers of the ticks that fail."""
     clock = FakeClock(start)
-    failures = run_loop(clock.now, clock.sleep, lambda mode: clock.tick(not fail, mode), tick_now=tick_now,
-                        log=lambda _: None, rng=random.Random(seed))
+
+    def tick(mode):
+        failing = fail is True or (mode == "tick" and fail and len(clock.ticks) in fail)
+        return clock.tick(not failing, mode)
+
+    failures = run_loop(clock.now, clock.sleep, tick, tick_now=tick_now, log=lambda _: None, rng=random.Random(seed))
     return clock, failures
 
 
@@ -70,9 +75,14 @@ def main():
     c, f = run(datetime(2026, 10, 24, 23, 58))
     assert c.ticks == [] and c.slept == BUDGET_MIN * 60 and c.now().strftime("%H:%M") == "04:28", c.now()
 
-    # Failed ticks are counted (the run fails, GitHub e-mails), the loop goes on.
-    c, f = run(datetime(2026, 10, 16, 12, 40), fail=True)
-    assert f == len(c.ticks) and len(c.ticks) > 15, "only ticks count; a slow check does not fail the run"
+    # A failed tick is counted (the run fails, GitHub e-mails) and the loop goes on;
+    # two failed ticks in a row hand over at once (a new machine, a new address).
+    c, f = run(datetime(2026, 10, 16, 12, 40), fail={3, 7})
+    assert f == 2 and len(c.ticks) > 15, "single failures: the loop goes on"
+    c, f = run(datetime(2026, 10, 16, 12, 40), fail={3, 4})
+    assert f == 2 and len(c.ticks) == 5, len(c.ticks)
+    c, f = run(datetime(2026, 10, 16, 12, 40), tick_now=True, fail=True)
+    assert f == 2 and len(c.ticks) == 2 and len(c.quick) <= 2, "blocked from the start: hands over after two"
     print("loop tests passed")
 
 
