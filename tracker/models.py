@@ -342,7 +342,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 36
+VERSION = 37
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -807,6 +807,8 @@ _JUNK = [
         r"chicco|spielzeug|giocattol|jouet|\bkinder|\btoy\b|brownie|box ?kamera|box camera|tengor|\b(?:agfa|kodak|zeiss) box\b"
         r"|\bbox (?:agfa|kodak)\b|agfa-box|einweg|jetable|usa e getta|disposable|quicksnap|fun ?saver|lomograph|\blomo\b"
         r"|\blc-?a\b|holga|\bdiana\b|super color 35|ektar h35|\bm35\b|\bm38\b|pouva|la sardina")),
+    ("action camera / drone", re.compile(
+        r"\bdji\b|\bosmo\b|gimbal|zenmuse|gopro|go pro|insta ?360|\bdrone|\baction ?cam")),  # not '4K': Zorki 4K
     ("movie / video / projector", re.compile(
         r"cinepresa|cinecamera|super ?-?8\b|\bsuper8|schmalfilm|camescope|camcorder|handycam|videokamera|video ?camera"
         r"|\bdoppel ?8|normal ?8|autopak|projecteur|projektor|proiettore|projector|bolex|stereofilm")),
