@@ -331,6 +331,8 @@ def main():
         assert all(r[0] != 1010 for r in fast[1:]), "preexisting sale is not fast"
         cheap = ss.sheets["До 20 €"].rows
         assert "Группа" in cheap[0] and [r[0] for r in cheap[1:]] == [1021], "sold Zenit 400 is not shown"
+        assert cheap[0][6:8] == ["Сохранений", "Ссылка"] and cheap[1][7].startswith("https://"), cheap[0]
+        assert cheap[0][report.ITEM_HEADER.index("Статус")] == "Статус" and cheap[0][-2:] == [report.NEW_HEADER, report.FRESH_HEADER]
         # 'До 20 €' follows 'Модели': the user deletes Zenit E, it leaves 'До 20 €' and is not re-added.
         models_ws = ss.sheets["Модели"]
         models_ws.rows = [r for r in models_ws.rows if r[0] != "Zenit E"]

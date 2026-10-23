@@ -1107,8 +1107,10 @@ def write_sheets(writer, result, state_flags):
     print(f"sheets: cheap sheet {len(cheap)} of {len(candidates)} list cameras at <= 20 EUR"
           f" (the others have models missing from the models sheet)")
     # 'До 20 €' is mostly old cheap cameras found by search: mark what entered the sheet in 12 h.
-    writer.replace(sheets.CHEAP_SHEET, report.item_rows(cheap, with_group=True, new_since=new_since,
-                                                        new_old_listings=True, fresh_since=fresh_since), links=True)
+    # The link right after 'Сохранений' (column H): the status column and the flag columns stay where they were.
+    cheap_rows = report.item_rows(cheap, with_group=True, new_since=new_since, new_old_listings=True,
+                                  fresh_since=fresh_since)
+    writer.replace(sheets.CHEAP_SHEET, report.move_column(cheap_rows, "Ссылка", CHEAP_LINK_COLUMN), links=True)
     # Cameras that entered 'До 20 €' since the previous tick (none counted on the very first one).
     cheap_ids = sorted(i["id"] for i in cheap)
     previous = state_flags.get("cheap_ids")
@@ -1200,6 +1202,7 @@ def main():
         return 1
 
 
+CHEAP_LINK_COLUMN = 7  # 'До 20 €': the link in column H, right after G ('Сохранений')
 PHOTO_TIME_BUDGET_S = 90   # photo labeling of new 'Остальные' per full tick (trial)
 PHOTO_START_LIMIT_S = 9 * 60  # a tick that already ran this long skips it
 PHOTO_ROW_PX = 110

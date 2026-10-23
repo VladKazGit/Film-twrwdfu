@@ -217,6 +217,18 @@ def item_row(item):
     ]
 
 
+def move_column(rows, name, index):
+    """Rows with the column named `name` moved to position `index` (the others keep their order)."""
+    old = rows[0].index(name)
+    out = []
+    for row in rows:
+        row = list(row)
+        cell = row.pop(old)
+        row.insert(index, cell)
+        out.append(row)
+    return out
+
+
 NEW_HEADER = "Новая (12 ч)"
 FRESH_HEADER = "Новая (3 ч)"
 
