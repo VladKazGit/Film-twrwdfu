@@ -1,7 +1,9 @@
 """Tick logic on a fake Vinted and a fake spreadsheet. Run: python -m tests.test_tick"""
+import json
 import tempfile
 import time
 from collections import Counter
+from pathlib import Path
 
 from tracker import models, report, tick
 from tracker.store import DataStore
@@ -272,6 +274,18 @@ def main():
         assert photos.image_formula('https://images1.vinted.net/a"),HYPERLINK("x') == "" and photos.image_formula("http://x") == ""
         assert photos.verdict_text({"verdict": ["drop", "compact"]}) == "убрать: compact"
         tick.photo_step(DataStore(tempfile.mkdtemp()), {"items": [labelled]}, time.monotonic())  # no gallery: off
+        # Drops leave the data with a short record; outside verdicts replace earlier ones; manual labels stay.
+        root = Path(tempfile.mkdtemp())
+        assert photos.is_dropped(dropped) and not photos.is_dropped(labelled)
+        assert not photos.is_dropped(dict(dropped, model_source="manual")) and not photos.is_dropped(dict(dropped, group="list"))
+        photos.record_drops(root, [dropped])
+        photos.record_drops(root, [dict(dropped, id=11), dropped])
+        assert [r["id"] for r in photos.dropped_records(root)] == [11, 9]
+        assert [r[-2] for r in report.photo_rows(photos.dropped_records(root), dropped=True)[1:]] == [11, 9]
+        (root / photos.BACKFILL_FILE).write_text(json.dumps({"7": {"verdict": ["drop", "compact"]}}), encoding="utf-8")
+        state, cards = {}, [dict(labelled)]
+        assert photos.apply_backfill(root, cards, state) == cards and cards[0]["photo_label"]["verdict"] == ["drop", "compact"]
+        assert photos.apply_backfill(root, cards, state) == [], "once per file"
         # Relists: the same seller and model, the earlier listing taken down unsold before the next one showed up.
         def listing(item_id, status, first, last, price, seller=7, **extra):
             return dict({"id": item_id, "group": "list", "model": "Canon AE-1", "seller_id": seller, "status": status,

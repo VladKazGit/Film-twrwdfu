@@ -1,4 +1,4 @@
-"""Labels 'Остальные' by the listing's first photo (trial mode: the verdict is only recorded).
+"""Labels 'Остальные' by the listing's first photo; drops what is not worth keeping.
 
 Free and local: CLIP (an open image-text model, CPU) compares the photo with a gallery of
 reference fingerprints from the tracker's own data (list cameras by model, the kinds of junk
@@ -6,8 +6,13 @@ by the text rules) and with descriptions of cameras and other things; OCR reads 
 printed on the camera, and the model rules (models.find_models) look for a list model in it.
 
 The gallery lives in the private data repo (photo_gallery.pt). Without the libraries or the
-gallery the step is off. Verdicts: ["drop", reason], ["list", model, "надпись" | "вид"],
-["keep"], ["gone"] (the photo is no longer online).
+gallery the step is off. Verdicts: ["drop", reason], ["list", model, "надпись" | "вид"] (a hint
+only: nothing moves to 'Список' by photo), ["keep"], ["gone"] (the photo is no longer online).
+
+'Остальные' keeps only what looks like the cameras of the list: the 5 nearest reference photos of
+list models must be at least LIST_SCORE_MIN closer than the 5 nearest of everything else (junk
+kinds, other cameras, the user's examples of what is not wanted). The rest is dropped from the
+data; a short record of each drop stays in photo_dropped.json for the sheet 'По фото: убрать'.
 """
 import random
 import re
@@ -17,10 +22,12 @@ from . import clock, models
 
 ARCH, WEIGHTS = "ViT-L-14", "laion2b_s32b_b82k"
 GALLERY_FILE = "photo_gallery.pt"
-BACKFILL_FILE = "photo_labels_backfill.json"  # archive verdicts labelled outside the tracker
+BACKFILL_FILE = "photo_labels_backfill.json"  # verdicts labelled outside the tracker (archive, re-checks)
+DROPPED_FILE = "photo_dropped.json"           # what the photo check dropped from the data (for the sheet)
+DROPPED_KEEP = 3000
 K = 7
 LOOK_SHARE = 0.6        # a model by look: its share of the K nearest reference photos
-JUNK_MARGIN = 0.02      # junk: the 5 nearest junk photos at least this close as the 5 nearest cameras
+LIST_SCORE_MIN = 0.02   # keep: the 5 nearest list-model photos this much closer than the 5 nearest others
 NOT_CAMERA = 0.1        # 'is it a camera at all' below this, for titles without a camera word or brand
 OCR_SCORE = 0.6
 PAUSE = (2.0, 3.0)      # between photo downloads, as for every request to Vinted
@@ -64,8 +71,8 @@ class Labeler:
         gallery = torch.load(root / GALLERY_FILE, weights_only=True)
         self.matrix = gallery["vectors"].float()
         self.labels = list(gallery["labels"])
-        self.camera = torch.tensor([not label.startswith("junk:") for label in self.labels])
-        self.junk_index = [i for i, is_cam in enumerate(self.camera.tolist()) if not is_cam]
+        self.is_list = torch.tensor([label.startswith("model:") for label in self.labels])
+        self.other_index = [i for i, is_list in enumerate(self.is_list.tolist()) if not is_list]
         self.ocr = RapidOCR()
 
     def label(self, item, image_path):
@@ -82,8 +89,8 @@ class Labeler:
             score[self.labels[idx]] = score.get(self.labels[idx], 0.0) + s
         best = max(score, key=score.get)
         share = score[best] / sum(score.values())
-        margin = (sims[self.camera].topk(5).values.mean() - sims[~self.camera].topk(5).values.mean()).item()
-        junk_label = self.labels[self.junk_index[int(sims[~self.camera].argmax())]]
+        list_score = (sims[self.is_list].topk(5).values.mean() - sims[~self.is_list].topk(5).values.mean()).item()
+        nearest_other = self.labels[self.other_index[int(sims[~self.is_list].argmax())]]
         is_camera = (100 * self.texts @ vec).softmax(dim=-1)[:len(CAMERA_TEXTS)].sum().item()
 
         result, _ = self.ocr(str(image_path))
@@ -97,15 +104,15 @@ class Labeler:
         look_model = best[6:] if best.startswith("model:") and share >= LOOK_SHARE else None
         if no_camera_text and is_camera < NOT_CAMERA:
             verdict = ["drop", "не камера"]
-        elif margin < JUNK_MARGIN and not read_model:
-            verdict = ["drop", junk_label[5:]]
+        elif list_score < LIST_SCORE_MIN:  # what was read on it does not save it: OCR misreads adapters, magazines
+            verdict = ["drop", OTHER_RU.get(nearest_other, nearest_other.replace("junk:", ""))]
         elif read_model:
             verdict = ["list", read_model, "надпись"]
         elif look_model:
             verdict = ["list", look_model, "вид"]
         else:
             verdict = ["keep"]
-        return {"verdict": verdict, "margin": round(margin, 3), "is_camera": round(is_camera, 2),
+        return {"verdict": verdict, "list_score": round(list_score, 3), "is_camera": round(is_camera, 2),
                 "similar": best, "share": round(share, 2), "ocr": read[:80]}
 
 
@@ -115,8 +122,12 @@ def candidates(items):
                   key=lambda i: i["id"], reverse=True)
 
 
+OTHER_RU = {"other camera": "камера не из списка", "junk:user": "похоже на ваши примеры «не надо»"}
+
+
 def apply_backfill(root, items, state):
-    """Verdicts labelled outside the tracker (the archive) go onto the cards once. Returns the cards changed."""
+    """Verdicts labelled outside the tracker (the archive, re-checks) go onto the cards once, over
+    the earlier ones (the file is the newer judgment). Returns the cards changed."""
     import json
 
     path = root / BACKFILL_FILE
@@ -129,7 +140,7 @@ def apply_backfill(root, items, state):
     changed = []
     for item in items:
         found = labels.get(str(item["id"]))
-        if found and "photo_label" not in item:
+        if found and item.get("photo_label") != found:
             item["photo_label"] = dict(found, at=found.get("at") or "архив")
             changed.append(item)
     state["photo_backfill_applied"] = stamp
@@ -182,6 +193,33 @@ def run(root, items, budget_s, session=None):
             stats["labelled"] += 1
             changed.append(item)
     return changed, stats
+
+
+def is_dropped(item):
+    """A card of 'Остальные' the photo check drops (manual labels are never dropped)."""
+    label = item.get("photo_label") or {}
+    return (item.get("group") == "rest" and item.get("model_source") != "manual"
+            and (label.get("verdict") or [""])[0] == "drop")
+
+
+def record_drops(root, dropped):
+    """Short records of the dropped cards, newest first, for 'По фото: убрать'."""
+    import json
+
+    path = root / DROPPED_FILE
+    old = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+    keys = ("id", "group", "title", "photo", "url", "price_start", "status", "first_seen", "photo_label")
+    new = [{k: i.get(k) for k in keys} for i in dropped]
+    seen = {r["id"] for r in new}
+    records = (new + [r for r in old if r["id"] not in seen])[:DROPPED_KEEP]
+    path.write_text(json.dumps(records, ensure_ascii=False), encoding="utf-8")
+
+
+def dropped_records(root):
+    import json
+
+    path = root / DROPPED_FILE
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
 
 
 VERDICT_RU = {"drop": "убрать", "list": "в «Список»", "keep": "оставить", "gone": "фото нет"}

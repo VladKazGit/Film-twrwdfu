@@ -1123,9 +1123,13 @@ def write_sheets(writer, result, state_flags):
     writer.replace(sheets.SUMMARY_SHEET, report.summary_rows(result["summary"]))
     writer.replace(sheets.TOP_SHEET, report.top_rows(items, result["run"]["at"]), links=True)
     writer.replace(sheets.ANALYTICS_SHEET, report.analytics_rows(items, result["run"]["at"]))
-    if any(i.get("photo_label") for i in items):
-        for title, dropped in ((sheets.PHOTO_KEEP_SHEET, False), (sheets.PHOTO_DROP_SHEET, True)):
-            writer.replace(title, report.photo_rows(items, dropped), links=True)
+    if any(i.get("photo_label") for i in items) or result.get("photo_dropped"):
+        # kept: the cards; dropped: the records of what left the data (only full ticks bring them)
+        pages = [(sheets.PHOTO_KEEP_SHEET, items, False)]
+        if "photo_dropped" in result:
+            pages.append((sheets.PHOTO_DROP_SHEET, result["photo_dropped"], True))
+        for title, rows_from, dropped in pages:
+            writer.replace(title, report.photo_rows(rows_from, dropped), links=True)
             try:  # cosmetic: room for the photos (rows added by the rewrite are short again)
                 writer.set_row_height(title, PHOTO_ROW_PX)
             except Exception as exc:
@@ -1212,21 +1216,32 @@ PHOTO_ROW_PX = 110
 
 
 def photo_step(store, result, started):
-    """Trial mode: label new cards of 'Остальные' by photo and take the archive verdicts in.
-    Only records 'photo_label'; a failure never fails the tick. Counts only in the log."""
+    """Label new cards of 'Остальные' by photo, take the verdicts labelled outside the tracker in,
+    and drop from the data what the photo check rejects (a short record stays for 'По фото: убрать').
+    A failure never fails the tick. Counts only in the log."""
     from . import photos
 
     if time.monotonic() - started > PHOTO_START_LIMIT_S or not photos.available(store.root):
         return
     try:
         state = store.load_state()
-        archive = photos.apply_backfill(store.root, result["items"], state)
+        outside = photos.apply_backfill(store.root, result["items"], state)
         store.save_state(state)
         fresh, stats = photos.run(store.root, result["items"], PHOTO_TIME_BUDGET_S)
-        for item in archive + fresh:
-            store.save(item)
+        dropped = [i for i in result["items"] if photos.is_dropped(i)]
+        if dropped:
+            photos.record_drops(store.root, dropped)
+            gone = {i["id"] for i in dropped}
+            for item_id in gone:
+                store.discard(item_id)
+            result["items"] = [i for i in result["items"] if i["id"] not in gone]
+        for item in outside + fresh:
+            if not photos.is_dropped(item):
+                store.save(item)
+        result["photo_dropped"] = photos.dropped_records(store.root)
         print(f"photos: labelled {stats['labelled']} (drop {stats['drop']}, list {stats['list']}, keep {stats['keep']},"
-              f" gone {stats['gone']}), archive {len(archive)}, errors {stats['errors']}")
+              f" gone {stats['gone']}), from outside {len(outside)}, dropped from the data {len(dropped)},"
+              f" errors {stats['errors']}")
     except Exception as exc:
         print(f"photos failed: {type(exc).__name__}: {env.redact(exc)}")
 
