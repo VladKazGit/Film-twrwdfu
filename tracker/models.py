@@ -342,7 +342,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 35
+VERSION = 36
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -435,7 +435,9 @@ class _Alias:
 
 
 _BETWEEN = (r"(?:kamera|camera|appareil(?: photo)?|fotocamera|spiegelreflex(?:kamera)?|slr|reflex"
-            r"|analog(?:e|ue)?|analogique|argentique|vintage)")
+            r"|analog(?:e|ue)?|analogique|argentique|vintage"
+            # a lens maker named with the camera: 'Macchina Canon Vivitar AT-1 funzionante'
+            r"|vivitar)")
 
 
 def _compile_alias(brand, model, alias, not_after):
@@ -783,6 +785,60 @@ def flags_of(title, model_span=None):
     if _is_accessory(norm, model_span):
         flags.append("accessory?")
     return flags
+
+
+# ---------------------------------------------------------------- not worth tracking
+
+# Listings outside the list that are of no interest at all: kept out of the data ('Остальные'
+# holds the other manual cameras only). By the title, first match wins.
+_JUNK = [
+    ("instant", re.compile(r"polaroid|instax|\bintax\b|\bimpulse\b|sofortbild|\binstant|\bsx ?70\b|onestep|one step\b|istantane")),
+    ("aps / 110 / 126", re.compile(r"\baps\b|advantix|vectis|\bix ?240|\bix-?date|\bnexia\b|\belph\b|\brevio\b|instamatic"
+                                   r"|agfamatic|\bpocket|\b110\b|\b126")),
+    ("compact", re.compile(
+        r"\bprima\b|\bmju\b|\bmu-?\d|µ|espio|superzoom|zoom ?\d{2,3}\b(?! ?mm|-\d)|\baf ?-?\d{3}\b|\b[a-z]{0,2}35 ?af\b|\baf ?35"
+        r"|\bl35\b|\btrip\b|sure ?shot|autoboy|\briva\b|\bxa ?\d?\b|contax t ?[2-5]\b|minilux|leica c ?[1-3]\b|leica mini"
+        r"|\bz2x\b|big mini|yashica t ?[2-5]\b|\b(?:28|35) ?ti\b|\bgr ?1[sv]?\b|stylus|\bultra f9\b|euming|optima|vitolux"
+        r"|super shot|top shot|\bis-?\d{1,3}\b|\bez-?35|reusable|wiederverwendbar|\bbv ?35|\bfex\b|halina|tronic\b"
+        r"|datematic|canomati[ck]|kanomatic|discomini"
+        r"|point (?:and|&|n) shoot|point-and-shoot|\bkompakt|\bcompact|compatta|with ?flash|flash integr|eingebaut\w* blitz"
+        r"|\bdl-?\d{3}|\bsuper ?105\b|\befp\b|\d ?ef\b|\brf ?2\b|\bqd\b")),
+    ("toy / box / disposable", re.compile(
+        r"chicco|spielzeug|giocattol|jouet|\bkinder|\btoy\b|brownie|box ?kamera|box camera|tengor|\b(?:agfa|kodak|zeiss) box\b"
+        r"|\bbox (?:agfa|kodak)\b|agfa-box|einweg|jetable|usa e getta|disposable|quicksnap|fun ?saver|lomograph|\blomo\b"
+        r"|\blc-?a\b|holga|\bdiana\b|super color 35|ektar h35|\bm35\b|\bm38\b|pouva|la sardina")),
+    ("movie / video / projector", re.compile(
+        r"cinepresa|cinecamera|super ?-?8\b|\bsuper8|schmalfilm|camescope|camcorder|handycam|videokamera|video ?camera"
+        r"|\bdoppel ?8|normal ?8|autopak|projecteur|projektor|proiettore|projector|bolex|stereofilm")),
+    ("flash / meter / printer", re.compile(
+        r"^\W*(?:flash|blitz|esposimetr|belichtungsmesser|posemetre|light ?meter)|flitser|cartuccia|stampante|drucker"
+        r"|printer|imprimante|telescreen|\bhulle\b|sprocket|printkit")),
+    ("lens", re.compile(r"^\W*(?:[a-z]+ )?(?:af[- ]?s? |sp )?(?:nikkor|zuiko|takumar|rokkor|hexanon|serenar|yashinon"
+                        r"|objektiv|obiettivo|objectif|lens|lente|tamron|tokina|soligor)\b")),
+    ("modern AF", re.compile(
+        r"\bnikon f ?(?:50|55|60|65|70|75|80|90x?|100|401s?|501|601m?|801s?)\b|\bf-?(?:401|501|601|801)s?\b|\b401 ?s\b"
+        r"|\bn ?\d{4}s?\b(?=.*nikon)|\bnikon n ?\d{4}|\bminolta af\b|\baf ?\d{2}-\d{2,3}|dynax|maxxum|\beos\b|\bmz ?-?\d"
+        r"|\bpentax z ?-?\d|\bsf ?\d\b|autofocus|auto focus|\b\d{3,4} ?af\b")),
+]
+# No camera word or camera brand in the title and one of these: not a camera.
+_NOT_CAMERA = re.compile(r"esposimetr|belichtungsmesser|posemetre|light ?meter|lunasix|bisix|sekonic|filtre|\bfilter"
+                         r"|visore|visionneuse|viewer|faretto|lampe|\blamp|papier|paper|rouleaux|stativ|tripod|treppiede"
+                         r"|crayon|mcdonald|cokin")
+
+
+def junk_reason(title, vinted_brand=None):
+    """Why a listing outside the list is not worth tracking ('compact', 'instant', ...), or None."""
+    norm = normalize(title)
+    for reason, rx in _JUNK:
+        if rx.search(norm):
+            # 'Objectif Ricoh 40mm + Ricoh 500 GX', 'Nikon AF Nikkor foto toestel': a camera too
+            if reason == "lens" and (_CAMERA_WORDS.search(norm) or _WITH_WORDS.search(norm)):
+                continue
+            return reason
+    if (_NOT_CAMERA.search(norm) and not _CAMERA_WORDS.search(norm)
+            and not brands_in(norm) and not brands_in(vinted_brand or "")):
+        return "not a camera"
+    return None
 
 
 # ---------------------------------------------------------------- classification

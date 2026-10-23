@@ -189,6 +189,20 @@ def group_of(item):
     return "list" if item.get("in_list") and not SIGNAL_FLAGS & set(item.get("flags") or []) else "rest"
 
 
+def is_junk(item):
+    """A listing outside the list not worth keeping: an accessory, digital or compact camera, or a
+    kind of no interest (instant, APS, toys, movie cameras, flashes, modern autofocus, ...)."""
+    if item.get("group") == "list" or item.get("model_source") == "manual":
+        return False
+    return bool(SIGNAL_FLAGS & set(item.get("flags") or [])) or bool(
+        models.junk_reason(item.get("title") or "", item.get("vinted_brand")))
+
+
+def worth_tracking(item):
+    """List cameras; other cameras from REST_MIN_PRICE up that are not junk."""
+    return item["group"] == "list" or ((item.get("price_start") or 0) >= REST_MIN_PRICE and not is_junk(item))
+
+
 def _refresh_signal_flags(item):
     """Accessory/digital flags again, now with the description (manual labels stay)."""
     if item.get("model_source") == "manual":
@@ -605,6 +619,14 @@ def run_tick(store, client, labels=None, now=None, quick=False):
                 changed.add(item["id"])
                 stats["reclassified"] += 1
         state["models_version"] = models.VERSION
+        # The rules of what is worth keeping may have changed too: drop the junk, rewrite 'Остальные'.
+        for item in [i for i in [*active.values(), *closed.values()] if is_junk(i)]:
+            active.pop(item["id"], None)
+            closed.pop(item["id"], None)
+            changed.discard(item["id"])
+            store.discard(item["id"])
+            stats["junk_dropped"] += 1
+        state["rest_rewrite"] = True
 
     # 'Unsold in 3 h' is a rule of the rest group. A list camera closed that way
     # (it became a list camera later, e.g. after a dictionary update) is reopened
@@ -672,10 +694,12 @@ def run_tick(store, client, labels=None, now=None, quick=False):
         elif rec_id > max_seen:
             cheap = (rec["price"] or CHEAP_PRICE + 1) <= CHEAP_PRICE and rec_id not in parts_ids
             item = new_item(rec, now, cheap_after if cheap else listed_after, extra)
-            if item["group"] == "list" or (rec["price"] or 0) >= REST_MIN_PRICE:
+            if worth_tracking(item):
                 active[rec_id] = item
                 changed.add(rec_id)
                 stats[f"new_{item['group']}"] += 1
+            elif is_junk(item):
+                stats["junk_skipped"] += 1
         elif rec_id in misplaced and rec_id not in closed:
             # An older list camera under 'Sofortbildkameras', never seen: listing time unknown.
             if not first_run:
@@ -685,8 +709,10 @@ def run_tick(store, client, labels=None, now=None, quick=False):
         elif rec_id not in closed:
             # An old listing pushed back to the top. List cameras are tracked
             # from the bump on: it happened between the previous tick and now.
-            stats["bumped"] += 1
             item = new_item(rec, now, listed_after, ["bumped"] + (["night"] if first_of_day else []))
+            if is_junk(item):
+                continue  # kept out of the data, seen again on the next pages
+            stats["bumped"] += 1
             if item["group"] == "list" and not first_run:
                 active[rec_id] = item
                 changed.add(rec_id)
@@ -791,6 +817,12 @@ def run_tick(store, client, labels=None, now=None, quick=False):
         store.discard(item_id)
         state.setdefault(MODEL_SWEEP.key, {}).setdefault("skipped", []).append(item_id)
         stats["too_old"] += 1
+    # A description can show a compact or an accessory later: out of the data too.
+    for item_id in [i for i, it in active.items() if is_junk(it)]:
+        del active[item_id]
+        changed.discard(item_id)
+        store.discard(item_id)
+        stats["junk_dropped"] += 1
 
     # ---- cameras the user labelled that the tracker never saw (the model only in the photos,
     # or never on the scanned pages): opened once and tracked like found ones
@@ -852,7 +884,7 @@ def run_tick(store, client, labels=None, now=None, quick=False):
     state.setdefault("first_run_at", now)
     return _finish(store, state, now, started, client, stats, errors, full_scan, pages_read,
                    rest_enabled, today, active, closed, changed, fatal=False,
-                   daily=(first_run or first_of_day) and not quick, promoted=promoted, quick=quick)
+                   daily=not quick and bool(first_run or first_of_day or state.pop("rest_rewrite", False)), promoted=promoted, quick=quick)
 
 
 def run_cheap(store, client, labels=None, now=None):
@@ -887,7 +919,7 @@ def run_cheap(store, client, labels=None, now=None):
             continue
         elif rec_id > max_seen:
             item = new_item(rec, now, listed_after, [])
-            if item["group"] == "list" or (rec["price"] or 0) >= REST_MIN_PRICE:
+            if worth_tracking(item):
                 active[rec_id] = item
                 changed.add(rec_id)
                 stats[f"new_{item['group']}"] += 1
@@ -969,6 +1001,7 @@ def _finish(store, state, now, started, client, stats, errors, full_scan, pages,
         "search_pages": stats["search_pages"], "search_candidates": stats["search_candidates"],
         "found": stats["found"], "search_skipped": stats["search_skipped"], "found_missing": stats["found_missing"],
         "enriched": stats["enriched"], "too_old": stats["too_old"], "labelled": stats["labelled"],
+        "junk_skipped": stats["junk_skipped"], "junk_dropped": stats["junk_dropped"],
         "fresh_pages": stats["fresh_pages"], "fresh_found": stats["fresh_found"], "fresh_missing": stats["fresh_missing"],
         "rest_enabled": rest_enabled, "errors": [env.redact(e) for e in errors],
         # Names stay in the private data repo and sheet; log_line() never prints them.
@@ -1011,6 +1044,7 @@ def log_line(run):
             f" found {run.get('found', 0)}, too old/gone {run.get('search_skipped', 0)},"
             f" missing from search {run.get('found_missing', 0)}"
             f" | enriched {run.get('enriched', 0)}, too old {run.get('too_old', 0)}"
+            f" | junk skipped {run.get('junk_skipped', 0)}, dropped {run.get('junk_dropped', 0)}"
             f"{' | from labels ' + str(run['labelled']) if run.get('labelled') else ''}"
             f" | fresh search: pages {run.get('fresh_pages', 0)}, found {run.get('fresh_found', 0)},"
             f" missing {run.get('fresh_missing', 0)}"

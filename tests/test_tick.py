@@ -118,7 +118,7 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         store = DataStore(tmp)
         # Tick 1: first run, full scan; everything is preexisting.
-        pages = {1: [rec(1010, "Canon AE-1 Kamera"), rec(1009, "Polaroid Kamera", 10.0), rec(1008, "Agfa", 2.0)]
+        pages = {1: [rec(1010, "Canon AE-1 Kamera"), rec(1009, "Agfa Silette Kamera", 10.0), rec(1008, "Agfa", 2.0)]
                  + older(1007), 2: older(980)}
         r1 = tick.run_tick(store, FakeClient(pages), now="2026-10-16 07:07")
         a = store.load_active()
@@ -129,7 +129,7 @@ def main():
 
         # Tick 2: two new items; the list camera vanished and is sold.
         pages = {1: [rec(1012, "Kamera Canon", 40.0), rec(1011, "Nikon FM2 body", 150.0),
-                     rec(1009, "Polaroid Kamera", 10.0), rec(500, "Bumped old", 30.0),
+                     rec(1009, "Agfa Silette Kamera", 10.0), rec(500, "Bumped old", 30.0),
                      rec(400, "Reflex argentique Zenit 12XP bon état", 10.0)] + older(1007), 2: older(980)}
         client = FakeClient(pages, {1010: {"status": "sold", "price": 45.0},
                                     1012: {"description": "Canon AE-1 Program mit 50mm Objektiv"}})
@@ -555,7 +555,9 @@ def main():
         store.save_state(state)
         r = tick.run_tick(store, FakeClient(base), now="2026-10-16 17:15")
         moved = (store.load_active().get(acc["id"]) or store.load_closed().get(acc["id"]))
-        assert moved["group"] == "rest" and r["run"]["reclassified"] >= 1, (moved["group"], r["run"]["reclassified"])
+        # out of the list, and as an accessory out of the data too
+        assert moved is None and r["run"]["reclassified"] >= 1 and r["run"]["junk_dropped"] >= 1, r["run"]
+        assert r["daily"], "'Остальные' is rewritten after the clean-up"
 
     # 'Проверка': a Mat-124G at 3 EUR among 200 EUR ones, a model taken from the description,
     # and a title with an accessory word that slipped through; manual labels are trusted.

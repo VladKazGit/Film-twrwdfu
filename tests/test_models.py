@@ -1,5 +1,5 @@
 """Model recognition rules from CLAUDE.md. Run: python -m tests.test_models"""
-from tracker.models import classify
+from tracker.models import classify, junk_reason
 
 CASES = [
     # (title, vinted brand, expected model)
@@ -299,6 +299,36 @@ FLAG_CASES = [
 ]
 
 
+# (title, expected reason): listings outside the list kept out of the data
+JUNK_CASES = [
+    ("Canon Prima 115u Super (tested)", "compact"),
+    ("Olympus MjuZOOM115", "compact"),
+    ("Appareil photo argentique Nikon AF230", "compact"),
+    ("Pack argentique Panasonic C-310EF.", "compact"),
+    ("Minolta Vectis 2000 IX-Date APS Film Camera - Tested", "aps / 110 / 126"),
+    ("Kodak Instamatic 100 Vintage Kamera", "aps / 110 / 126"),
+    ("polaroid vintage", "instant"),
+    ("Intax Bilddrucker", "instant"),
+    ("Brownie starlet vintage camera  deco", "toy / box / disposable"),
+    ("Macchina fotografica Chicco", "toy / box / disposable"),
+    ("Lomography LC-A", "toy / box / disposable"),
+    ("Cinepresa Canon anni 70 autonomo 310 m con borsa in pelle", "movie / video / projector"),
+    ("Flash Metz 180 per fotocamera", "flash / meter / printer"),
+    ("Cartuccia per stampante fotografica portatile Kodak", "flash / meter / printer"),
+    ("Esposimetro vintage Leningrad 2", "flash / meter / printer"),
+    ("Macchina fotografica reflex analogica NIKON F50", "modern AF"),
+    ("Minolta af 28-80", "modern AF"),
+    ("Lichtmeter Gossen Bisix", "not a camera"),
+    ("Olympus lens", "lens"),
+    ("Canon Canonet QL19", None),
+    ("Minolta X-300 + flash", None),
+    ("Pentax P30 + zoom 70-210", None),
+    ("Objectif Ricoh 40mm + Ricoh 500 GX", None),
+    ("Lipca Rollop Automatic TLR", None),
+    ("Macchina fotografica funzionante", None),
+]
+
+
 # (title, description, expected model): description search rules
 DESC_CASES = [
     ("Canon EOS 5000", "Canon EF Objektiv 35-80 dabei", None),
@@ -312,6 +342,7 @@ DESC_CASES = [
     ("Kamera Canon", "Canon EF Spiegelreflexkamera von 1976", "Canon EF"),
     ("Lotto depliant e cataloghi vintage Leica anni 50", "Leica M3, Leicaflex SL, IIIf", None),
     ("Yashica Mat-124g", "Kamera in gutem Zustand, Objektiv sauber", "Yashica Mat-124G"),
+    ("Macchina fotografica funzionante", "Macchina Canon Vivitar AT-1 funzionante compreso di tutto il kit", "Canon AT-1"),
     ("Olympus PEN-F silber", "Body mit M.Zuiko 17mm, 4K, Micro Four Thirds", None),
     ("Olympus Pen F", "Halbformat-Spiegelreflex von 1963, F.Zuiko 38mm 1.8, ohne Batterie", "Olympus Pen F"),
     ("Olympus M1", "OM-D, Mark II, 20 MP", None),
@@ -366,7 +397,12 @@ def main():
         if got != expected:
             bad += 1
             print(f"FAIL: {title!r}: expected {expected}, got {got}")
-    total = len(CASES) + len(FLAG_CASES) + len(DESC_CASES) + len(DESC_FLAG_CASES)
+    for title, expected in JUNK_CASES:
+        got = junk_reason(title)
+        if got != expected:
+            bad += 1
+            print(f"FAIL: {title!r}: expected junk {expected}, got {got}")
+    total = len(CASES) + len(FLAG_CASES) + len(DESC_CASES) + len(DESC_FLAG_CASES) + len(JUNK_CASES)
     print(f"{total - bad}/{total} passed")
 
 if __name__ == "__main__":
