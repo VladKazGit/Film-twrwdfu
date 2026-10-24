@@ -299,6 +299,13 @@ def main():
                  dict(labelled, id=23, title="Appareil photo", photo_label={"verdict": ["keep"], "ocr": "xx"})]
         counts = tick.name_step(DataStore(tempfile.mkdtemp()), {"items": named})
         assert counts["named"] == 2 and counts["unnamed"] == 1 and counts["to_list"] == 1, counts
+        # A compact, autofocus or movie camera by its exact name leaves the data (not in a wanted bundle).
+        dropping = DataStore(tempfile.mkdtemp())
+        res = {"items": [dict(labelled, id=25, title="Konica C35 telemetro", photo_label={"verdict": ["keep"]}),
+                         dict(labelled, id=26, title="Lot Konica C35 + Minolta X300S", photo_label={"verdict": ["keep"]})]}
+        counts = tick.name_step(dropping, res)
+        assert counts["dropped"] == 1 and [i["id"] for i in res["items"]] == [26], (counts, res["items"][0].get("bundle"))
+        assert photos.dropped_records(dropping.root)[0]["photo_label"]["verdict"] == ["drop", "по названию: мыльница"]
         assert named[0]["camera_name"] == "Minolta X300S" and named[0]["camera_name_source"] == "title"
         assert named[1]["model"] == "Zenit 122" and named[1]["model_source"] == "photo" and named[1]["group"] == "list"
         assert report.item_row(named[0])[1] == "Minolta X300S" and "название" in report.item_row(named[0])[report.ITEM_HEADER.index("Источник модели")]

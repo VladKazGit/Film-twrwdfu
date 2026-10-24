@@ -26,7 +26,7 @@ import traceback
 from collections import Counter
 from pathlib import Path
 
-from . import ageest, clock, env, models, notify, report
+from . import ageest, clock, env, kinds, models, notify, report
 from .store import DataStore
 from .vinted import EXTRA_CATEGORY_IDS, MAX_PAGES, PARTS_CATEGORY_ID, BlockedError, VintedClient, VintedError, age_days
 
@@ -1250,11 +1250,26 @@ PHOTO_START_LIMIT_S = 9 * 60  # a tick that already ran this long skips it
 PHOTO_ROW_PX = 110
 
 
+NAME_DROP_KINDS = {kinds.COMPACT, kinds.AF, kinds.MOVIE}  # not wanted, as junk titles are
+
+
+def unwanted_kind(item):
+    """'мыльница' / 'автофокус' / 'кино' when the exact name of a card says so and no other camera
+    of its bundle is wanted (or of unknown kind), else None."""
+    kind = kinds.camera_kind(item.get("camera_name"))
+    if kind not in NAME_DROP_KINDS or any(kinds.camera_kind(n) not in NAME_DROP_KINDS for n in item.get("bundle") or []):
+        return None
+    return kind
+
+
 def name_step(store, result):
     """An exact camera name for every card of 'Остальные' (camera_name): from the title, the
     description, then the text read on its photo. A list model read on the photo of a kept card
-    moves it to 'Список' (model_source 'photo'). Returns the counts."""
-    counts = Counter()
+    moves it to 'Список' (model_source 'photo'); a compact, autofocus or movie camera by its name
+    is dropped from the data, like a junk title (a short record stays). Returns the counts."""
+    from . import photos
+
+    counts, dropped = Counter(), []
     for item in result["items"]:
         if item.get("group") != "rest":
             continue
@@ -1268,29 +1283,47 @@ def name_step(store, result):
                 item["camera_name"], item["camera_name_source"] = label["camera_name"], "manual"
                 store.save(item)
             counts["named"] += 1
-            continue
-        name, source = None, None
-        for source, text, from_photo in (("title", item.get("title"), False),
-                                         ("description", (item.get("description") or "")[:300], False),
-                                         ("photo", label.get("ocr"), True),
-                                         ("more_photos", item.get("photo_more_ocr"), True)):
-            name = models.camera_name(text, from_photo=from_photo)
-            if name:
-                break
-        source = source if name else None
-        text = f"{name[0]} {name[1]}" if name else None
-        model = models.list_model_of(*name) if name and source in ("photo", "more_photos") else None
-        moved = bool(model and (label.get("verdict") or [""])[0] != "drop"
-                     and not SIGNAL_FLAGS & set(item.get("flags") or []))
-        if moved:
-            set_model(item, model, "photo")
-            item["group"] = group_of(item)  # closed ones too: the next tick reopens and checks them
-            counts["to_list"] += 1
-        if moved or (item.get("camera_name"), item.get("camera_name_source")) != (text, source):
-            item["camera_name"], item["camera_name_source"] = text, source
-            store.save(item)
-        counts["named" if name else "unnamed"] += 1
+        else:
+            got = _name_from_text(store, item, label)
+            counts["unnamed" if got == "unnamed" else "named"] += 1
+            counts["to_list"] += got == "to_list"
+        kind = unwanted_kind(item) if item.get("group") == "rest" else None
+        if kind:
+            item["photo_label"] = dict(label, verdict=["drop", f"по названию: {kind}"])
+            dropped.append(item)
+    if dropped:
+        photos.record_drops(store.root, dropped)
+        gone = {i["id"] for i in dropped}
+        for item_id in gone:
+            store.discard(item_id)
+        result["items"] = [i for i in result["items"] if i["id"] not in gone]
+        result["photo_dropped"] = photos.dropped_records(store.root)
+    counts["dropped"] = len(dropped)
     return counts
+
+
+def _name_from_text(store, item, label):
+    """Name a card from its title, description and photo texts; 'named' / 'unnamed' / 'to_list'."""
+    name, source = None, None
+    for source, text, from_photo in (("title", item.get("title"), False),
+                                     ("description", (item.get("description") or "")[:300], False),
+                                     ("photo", label.get("ocr"), True),
+                                     ("more_photos", item.get("photo_more_ocr"), True)):
+        name = models.camera_name(text, from_photo=from_photo)
+        if name:
+            break
+    source = source if name else None
+    text = f"{name[0]} {name[1]}" if name else None
+    model = models.list_model_of(*name) if name and source in ("photo", "more_photos") else None
+    moved = bool(model and (label.get("verdict") or [""])[0] != "drop"
+                 and not SIGNAL_FLAGS & set(item.get("flags") or []))
+    if moved:
+        set_model(item, model, "photo")
+        item["group"] = group_of(item)  # closed ones too: the next tick reopens and checks them
+    if moved or (item.get("camera_name"), item.get("camera_name_source")) != (text, source):
+        item["camera_name"], item["camera_name_source"] = text, source
+        store.save(item)
+    return "to_list" if moved else "named" if name else "unnamed"
 
 
 MORE_PHOTOS_BUDGET_S = 60  # unnamed kept cards: the 2nd and 3rd photos per full tick
@@ -1377,7 +1410,7 @@ def _main(args):
             try:  # exact names of 'Остальные'; a failure never fails the tick
                 names = name_step(store, result)
                 print(f"names: named {names['named']}, without a name {names['unnamed']},"
-                      f" to the list by photo {names['to_list']}")
+                      f" to the list by photo {names['to_list']}, dropped by kind {names['dropped']}")
             except Exception as exc:
                 print(f"names failed: {type(exc).__name__}: {env.redact(exc)}")
         if not result["fatal"]:
