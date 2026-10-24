@@ -238,6 +238,8 @@ def apply_page(item, page, now):
         kit, details = models.kit_of(f"{item['title']} {page['description']}")
         item["kit"], item["kit_details"] = kit, details
     status = page["status"]
+    if status in ("active", "reserved", "hidden", "sold"):
+        item["description_checked"] = True  # the page was read, its description (maybe none) too
     if status == "active":
         item["status"] = "active"
         item["last_seen_active"] = now
@@ -291,6 +293,47 @@ def recheck_minutes(item, now):
     if listed and clock.minutes_between(f"{listed} 00:00", now) > OLD_ON_VINTED_DAYS * 1440:
         return OLD_RECHECK_MIN
     return 1440
+
+
+CHEAP_DESCRIPTIONS_PER_RUN = 10  # cheap list cameras carded without a description, per run
+JUNK_IDS_KEEP = 3000  # listings dropped as junk after their description: not carded again
+
+
+def describe_cheap(active, client, now, stats, changed):
+    """Cheap list cameras carded without their description (found ones: by the cheap check, the
+    fresh search): read it before 'До 20 €' and the letter, which wait for it. The cheapest
+    first, a few per run. Raises BlockedError."""
+    todo = sorted((i for i in active.values() if i.get("group") == "list" and i["status"] == "active"
+                   and report.unread_description(i) and (report.current_price(i) or 0) <= CHEAP_PRICE),
+                  key=lambda i: (report.current_price(i) or 0, i["id"]))
+    for item in todo[:CHEAP_DESCRIPTIONS_PER_RUN]:
+        if not _can_request(client):
+            return
+        try:
+            page = client.item_page(item["id"])
+        except BlockedError:
+            raise
+        except VintedError:
+            stats["check_errors"] += 1
+            continue
+        stats["checks"] += 1
+        stats["descriptions"] += 1
+        item["description_checked"] = True
+        apply_page(item, page, now)
+        changed.add(item["id"])
+
+
+def drop_junk(store, state, active, changed, stats):
+    """A description can show a compact or an accessory later: out of the data too, and its id
+    remembered so that no later page cards it again."""
+    junk = state.setdefault("junk_ids", [])
+    for item_id in [i for i, it in active.items() if is_junk(it)]:
+        del active[item_id]
+        changed.discard(item_id)
+        store.discard(item_id)
+        junk.append(item_id)
+        stats["junk_dropped"] += 1
+    del junk[:-JUNK_IDS_KEEP]
 
 
 def wants_description(item):
@@ -369,7 +412,7 @@ def fresh_search(state, client, active, closed, now, stats, changed, quick=False
                if i["first_seen"] >= day_ago and not {"found", "bumped", "preexisting"} & set(i["flags"])]
     floor = min(new_ids + [h[1] for h in history[:1]], default=0)
     top = state.get("max_seen_id", 0)
-    skipped = set(state.get(MODEL_SWEEP.key, {}).get("skipped", []))
+    skipped = set(state.get(MODEL_SWEEP.key, {}).get("skipped", [])) | set(state.get("junk_ids") or [])
     for model, pages in queries:
         results, last = [], []
         for page in range(1, pages + 1):
@@ -687,10 +730,13 @@ def run_tick(store, client, labels=None, now=None, quick=False):
     listed_after = None if first_run else state.get("last_tick_at")
     # A cheap one (outside the parts) would have shown in the last cheap check: listed after it.
     cheap_after = listed_after and max(listed_after, state.get("last_cheap_at") or "")
+    junk_ids = set(state.get("junk_ids") or [])
     for rec_id, rec in seen.items():
         if rec_id in active:
             mark_seen(active[rec_id], rec, now)
             changed.add(rec_id)
+        elif rec_id in junk_ids:
+            continue
         elif rec_id > max_seen:
             cheap = (rec["price"] or CHEAP_PRICE + 1) <= CHEAP_PRICE and rec_id not in parts_ids
             item = new_item(rec, now, cheap_after if cheap else listed_after, extra)
@@ -809,6 +855,12 @@ def run_tick(store, client, labels=None, now=None, quick=False):
             rest_enabled = False
         except VintedError:
             stats["check_errors"] += 1
+    if not first_run:
+        try:
+            describe_cheap(active, client, now, stats, changed)
+        except BlockedError as exc:
+            errors.append(f"item page: {exc}")
+            rest_enabled = False
 
     # Found cameras that turned out older than half a year: not tracked at all.
     for item_id in [i for i, it in active.items() if it.get("too_old")]:
@@ -817,12 +869,7 @@ def run_tick(store, client, labels=None, now=None, quick=False):
         store.discard(item_id)
         state.setdefault(MODEL_SWEEP.key, {}).setdefault("skipped", []).append(item_id)
         stats["too_old"] += 1
-    # A description can show a compact or an accessory later: out of the data too.
-    for item_id in [i for i, it in active.items() if is_junk(it)]:
-        del active[item_id]
-        changed.discard(item_id)
-        store.discard(item_id)
-        stats["junk_dropped"] += 1
+    drop_junk(store, state, active, changed, stats)
 
     # ---- cameras the user labelled that the tracker never saw (the model only in the photos,
     # or never on the scanned pages): opened once and tracked like found ones
@@ -909,13 +956,13 @@ def run_cheap(store, client, labels=None, now=None):
                        active, closed, changed, fatal=True, quick=True, cheap=True)
     max_seen = state.get("max_seen_id", 0)
     listed_after = max(state.get("last_tick_at") or "", state.get("last_cheap_at") or "") or None
-    fresh = []
+    fresh, junk_ids = [], set(state.get("junk_ids") or [])
     for rec in recs:
         rec_id = rec["id"]
         if rec_id in active:
             mark_seen(active[rec_id], rec, now)
             changed.add(rec_id)
-        elif rec_id in closed:
+        elif rec_id in closed or rec_id in junk_ids:
             continue
         elif rec_id > max_seen:
             item = new_item(rec, now, listed_after, [])
@@ -955,10 +1002,12 @@ def run_cheap(store, client, labels=None, now=None):
                 promoted.append(item["id"])
     try:
         fresh_search(state, client, active, closed, now, stats, changed, quick=True, limit=FRESH_PER_CHEAP)
+        describe_cheap(active, client, now, stats, changed)
     except BlockedError as exc:
         errors.append(f"fresh search: {exc}")
     except VintedError:
         stats["check_errors"] += 1
+    drop_junk(store, state, active, changed, stats)
     state["last_cheap_at"] = now
     return _finish(store, state, now, started, client, stats, errors, False, 1, True, today,
                    active, closed, changed, fatal=False, quick=True, promoted=promoted, cheap=True)

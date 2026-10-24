@@ -371,12 +371,19 @@ def check_rows(items):
         for i, reason in found]
 
 
+def unread_description(item):
+    """Carded without its description yet (a found one): out of 'До 20 €' and the letters until it
+    is read - a manual or a part hides there ('Praktica MTL50': 'Mode d'emploi…')."""
+    return not item.get("description") and not item.get("description_checked")
+
+
 def cheap_cameras(items, max_price):
     """Cameras from 'Список' (not flagged accessory/digital) on sale now, priced max_price or
-    less. Sold, deleted, reserved or hidden ones stay in 'Список' / 'Продажи' only."""
+    less, their description read. Sold, deleted, reserved or hidden ones stay in 'Список' /
+    'Продажи' only."""
     return [i for i in items
             if i.get("group") == "list" and i.get("status") == "active"
-            and not stat_flags(i) & EXCLUDED_FLAGS
+            and not stat_flags(i) & EXCLUDED_FLAGS and not unread_description(i)
             and current_price(i) is not None and current_price(i) <= max_price]
 
 

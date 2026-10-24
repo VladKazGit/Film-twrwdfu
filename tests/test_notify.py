@@ -7,7 +7,8 @@ from tracker import notify
 def card(item_id, model, price, flags=(), group="list", status="active"):
     return {"id": item_id, "model": model, "title": f"{model} analog", "url": f"https://www.vinted.de/items/{item_id}",
             "price_start": price, "price_final": None, "price_history": [{"at": "2026-10-18 10:30", "price": price}],
-            "first_seen": "2026-10-18 10:30", "flags": list(flags), "group": group, "status": status}
+            "first_seen": "2026-10-18 10:30", "flags": list(flags), "group": group, "status": status,
+            "description_checked": True}
 
 
 def main():

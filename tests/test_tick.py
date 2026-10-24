@@ -742,7 +742,8 @@ def main():
 
     # 'До 20 €' includes exactly 20 EUR.
     at = lambda price, group="list", flags=(), status="active": {
-        "price_history": [{"at": "x", "price": price}], "group": group, "flags": list(flags), "status": status}
+        "price_history": [{"at": "x", "price": price}], "group": group, "flags": list(flags), "status": status,
+        "description_checked": True}
     assert len(report.cheap_cameras([at(20.0), at(19.99), at(20.01)], 20.0)) == 2
     assert not report.cheap_cameras([at(10.0, status=s) for s in ("sold", "deleted", "reserved", "hidden", "unsold_30d")], 20.0)
     assert not report.cheap_cameras([at(10.0, flags=["accessory?"]), at(10.0, group="rest")], 20.0),         "accessories and rest rows are not in 'До 20 €'"
@@ -792,6 +793,20 @@ def main():
         assert set(client.opened) <= {30_000_000_001, 30_000_000_002}, client.opened
         assert tick.log_line(rc["run"]).startswith("cheap tick") and tick.runs_row(rc["run"])[sheets.RUNS_HEADER.index("Полный обход")] == "до 20 €"
         assert store.load_state()["checks_since_tick"]["cheap"] == 1 and tick.runs_row(rc["run"])[-1] == ""
+        # A cheap found one gets its description read before 'До 20 €' and the letter: a manual
+        # titled as a camera leaves the data and is not carded again.
+        manual, zenit = 19_600_000_001, 19_600_000_002
+        client = FakeClient({"cheap": [rec(manual, "Praktica MTL50", 13.0), rec(zenit, "Zenit 11", 12.0)]},
+                            {manual: {"description": "Mode d’emploi, Notice d’utilisation, manuel, Praktica MTL 50"},
+                             zenit: {"description": "Funktioniert"}})
+        rc = tick.run_cheap(store, client, now="2026-10-17 11:12")
+        a = store.load_active()
+        assert manual not in a and manual in store.load_state()["junk_ids"] and rc["run"]["junk_dropped"] == 1, rc["run"]
+        assert a[zenit]["flags"] == ["found"] and zenit in [i["id"] for i in report.cheap_cameras(rc["items"], 20.0)]
+        assert not report.cheap_cameras([{**a[zenit], "description": None, "description_checked": False}], 20.0)
+        client = FakeClient({"cheap": [rec(manual, "Praktica MTL50", 13.0)]})
+        tick.run_cheap(store, client, now="2026-10-17 11:14")
+        assert manual not in store.load_active() and manual not in client.opened, "not carded again"
 
         # Full scans (the morning after the night) read 3 pages of the extra categories.
         state = store.load_state()
@@ -800,7 +815,7 @@ def main():
         pages = {1: page1, 2: older(19_000_000_000), (3077, 2): [rec(25_000_000_100, "Nikon EM Kamera", 40.0)]}
         rf = tick.run_tick(store, FakeClient(pages), now="2026-10-17 11:20")
         assert rf["run"]["full_scan"] and 25_000_000_100 in store.load_active(), rf["run"]
-        assert tick.runs_row(rf["run"])[-1] == "быстрых 0, до 20 € 1", tick.runs_row(rf["run"])[-1]
+        assert tick.runs_row(rf["run"])[-1] == "быстрых 0, до 20 € 3", tick.runs_row(rf["run"])[-1]
         assert store.load_state()["checks_since_tick"] == {"quick": 0, "cheap": 0}
 
         # Fresh search: a list camera from another category, listed within a day, is tracked.
