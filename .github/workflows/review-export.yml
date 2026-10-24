@@ -1,0 +1,32 @@
+name: review export
+
+# Reads the user's marks (row colours, notes, comments) on the review sheets into the private data
+# repo (review/export.json). Started by hand or by the maintainer; touches no sheet.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -q -r requirements.txt
+
+      - name: Export the review
+        env:
+          GOOGLE_SA_KEY: ${{ secrets.GOOGLE_SA_KEY }}
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+          DATA_TOKEN: ${{ secrets.DATA_TOKEN }}
+          DATA_REPO: ${{ secrets.DATA_REPO }}
+        run: python -u -m tracker.review_export
