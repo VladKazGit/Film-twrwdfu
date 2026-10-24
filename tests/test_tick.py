@@ -301,7 +301,8 @@ def main():
         assert named[1]["model"] == "Zenit 122" and named[1]["model_source"] == "photo" and named[1]["group"] == "list"
         assert report.item_row(named[0])[1] == "Minolta X300S" and "название" in report.item_row(named[0])[report.ITEM_HEADER.index("Источник модели")]
         sib = report.sibling_rows(named)
-        assert [r[1] for r in sib[1:]] == ["Minolta X300S"] and "Minolta X-700" in sib[1][2], sib
+        assert [r[1] for r in sib[1:]] == ["Minolta X300S"] and "Minolta X-700" in sib[1][3], sib
+        assert sib[1][2] == "полуавтомат / электроника", "the kind of camera, for the list's two parts"
         # No name from the first photo: the 2nd/3rd photos are read; still nothing -> the manual sheet.
         more = [dict(labelled, id=31, title="Kamera", photo_label={"verdict": ["keep"]}, name_tried="t",
                      photo_more_ocr="CHINON CE-4 | x", photos_more=[photo, photo]),
@@ -322,8 +323,9 @@ def main():
                  dict(labelled, id=44, camera_name="Minolta X-300"),
                  dict(labelled, id=45, name_tried="t"), dict(labelled, id=46)]
         prop = report.proposal_rows(cards)
-        assert [(r[1], r[2], r[-2]) for r in prop[1:]] == [("Chinon CE-4", 2, 43), ("Chinon CE-4", 2, 41),
+        assert [(r[1], r[3], r[-2]) for r in prop[1:]] == [("Chinon CE-4", 2, 43), ("Chinon CE-4", 2, 41),
                                                            ("Agfa Selecta", 1, 42)], prop
+        assert [r[2] for r in prop[1:]] == ["полуавтомат / электроника"] * 2 + ["мыльница"]
         assert [r[-2] for r in report.sibling_rows(cards)[1:]] == [44]
         assert [r[-2] for r in report.photo_rows(cards, dropped=False)[1:]] == [46]
         # Relists: the same seller and model, the earlier listing taken down unsold before the next one showed up.

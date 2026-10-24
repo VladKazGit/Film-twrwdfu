@@ -430,7 +430,14 @@ def main():
     if siblings("Minolta", "X-300") != ["Minolta X-1", "Minolta X-700", "Minolta X-500"] or siblings("Canon", "AE-1"):
         bad += 1
         print("FAIL: siblings", siblings("Minolta", "X-300"), siblings("Canon", "AE-1"))
-    total = len(CASES) + len(FLAG_CASES) + len(DESC_CASES) + len(DESC_FLAG_CASES) + len(JUNK_CASES) + len(NAME_CASES) + 1
+    from tracker.kinds import camera_kind
+    for name, kind in (("Minolta X-300", "полуавтомат / электроника"), ("Minolta SRT100X", "механика"),
+                       ("Nikon F-401X", "автофокус"), ("Konica C35", "мыльница"), ("Fujica STX-1N", "механика"),
+                       ("Fujica Single-8", "кино"), ("Revue AC4", "?"), ("Zeiss Ikon Contaflex", "механика")):
+        if camera_kind(name) != kind:
+            bad += 1
+            print(f"FAIL: kind {name}: expected {kind}, got {camera_kind(name)}")
+    total = len(CASES) + len(FLAG_CASES) + len(DESC_CASES) + len(DESC_FLAG_CASES) + len(JUNK_CASES) + len(NAME_CASES) + 2
     print(f"{total - bad}/{total} passed")
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ import statistics
 from collections import Counter
 from datetime import timedelta
 
-from . import clock, models
+from . import clock, kinds, models
 
 # Sale time buckets by the upper estimate (time_to_sell_max), minutes.
 BUCKETS = [(30, "< 30 мин"), (360, "30 мин – 6 ч"), (1440, "6–24 ч"), (10080, "1–7 дн"), (None, "> 7 дн")]
@@ -786,7 +786,7 @@ def unnamed_rows(items):
     return rows
 
 
-SIBLINGS_HEADER = ["Фото", "Камера", "Братья в списке", "Откуда название", "Заголовок", "Цена, €", "Статус",
+SIBLINGS_HEADER = ["Фото", "Камера", "Тип", "Братья в списке", "Откуда название", "Заголовок", "Цена, €", "Статус",
                    "Впервые", "id", "Ссылка"]
 
 
@@ -797,7 +797,7 @@ def near_list_models(item):
     return models.siblings(brand, name[len(brand) + 1:]) if brand else []
 
 
-PROPOSAL_HEADER = ["Фото", "Камера", "Таких объявлений", "Откуда название", "Заголовок", "Цена, €", "Статус",
+PROPOSAL_HEADER = ["Фото", "Камера", "Тип", "Таких объявлений", "Откуда название", "Заголовок", "Цена, €", "Статус",
                    "Впервые", "id", "Ссылка"]
 
 
@@ -813,7 +813,8 @@ def proposal_rows(items):
     cards.sort(key=lambda i: (-seen[i["camera_name"]], i["camera_name"]))       # ... within each model
     rows = [PROPOSAL_HEADER]
     for i in cards:
-        rows.append([photos.image_formula(i.get("photo")), i["camera_name"], seen[i["camera_name"]],
+        rows.append([photos.image_formula(i.get("photo")), i["camera_name"], kinds.camera_kind(i["camera_name"]),
+                     seen[i["camera_name"]],
                      NAME_SOURCE_RU.get(i.get("camera_name_source"), ""), i.get("title") or "",
                      _num(current_price(i)), STATUS_RU.get(i.get("status"), i.get("status") or ""),
                      i.get("first_seen") or "", i["id"], i.get("url") or ""])
@@ -835,7 +836,8 @@ def sibling_rows(items):
     found.sort(key=lambda f: (f[0].get("first_seen") or "", f[0]["id"]), reverse=True)
     rows = [SIBLINGS_HEADER]
     for i, near in found:
-        rows.append([photos.image_formula(i.get("photo")), i["camera_name"], ", ".join(near[:4]),
+        rows.append([photos.image_formula(i.get("photo")), i["camera_name"], kinds.camera_kind(i["camera_name"]),
+                     ", ".join(near[:4]),
                      NAME_SOURCE_RU.get(i.get("camera_name_source"), ""), i.get("title") or "",
                      _num(current_price(i)), STATUS_RU.get(i.get("status"), i.get("status") or ""),
                      i.get("first_seen") or "", i["id"], i.get("url") or ""])
