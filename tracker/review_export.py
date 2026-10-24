@@ -36,9 +36,10 @@ def export(spreadsheet):
         out[title] = rows
     comments = []
     try:  # Drive comments on the spreadsheet (the sheet's own notes are above)
-        resp = spreadsheet.client.http_client.request(
+        resp = spreadsheet.client.request(  # gspread's HTTP client, with the service account's Drive scope
             "get", f"https://www.googleapis.com/drive/v3/files/{spreadsheet.id}/comments",
-            params={"fields": "comments(content,anchor,quotedFileContent,resolved,replies(content))", "pageSize": 100})
+            params={"fields": "comments(content,anchor,quotedFileContent,resolved,replies(content)),nextPageToken",
+                    "pageSize": 100})
         comments = resp.json().get("comments", [])
     except Exception as exc:
         print(f"review: comments not read: {type(exc).__name__}")
