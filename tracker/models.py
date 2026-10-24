@@ -60,6 +60,11 @@ BRANDS = {
     "Moskva": (EAST, ["moskva"]),
     "Kodak": (None, ["kodak"]),
     "Polaroid": (None, ["polaroid"]),
+    "Braun": (EUROPE, ["braun"]),
+    "Altix": (EAST, ["altix", "altissa"]),
+    "Gamma": (EUROPE, ["gamma"]),
+    "Pax": (JAPAN, ["pax"]),
+    "Edixa": (EUROPE, ["edixa"]),
 }
 
 # Lens/aperture-looking tails that must not count as "another model number".
@@ -75,7 +80,7 @@ MODELS = [
     ("Nikon", "Nikon FM2n", MECH, S35, ["fm2 n!"], None),
     ("Nikon", "Nikon FM2n/T", MECH, S35, ["fm2 n t!", "fm2 t!"], None),
     ("Nikon", "Nikon FM3A", MECH, S35, ["fm3 a!"], None),
-    ("Nikon", "Nikkormat FTn", MECH, S35, ["nikkormat ftn!", "ftn"], None),
+    ("Nikon", "Nikkormat FTn", MECH, S35, ["nikkormat ftn!", "ftn", "^ft n"], None),
     ("Canon", "Canon F-1", MECH, S35, ["^f 1"], None),
     ("Canon", "Canon F-1n", MECH, S35, ["^f 1 n"], None),
     ("Canon", "Canon FTb", MECH, S35, ["ft b", "ft b n", "ft b ql"], None),
@@ -226,6 +231,30 @@ MODELS = [
     ("Zorki", "Zorki 4", MECH, S35, ["^4"], None),
     ("Zorki", "Zorki 1", MECH, S35, ["^1"], None),  # 1948
     ("Zorki", "Zorki 2C", MECH, S35, ["^2 c", "^2 s"], None),  # 1955, Зоркий-2С
+    # marked green by the user on 'Предложение' and 'По фото: без названия' (and the Fujica ST family)
+    ("Fujica", "Fujica ST701", MECH, S35, ['^st 701'], None),
+    ("Fujica", "Fujica ST801", MECH, S35, ['^st 801'], None),
+    ("Fujica", "Fujica ST605", MECH, S35, ['^st 605'], None),
+    ("Fujica", "Fujica ST605N", MECH, S35, ['^st 605 n', '^st 605 ii'], None),
+    ("Fujica", "Fujica ST705", MECH, S35, ['^st 705', '^st 705 w'], None),
+    ("Fujica", "Fujica STX-1", MECH, S35, ['^stx 1'], None),
+    ("Fujica", "Fujica STX-1N", MECH, S35, ['^stx 1 n'], None),
+    ("Nikon", "Nikkormat FT", MECH, S35, ['^ft', 'nikkormat ft!'], r"n(?![a-z])|el\b|[23]"),  # not FTn / FT2 / FT3
+    ("Canon", "Canon Canonet QL17", ELEC, S35, ['canonet ql 17!', 'canonet g iii ql 17!', 'canonet ql 17 g iii!', 'canonet g iii 17!'], None),
+    ("Minolta", "Minolta XG-2", ELEC, S35, ['xg 2'], None),
+    ("Minolta", "Minolta Hi-Matic F", ELEC, S35, ['hi matic f!', 'himatic f!', '^matic f'], None),
+    ("Yashica", "Yashica Electro 35 GSN", ELEC, S35, ['electro 35 gsn'], None),
+    ("Yashica", "Yashica 44 LM", MECH, MED, ['^44 lm', 'yashica 44 lm!'], None),
+    ("Agfa", "Agfa Super Silette", MECH, S35, ['super silette!'], None),
+    ("Zeiss Ikon", "Zeiss Ikon Ikonta", MECH, MED, ['ikonta!', r'~ikonta[\s\-.,_/]*\d{3}(?:/\d+)?'], None),  # 'Ikonta 521/16'
+    ("Zeiss Ikon", "Zeiss Ikon Nettar", MECH, MED, ['nettar!', r'~nettar[\s\-.,_/]*\d{3}(?:/\d+)?'], None),  # 'Nettar 515/2'
+    ("Zeiss Ikon", "Zeiss Ikon Symbolica", MECH, S35, ['symbolica!'], None),
+    ("Zeiss Ikon", "Zeiss Ikon Taxona", MECH, S35, ['taxona!'], None),
+    ("Braun", "Braun SR 2000", MECH, S35, ['^sr 2000'], None),
+    ("Altix", "Altix NB", MECH, S35, ['^n b', 'altix n b!'], None),
+    ("Gamma", "Gamma Perla", MECH, S35, ['^perla'], None),
+    ("Pax", "Pax M4", MECH, S35, ['^m 4'], None),
+    ("Edixa", "Edixa Prismaflex", MECH, S35, ['^prismaflex'], None),
     ("Zorki", "Zorki 4K", MECH, S35, ["^4 k"], None),
     # Ihagee Exa (Dresden, 1951-1987): 'Ihagee EXA-I', 'Exa Ia', 'Exa 1b'
     ("Exakta", "Ihagee Exa", MECH, S35, ['exa!'], None),
@@ -349,7 +378,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 39
+VERSION = 40
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -359,6 +388,7 @@ PRIORITY_SEARCH = ("Canon FX", "Canon FP", "Canon TL", "Canon TLb", "Canon TX", 
                    "Praktiflex", "Praktica FX", "Praktica FX2", "Praktica FX3", "Praktica IV", "Praktica IVB", "Praktica IVM", "Praktica IVBM", "Praktica IVF", "Praktica IVFB", "Praktica V", "Praktica VF", "Praktica Nova", "Praktica Nova B", "Praktica Nova I", "Praktica Nova IB", "Praktica Super TL2", "Praktica Super TL3", "Praktica L2", "Praktica LTL2", "Praktica LTL3", "Praktica LLC", "Praktica Mat", "Praktica MTL 50", "Praktica PLC2", "Praktica PLC3", "Praktica VLC", "Praktica VLC2", "Praktica VLC3", "Kiev 2", "Kiev 2A", "Kiev 3", "Kiev 3A", "Kiev 5", "Kiev 17", "Kiev 19", "Kiev 19M", "Kiev 20", "Kiev 88CM", "Kiev Salut", "Kiev Salut-S", "Kiev 90",
                    "Olympus M-1", "Olympus OM-2000", "Olympus FTL", "Olympus Pen F", "Olympus Pen FT", "Olympus Pen FV",
                    "Minolta SR-T 100X", "Yashica FX-2", "Yashica FX-3 Super", "Zenit 12", "Zorki 1", "Zorki 2C", "Mamiya C33",
+                   "Fujica ST701", "Fujica ST801", "Fujica ST605", "Fujica ST605N", "Fujica ST705", "Fujica STX-1", "Fujica STX-1N", "Nikkormat FT", "Canon Canonet QL17", "Minolta XG-2", "Minolta Hi-Matic F", "Yashica Electro 35 GSN", "Yashica 44 LM", "Agfa Super Silette", "Zeiss Ikon Ikonta", "Zeiss Ikon Nettar", "Zeiss Ikon Symbolica", "Zeiss Ikon Taxona", "Braun SR 2000", "Altix NB", "Gamma Perla", "Pax M4", "Edixa Prismaflex",
                    "Olympus OM-1 MD", "Leica CL", "Leica I", "Leica Ic", "Leica If", "Leica Ig", "Leica II", "Leica IIc", "Leica IIf", "Leica III", "Leica IIIa", "Leica IIIb", "Leica IIIc", "Leica IIIf", "Leica IIIg", "Ihagee Exa", "Ihagee Exa I", "Ihagee Exa Ia", "Ihagee Exa Ib", "Ihagee Exa Ic", "Ihagee Exa II", "Ihagee Exa IIa", "Ihagee Exa IIb", "Ihagee Exa 500")
 
 # Models that must not match when the text also contains this pattern.
@@ -863,6 +893,7 @@ def _model_token(token, raw, first, from_photo):
         return not from_photo or (len(token) >= 2 and token.isascii())
     if token in _NAMED_MODELS or re.fullmatch(r"i{1,3}[abcdfg]?|iv[a-z]?|v[a-z]?", token):  # 'Retina IIa', 'Leica IIIf'
         return True
+    raw = raw.replace("-", "") if raw else raw  # 'SR-T', 'FT-N'
     if not raw or not raw.isalpha():
         return False
     if raw.isupper() and len(raw) == 1:
@@ -871,11 +902,13 @@ def _model_token(token, raw, first, from_photo):
         return False
     if raw.isupper():
         return 1 < len(raw) <= 5
-    return first and not from_photo and raw[0].isupper() and len(raw) >= 3
+    return first and not from_photo and raw[0].isupper() and len(raw) >= 2  # 'Agfa Selecta', 'Pax Jr'
 
 
 def _pretty(token):
-    return token.upper() if re.search(r"\d", token) or len(token) <= 3 else token.capitalize()
+    if re.search(r"\d", token) or len(token) <= 3 or re.fullmatch(r"[a-z]{1,3}(?:-[a-z]{1,3})+", token):
+        return token.upper()  # 'X300S', 'LM', 'SR-T'
+    return token.capitalize()
 
 
 def camera_name(text, from_photo=False):
@@ -908,6 +941,36 @@ def camera_name(text, from_photo=False):
         if model:
             return brand, " ".join(_pretty(t) for t in model)
     return None
+
+
+_LOT = re.compile(r"\b(?:lot|lots|lotto|set|konvolut|sammlung|collection|collezione|bundle|kit)\b"
+                  r"|\b(?:\d|zwei|drei|deux|trois|due|tre|two|three|twee|drie) ?(?:x )?(?:kameras|cameras|appareils"
+                  r"|macchine|fotocamere|fototoestellen|analogkameras)\b|\b\d ?x\b")
+
+
+def bundle_names(title):
+    """The cameras of a listing that sells several, or a lot: ['Pax M4', 'Pax Jr'] from '2x Vintage Pax
+    camera - Pax M4 & Pax Jr'; [] for one camera. By the title only (descriptions compare with other
+    models). Its price is not one camera's."""
+    if not title:
+        return []
+    names = [m for _, _, m in find_models(title)]
+    norm = normalize(title)
+    pos = 0
+    for match in _NAME_BRAND_RX.finditer(norm):
+        # the same brand in the original text, so that capitals ('Pax Jr', 'MTL') still count
+        spelled = re.compile(re.escape(match.group(1)).replace(r"\ ", r"[\s\-]*"), re.I).search(title, pos)
+        piece = title[spelled.start():] if spelled else norm[match.start():]
+        if spelled:
+            pos = spelled.end()
+        got = camera_name(piece)
+        if got:
+            name = list_model_of(*got) or f"{got[0]} {got[1]}"
+            if name not in names:
+                names.append(name)
+    if len(names) >= 2 or (names and _LOT.search(norm)):
+        return names
+    return []
 
 
 def _series(model_text):
@@ -955,6 +1018,7 @@ _JUNK = [
         r"chicco|spielzeug|giocattol|jouet|\bkinder|\btoy\b|brownie|box ?kamera|box camera|tengor|\b(?:agfa|kodak|zeiss) box\b"
         r"|\bbox (?:agfa|kodak)\b|agfa-box|einweg|jetable|usa e getta|disposable|quicksnap|fun ?saver|lomograph|\blomo\b"
         r"|\blc-?a\b|holga|\bdiana\b|super color 35|ektar h35|\bm35\b|\bm38\b|pouva|la sardina")),
+    ("not wanted (user)", re.compile(r"\bnikon f-?301\b|\bom-?30\b|\byashica fx-?7\b")),
     ("action camera / drone", re.compile(
         r"\bdji\b|\bosmo\b|gimbal|zenmuse|gopro|go pro|insta ?360|\bdrone|\baction ?cam")),  # not '4K': Zorki 4K
     ("movie / video / projector", re.compile(

@@ -25,8 +25,8 @@ def placeholder_price(item):
 
 
 def stat_flags(item):
-    """The item's flags plus 'price?' for a placeholder price."""
-    flags = set(item.get("flags") or [])
+    """The item's flags plus 'набор' for a bundle and 'price?' for a placeholder price."""
+    flags = set(item.get("flags") or []) | ({"набор"} if item.get("bundle") else set())
     return flags | {"price?"} if placeholder_price(item) else flags
 GROUP_RU = {"list": "Список", "rest": "Остальные"}
 
@@ -795,6 +795,24 @@ def near_list_models(item):
     name = item.get("camera_name") or ""
     brand = next((b for b in sorted(models.BRANDS, key=len, reverse=True) if name.startswith(b + " ")), None)
     return models.siblings(brand, name[len(brand) + 1:]) if brand else []
+
+
+BUNDLES_HEADER = ["Фото", "Камеры в наборе", "Группа", "Модель", "Заголовок", "Цена, €", "Статус", "Впервые", "id",
+                  "Ссылка"]
+
+
+def bundle_rows(items):
+    """'Наборы': listings of several cameras or lots (their price is not one camera's), newest first."""
+    from . import photos
+
+    rows = [BUNDLES_HEADER]
+    for i in sorted((i for i in items if i.get("bundle")), key=lambda i: (i.get("first_seen") or "", i["id"]),
+                    reverse=True):
+        rows.append([photos.image_formula(i.get("photo")), ", ".join(i["bundle"]), GROUP_RU.get(i.get("group"), ""),
+                     i.get("model") or "", i.get("title") or "", _num(current_price(i)),
+                     STATUS_RU.get(i.get("status"), i.get("status") or ""), i.get("first_seen") or "", i["id"],
+                     i.get("url") or ""])
+    return rows
 
 
 PROPOSAL_HEADER = ["Фото", "Камера", "Тип", "Таких объявлений", "Откуда название", "Заголовок", "Цена, €", "Статус",

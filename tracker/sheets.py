@@ -20,7 +20,8 @@ PHOTO_DROP_SHEET = "По фото: убрать"     # no longer written: remove
 OLD_PHOTO_SHEET = "По фото (проба)"
 UNNAMED_SHEET = "По фото: без названия"  # no name after three photos: for 'Ручная разметка'
 PROPOSAL_SHEET = "Предложение"  # named cameras outside the list: for the user to pick new list models
-SIBLINGS_SHEET = "Братья моделей списка"  # cameras outside the list next to list models, for the user      # the one sheet before the split: removed once
+SIBLINGS_SHEET = "Братья моделей списка"
+BUNDLES_SHEET = "Наборы"  # listings of several cameras or lots: their price is not one camera's  # cameras outside the list next to list models, for the user      # the one sheet before the split: removed once
 ANALYTICS_SHEET = "Аналитика"
 MODELS_SHEET = "Модели"
 MANUAL_SHEET = "Ручная разметка"
@@ -113,6 +114,13 @@ class SheetWriter:
         ws = self._sheets.pop(title, None)
         if ws is not None:
             self.spreadsheet.del_worksheet(ws)
+
+    def clear_backgrounds(self, title):
+        """Remove the cell colours of a sheet (the values stay)."""
+        ws = self._get(title)
+        self.spreadsheet.batch_update({"requests": [{"repeatCell": {
+            "range": {"sheetId": ws.id}, "cell": {"userEnteredFormat": {}},
+            "fields": "userEnteredFormat.backgroundColor"}}]})
 
     def set_row_height(self, title, pixels):
         """Taller data rows (the header stays), e.g. room for photos."""

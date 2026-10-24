@@ -1136,6 +1136,20 @@ def write_sheets(writer, result, state_flags):
             writer.delete(old)
     # The user marks these three sheets by hand (colours, comments): while a review is open they are not
     # rewritten, so the marks stay on the right rows.
+    if not REVIEW_HOLD and not state_flags.get("review_colors_cleared_v1"):
+        try:  # the review is applied: its colours would sit on other rows once the sheets are rewritten
+            for title in (sheets.UNNAMED_SHEET, sheets.PROPOSAL_SHEET, sheets.SIBLINGS_SHEET):
+                if writer.has(title):
+                    writer.clear_backgrounds(title)
+            updates["review_colors_cleared_v1"] = True
+        except Exception as exc:
+            print(f"sheets: review colours not cleared: {type(exc).__name__}")
+    if any(i.get("bundle") for i in items):
+        writer.replace(sheets.BUNDLES_SHEET, report.bundle_rows(items), links=True)
+        try:
+            writer.set_row_height(sheets.BUNDLES_SHEET, PHOTO_ROW_PX)
+        except Exception as exc:
+            print(f"sheets: bundle rows not resized: {type(exc).__name__}")
     if not REVIEW_HOLD and any(i.get("name_tried") for i in items):
         writer.replace(sheets.UNNAMED_SHEET, report.unnamed_rows(items), links=True)
         try:
@@ -1230,7 +1244,7 @@ def main():
 
 
 CHEAP_LINK_COLUMN = 7  # 'До 20 €': the link in column H, right after G ('Сохранений')
-REVIEW_HOLD = True  # 'По фото: без названия', 'Предложение', 'Братья моделей списка' are being reviewed
+REVIEW_HOLD = False  # 'По фото: без названия', 'Предложение', 'Братья моделей списка' are being reviewed
 PHOTO_TIME_BUDGET_S = 90   # photo labeling of new 'Остальные' per full tick (trial)
 PHOTO_START_LIMIT_S = 9 * 60  # a tick that already ran this long skips it
 PHOTO_ROW_PX = 110
@@ -1245,6 +1259,16 @@ def name_step(store, result):
         if item.get("group") != "rest":
             continue
         label = item.get("photo_label") or {}
+        bundle = models.bundle_names(item.get("title") or "")
+        if bundle != item.get("bundle"):
+            item["bundle"] = bundle
+            store.save(item)
+        if label.get("camera_name"):  # named by the user's review
+            if (item.get("camera_name"), item.get("camera_name_source")) != (label["camera_name"], "manual"):
+                item["camera_name"], item["camera_name_source"] = label["camera_name"], "manual"
+                store.save(item)
+            counts["named"] += 1
+            continue
         name, source = None, None
         for source, text, from_photo in (("title", item.get("title"), False),
                                          ("description", (item.get("description") or "")[:300], False),
@@ -1301,6 +1325,12 @@ def photo_step(store, result, started):
         state = store.load_state()
         outside = photos.apply_backfill(store.root, result["items"], state)
         store.save_state(state)
+        for item in outside:  # the user's review names the model seen on the photo
+            model = (item.get("photo_label") or {}).get("model")
+            if model and item.get("model") != model:
+                item["flags"] = [f for f in item.get("flags") or [] if f not in SIGNAL_FLAGS]
+                set_model(item, model, "manual")
+                item["group"] = group_of(item)
         fresh, stats = photos.run(store.root, result["items"], PHOTO_TIME_BUDGET_S)
         dropped = [i for i in result["items"] if photos.is_dropped(i)]
         if dropped:

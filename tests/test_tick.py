@@ -407,7 +407,7 @@ def main():
         # 'До 20 €' follows 'Модели': the user deletes Zenit E, it leaves 'До 20 €' and is not re-added.
         models_ws = ss.sheets["Модели"]
         models_ws.rows = [r for r in models_ws.rows if r[0] != "Zenit E"]
-        state_flags = {"runs_header_v5": True, "runs_newest_first": True,
+        state_flags = {"runs_header_v5": True, "runs_newest_first": True, "review_colors_cleared_v1": True,
                        "cheap_ids": updates["cheap_ids"], "models_offered": updates["models_offered"],
                        "status_colors": updates["status_colors"], "new_rows_colors": updates["new_rows_colors"],
                        "fresh_rows_colors": updates["fresh_rows_colors"], "fresh_rows_green": True}
@@ -419,7 +419,7 @@ def main():
         models_ws.rows.append(["зенит-е"])
         offered = [m for m in updates["models_offered"] if m != "Zenit KM"]
         models_ws.rows = [r for r in models_ws.rows if r[0] != "Zenit KM"]
-        upd = tick.write_sheets(writer, r5, {"runs_header_v5": True, "runs_newest_first": True,
+        upd = tick.write_sheets(writer, r5, {"runs_header_v5": True, "runs_newest_first": True, "review_colors_cleared_v1": True,
                                              "cheap_ids": [400], "models_offered": offered,
                                              "status_colors": updates["status_colors"], "new_rows_color": True,
                                              "fresh_rows_green": True})
