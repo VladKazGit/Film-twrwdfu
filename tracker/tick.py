@@ -647,10 +647,12 @@ def run_tick(store, client, labels=None, now=None, quick=False):
     if state.get("models_version") != models.VERSION:
         stats["models_version_changed"] = 1
         for item in [*active.values(), *closed.values()]:
-            if item.get("model_source") in ("manual", "photo"):  # a model from the photo stays too
+            if item.get("model_source") == "manual":
                 continue
             cls = models.classify(item["title"], item.get("description"), item.get("vinted_brand"))
             signal = sorted(SIGNAL_FLAGS & set(cls["flags"]))
+            if item.get("model_source") == "photo" and not signal:
+                continue  # a model from the photo stays, unless the text shows it is no camera
             flags = [f for f in item["flags"] if f not in SIGNAL_FLAGS] + signal
             before = (item.get("model"), list(item["flags"]), item.get("group"))
             if cls["model"] != item.get("model") or flags != item["flags"]:

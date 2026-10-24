@@ -378,7 +378,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 40
+VERSION = 41
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -555,6 +555,7 @@ _ACCESSORY_WORDS = re.compile(
     r"|handbuch|mode d.emploi|istruzioni|handleiding"
     r"|zubehor|accessoire|accessori|toebehoren|\bfilter|deckel|\bprism|mattscheibe|focusing screen"
     r"|\badapter|batterie|\bbattery|\bgriff\b|\bgrip\b|stativ|tripod|treppiede|belichtungsmesser"
+    r"|\blivella|wasserwaage|\blibelle\b|niveau a bulle|bubble level|spirit level|waterpas"
     r"|light ?meter|posemetre|esposimetro|ruckteil|\bfilm ?back|magazin\b|gegenlichtblende"
     r"|lens hood|ausloser|\bfilm(?:e|s)?\b(?!\s*(?:kamera|camera))|pellicol|pellicule|\bfilmrolle"
     r"|\bback\b|data ?back|(?<!range)finder|(?<!mess)sucher\b|\bviseur|\bmirino|waist ?level|lichtschacht"
@@ -639,7 +640,26 @@ _LEAD_ACCESSORY = re.compile(
 _STRONG_ACCESSORY = re.compile(
     r"zubehor\b|acc?es+oires?\b|accessori[oe]?\b|accessor(?:y|ies)\b|toebehoren\b"
     r"|katalog|catalog|cataloghi|catalogue|depliant|prospekt|brochure|broschure|\bguide\b|\bguida\b|ratgeber|leitfaden|\bbuch\b|\bbook\b|\blibro\b|\blivre\b|\bposter\b|zeitschrift|rivista|\bflyer"
-    r"|camera (?:strap|bag|case|accessor)|kamera(?:tasche|gurt)")
+    r"|camera (?:strap|bag|case|accessor)|kamera(?:tasche|gurt)"
+    r"|^revue (?:photo |appareil )?(?:canon|nikon|pentax|minolta|olympus|leica|contax|yashica|konica|rollei|hasselblad"
+    r"|mamiya|fujica|asahi)\b")
+# Made for a camera, no model named: 'Livella per fotocamera', 'Cinghia per fotocamera'.
+_FOR_CAMERA = re.compile(r"\b(?:fur|for|pour|per|voor|para)\s+(?:(?:la|le|l|die|den|eine?n?|the|a|une?|il|de)\s+)?"
+                         r"(?:kamera|camera|appareil|fotocamera|macchina|fototoestel|camara|spiegelreflex)")
+# The description says the camera in the photos is not sold, or the listing is a magazine:
+# 'Fotocamera solo a scopo dimostrativo', 'Je vends une revue appareil canon reflex'.
+_GAP = r"(?:\s+(?:selbst|itself|lui.meme|stess[ao]|zelf|ist|is|wird|e|est))?"  # 'Kamera ist nicht …'
+_NOT_SOLD_CAMERA = re.compile(
+    rf"(?:fotocamera|macchina(?: fotografica)?){_GAP}\s+(?:(?:solo|solamente|soltanto)\s+(?:a|per)\s+scopo"
+    r"\s+(?:dimostrativo|illustrativo|espositivo)|non\s+(?:e\s+)?(?:inclus[ao]|compres[ao]|in vendita))"
+    rf"|kamera{_GAP}\s+(?:nicht (?:im lieferumfang|enthalten|inklusive|dabei|mit verkauft)"
+    r"|nur (?:zur|zu) (?:demonstration|veranschaulichung|anschauung|dekoration))"
+    rf"|appareil(?: photo)?{_GAP}\s+(?:non (?:inclus|fourni|vendu)|n.est pas (?:inclus|fourni|vendu|a vendre)"
+    r"|pas (?:inclus|fourni|vendu)|(?:present|utilise|montre)\w* (?:uniquement |seulement )?(?:a titre|pour) "
+    r"(?:d.exemple|d.illustration|indicatif|la demonstration|la photo))"
+    rf"|camera{_GAP}\s+(?:not included|is not (?:included|for sale)|for (?:illustration|demonstration|display)"
+    r" (?:purposes )?only|only for (?:illustration|demonstration|display)|niet inbegrepen|(?:wordt )?niet meegeleverd)"
+    r"|\b(?:une|la|cette|ma) revue (?:photo|appareil|sur|consacree|technique|canon|nikon|pentax|minolta|olympus|leica)")
 _LEADING_FILLER = re.compile(
     r"^(?:\W|(?:vintage|rare|ancien(?:ne)?|alt(?:e|er)?|old|lot|lotto|set|kit|neu|new|nuovo)\b)+")
 _MODEL_NUMBER = re.compile(r"[a-z]*\d+[a-z0-9]*")
@@ -727,6 +747,10 @@ def _is_accessory(norm, model_span):
             return True  # "Kit guarnizioni luce Canon AE-1 Program"
         if _COMPATIBLE_AFTER.match(norm[model_span[1]:]):
             return True  # "Canon FD 50mm 1:1.8 T50 passend": fits the camera
+    if model_span is None:
+        made_for = _FOR_CAMERA.search(norm)
+        if made_for and not (_CAMERA_WORDS.search(norm[:made_for.start()]) or _WITH_WORDS.search(norm[:made_for.start()])):
+            return True  # 'Livella per fotocamera': made for a camera
     acc = _ACCESSORY_WORDS.search(norm)
     if not acc:
         return False
@@ -1080,6 +1104,8 @@ def classify(title, description=None, vinted_brand=None):
     if (description and "accessory?" not in title_flags and not _CAMERA_WORDS.search(normalize(title))
             and lead_is_accessory(description)):
         title_flags = title_flags + ["accessory?"]
+    if description and "accessory?" not in title_flags and _NOT_SOLD_CAMERA.search(normalize(description)):
+        title_flags = title_flags + ["accessory?"]  # 'Fotocamera solo a scopo dimostrativo': not for sale
     # An accessory/digital title does not get a camera model from its description
     # ('Lotto depliant e cataloghi Leica' -> description mentions an M3).
     norm_title = normalize(title)

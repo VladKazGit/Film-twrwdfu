@@ -692,11 +692,16 @@ def main():
         acc = tick.new_item(rec(10_384_439_658, "Accessoires Olympus OM 10", 10.0), "2026-10-16 09:00", None, [])
         acc["group"] = "list"  # as created by the older code
         store.save(acc)
+        # A model read on the photo of the camera shown with a spirit level: the text now says accessory.
+        level = tick.new_item(rec(10_384_439_659, "Livella per fotocamera", 11.0), "2026-10-16 09:00", None, [])
+        level.update(model="Leica CL", model_source="photo", group="list", flags=[])
+        store.save(level)
         state = store.load_state()
         state["models_version"] = 0
         store.save_state(state)
         r = tick.run_tick(store, FakeClient(base), now="2026-10-16 17:15")
         moved = (store.load_active().get(acc["id"]) or store.load_closed().get(acc["id"]))
+        assert not (store.load_active().get(level["id"]) or store.load_closed().get(level["id"])), "dropped as junk"
         # out of the list, and as an accessory out of the data too
         assert moved is None and r["run"]["reclassified"] >= 1 and r["run"]["junk_dropped"] >= 1, r["run"]
         assert r["daily"], "'Остальные' is rewritten after the clean-up"

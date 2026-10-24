@@ -202,6 +202,10 @@ CASES = [
 
 # (title, expected flags, expected kit)
 FLAG_CASES = [
+    ("Livella per fotocamera", ["accessory?"], None),
+    ("Cinghia per fotocamera", ["accessory?"], None),
+    ("Revue Canon Al-1", ["accessory?"], None),
+    ("Appareil photo pour debutant", [], None),
     ("Leica data back R4 DB 14", ["accessory?"], None),
     ("Nikon F3 accessoires", ["accessory?"], None),
     ("Appareil photo Olympus OM10, avec accessoires", [], "extras"),
@@ -357,6 +361,13 @@ DESC_CASES = [
 
 # (title, description, expected flags): an accessory told by how the description starts
 DESC_FLAG_CASES = [
+    # a magazine (revue), a camera only for show
+    ("Revue canon reflex f1 a1 ae-1p al-1", "Je vends une revue appareil canon reflex A1,F1, AE1p", ["accessory?"]),
+    ("Revue Canon Al-1", "Je vends une revue appareil photo canon AL-1 Quick focus. Date de 1982.", ["accessory?"]),
+    ("Livella per fotocamera", "livella a bolla per fotocamera. Fotocamera solo a scopo dimostrativo.", ["accessory?"]),
+    ("Leica CL", "Fotocamera solo a scopo dimostrativo", ["accessory?"]),
+    ("Canon AE-1", "Kamera funktioniert, Objektiv nicht im Lieferumfang", []),
+    ("Revue 400 SE", "Une Revue 400 SE en bon etat", []),
     ("Yashica Mat-124g", "brochure originale in ottime condizioni", ["accessory?"]),
     ("Yashica Mat-124g", "Original Bedienungsanleitung, deutsch, 40 Seiten", ["accessory?"]),
     ("Yashica Mat-124g", "Kamera in gutem Zustand, mit Anleitung", []),
