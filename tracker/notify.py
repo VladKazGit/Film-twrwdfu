@@ -15,11 +15,12 @@ import smtplib
 from email.message import EmailMessage
 from html import escape
 
-from . import report
+from . import models, report
 from .sheets import CHEAP_MAX_PRICE
 
 SMTP_HOST, SMTP_PORT = "smtp.gmail.com", 465
 NOTIFIED_KEEP = 5000
+MAIL_SKIP_BRANDS = {"Praktica"}  # the user does not want letters about them (they stay in 'До 20 €')
 DESCRIPTION_CHARS = 300
 
 
@@ -127,6 +128,11 @@ def send(msg):
         smtp.send_message(msg)
 
 
+def _skipped_brand(item):
+    info = models.MODEL_INFO.get(item.get("model")) or {}
+    return (info.get("brand") or item.get("brand")) in MAIL_SKIP_BRANDS
+
+
 def run(items, state, now, send_fn=send):
     """Mail the cameras that entered 'До 20 €' since the last letter (each once).
     Updates state; returns the number mailed, or None when mail is not set up."""
@@ -139,7 +145,8 @@ def run(items, state, now, send_fn=send):
         state["notified"] = [i["id"] for i in current][-NOTIFIED_KEEP:]
         return 0
     done = set(state.get("notified") or [])
-    new = sorted((i for i in current if i["id"] not in done), key=lambda i: report.current_price(i) or 0)
+    new = sorted((i for i in current if i["id"] not in done and not _skipped_brand(i)),
+                 key=lambda i: report.current_price(i) or 0)
     if not new:
         return 0
     send_fn(message(new, now, stats=sale_stats(items)))

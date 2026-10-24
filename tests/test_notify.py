@@ -12,7 +12,7 @@ def card(item_id, model, price, flags=(), group="list", status="active"):
 
 
 def main():
-    state = {"models_sheet": ["Zenit E", "Canon AE-1"]}
+    state = {"models_sheet": ["Zenit E", "Canon AE-1", "Praktica MTL 5"]}
     items = [card(1, "Zenit E", 15.0), card(2, "Canon AE-1", 120.0)]
     sent = []
     os.environ.pop("MAIL_USER", None)
@@ -28,6 +28,7 @@ def main():
                   card(4, "Canon AE-1", 19.0, flags=["found"]),
                   card(5, "Canon AE-1", 10.0, flags=["accessory?"]),   # flagged: not in the sheet
                   card(6, "Pentax K1000", 15.0),                       # not in 'Модели'
+                  card(9, "Praktica MTL 5", 9.0),                      # Praktica: no letters
                   dict(card(7, "Zenit E", 18.0, status="sold"),       # not on sale; sales in the data
                        listed_after="2026-10-16 10:00", sold_detected_at="2026-10-18 10:00"),
                   dict(card(8, "Zenit E", 46.0, status="sold"),
@@ -36,6 +37,7 @@ def main():
         assert notify.run(items, state, "2026-10-18 10:47", sent.append) == 3 and len(sent) == 2
         body = sent[1].get_body(("plain",)).get_content()
         assert "items/3" in body and "items/4" in body and "items/2" in body and "items/5" not in body
+        assert "items/9" not in body and "Praktica" not in body
         assert "найдено поиском" in body and sent[1]["Subject"].startswith("⚡ Vinted «До 20 €»: Zenit E — 8 € и ещё 2")
         html = sent[1].get_body(("html",)).get_content()
         assert '<img src="https://images1.vinted.net/p3.jpg"' in html and "Kamera funktioniert" in html and "Kamera funktioniert" in body

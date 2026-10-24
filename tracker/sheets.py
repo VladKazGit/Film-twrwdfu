@@ -39,6 +39,8 @@ RUNS_HEADER = RUNS_HEADER_V4[:1] + RUNS_FRONT + [c for c in RUNS_HEADER_V4[1:] i
 _RUNS_FROM_V4 = [RUNS_HEADER_V4.index(c) for c in RUNS_HEADER]
 MANUAL_HEADER = ["id (или ссылка)", "Модель", "Комментарий"]
 MODELS_HEADER = ["Модель", "Бренд", "Тип", "Формат", "Регион"]
+MODELS_PRICE_HEADER = "Средняя цена, €"  # from the statistics, as in 'Сводка'; the tracker writes it
+MODELS_NO_PRICE = "нет данных"
 LIGHT_GREEN_3 = {"red": 217 / 255, "green": 234 / 255, "blue": 211 / 255}  # #d9ead3
 LIGHT_BLUE_3 = {"red": 207 / 255, "green": 226 / 255, "blue": 243 / 255}  # #cfe2f3
 LIGHT_YELLOW_3 = {"red": 255 / 255, "green": 242 / 255, "blue": 204 / 255}  # #fff2cc
@@ -242,6 +244,32 @@ class SheetWriter:
             ws.append_rows(new, value_input_option="RAW")
             keys |= {model_key(r[0]) for r in new}
         return names, keys
+
+    def write_model_prices(self, prices):
+        """'Модели': a column of each model's mean price from the statistics, or 'нет данных'.
+        Matched by the model in column A, so the user's rows, order and columns stay; written
+        only when it changed."""
+        if MODELS_SHEET not in self._sheets:
+            return
+        ws = self._sheets[MODELS_SHEET]
+        values = ws.get_all_values()
+        if not values:
+            return
+        header = values[0]
+        if MODELS_PRICE_HEADER in header:
+            col = header.index(MODELS_PRICE_HEADER) + 1
+        else:  # the first column after the user's headers
+            col = max((n for n, v in enumerate(header, 1) if v.strip()), default=0) + 1
+        cells = [[MODELS_PRICE_HEADER]]
+        for row in values[1:]:
+            name = row[0].strip() if row else ""
+            model = models.canonical_model(name) or name
+            cells.append([prices.get(model, MODELS_NO_PRICE) if name else ""])
+        if [[str(c[0])] for c in cells] == [[row[col - 1] if len(row) >= col else ""] for row in values]:
+            return
+        if col > ws.col_count:
+            ws.add_cols(col - ws.col_count)
+        ws.update(range_name=gspread.utils.rowcol_to_a1(1, col), values=cells, value_input_option="RAW")
 
     def manual_labels(self):
         """{item id: model text} from 'Ручная разметка' (created empty if missing)."""

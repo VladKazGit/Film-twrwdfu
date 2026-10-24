@@ -49,7 +49,15 @@ class FakeWorksheet:
         self.title, self.rows, self.size, self.id = title, [], (0, 0), abs(hash(title)) % 10_000
 
     def update(self, range_name, values, value_input_option):
-        assert range_name == "A1" and len(values) <= self.size[0] or not self.size[0], self.title
+        if range_name != "A1":  # one column from row 1 ('Модели' prices: F1)
+            col = sum((ord(ch) - 64) * 26 ** k for k, ch in enumerate(reversed(range_name.rstrip("1"))))
+            for k, (value,) in enumerate(values):
+                while len(self.rows) <= k:
+                    self.rows.append([])
+                self.rows[k] += [""] * (col - len(self.rows[k]))
+                self.rows[k][col - 1] = value
+            return
+        assert len(values) <= self.size[0] or not self.size[0], self.title
         self.mode, self.sent = value_input_option, values
         if value_input_option == "USER_ENTERED":  # Sheets keeps the text, hides the apostrophe
             values = [[c[1:] if isinstance(c, str) and c.startswith("'") else c for c in r] for r in values]
@@ -64,6 +72,13 @@ class FakeWorksheet:
     @property
     def row_count(self):
         return self.size[0]
+
+    @property
+    def col_count(self):
+        return max([self.size[1]] + [len(r) for r in self.rows])
+
+    def add_cols(self, n):
+        self.size = (self.size[0], self.col_count + n)
 
     def freeze(self, rows):
         pass
@@ -250,7 +265,9 @@ def main():
         assert fast_ws.rows[1][0] == 1011 and fast_ws.sent[1][link_col] == fast_ws.rows[1][link_col]
         assert ss.sheets["Сводка"].mode == "RAW" and ss.sheets["Проверка"].rows[0] == report.CHECK_HEADER
         assert ss.sheets["Список"].rows[0][0] == "id" and len(ss.sheets["Список"].rows) >= 4
-        assert ss.sheets["Модели"].rows[0] == sheets.MODELS_HEADER and len(ss.sheets["Модели"].rows) > 150
+        assert ss.sheets["Модели"].rows[0] == sheets.MODELS_HEADER + [sheets.MODELS_PRICE_HEADER] and len(ss.sheets["Модели"].rows) > 150
+        prices = {r[0]: r[5] for r in ss.sheets["Модели"].rows[1:]}
+        assert prices["Zenit E"] == report.model_prices(r5["summary"])["Zenit E"] and prices["Leica M6"] == sheets.MODELS_NO_PRICE, prices["Zenit E"]
         assert ss.sheets["Сводка"].rows[0][0] == "Обновлено"
         assert ss.sheets["Топ-10"].rows[2][0] == "Топ-10: чаще всего продаются", ss.sheets["Топ-10"].rows[:4]
         assert ss.sheets["Аналитика"].rows[0][0] == "Обновлено" and ss.sheets["Аналитика"].mode == "RAW"

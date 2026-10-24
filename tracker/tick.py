@@ -1170,6 +1170,10 @@ def write_sheets(writer, result, state_flags):
     writer.replace(sheets.SALES_SHEET, report.sales_rows(items), links=True)
     writer.replace(sheets.CHECK_SHEET, report.check_rows(items), links=True)
     writer.replace(sheets.SUMMARY_SHEET, report.summary_rows(result["summary"]))
+    try:  # 'Модели' belongs to the user: only the price column is written
+        writer.write_model_prices(report.model_prices(result["summary"]))
+    except Exception as exc:
+        print(f"sheets: model prices not written: {type(exc).__name__}")
     writer.replace(sheets.TOP_SHEET, report.top_rows(items, result["run"]["at"]), links=True)
     writer.replace(sheets.ANALYTICS_SHEET, report.analytics_rows(items, result["run"]["at"]))
     if any(i.get("photo_label") for i in items):

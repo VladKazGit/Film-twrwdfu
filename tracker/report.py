@@ -371,6 +371,11 @@ def check_rows(items):
         for i, reason in found]
 
 
+def model_prices(summary):
+    """{model: mean price} of the list models, as 'Средняя цена, €' in 'Сводка'."""
+    return {m["model"]: m["mean_price"] for m in summary["models"] if m.get("mean_price") is not None}
+
+
 def unread_description(item):
     """Carded without its description yet (a found one): out of 'До 20 €' and the letters until it
     is read - a manual or a part hides there ('Praktica MTL50': 'Mode d'emploi…')."""
