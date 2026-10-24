@@ -1134,13 +1134,15 @@ def write_sheets(writer, result, state_flags):
     for old in (sheets.OLD_PHOTO_SHEET, sheets.PHOTO_DROP_SHEET):
         if writer.has(old):
             writer.delete(old)
-    if any(i.get("name_tried") for i in items):
+    # The user marks these three sheets by hand (colours, comments): while a review is open they are not
+    # rewritten, so the marks stay on the right rows.
+    if not REVIEW_HOLD and any(i.get("name_tried") for i in items):
         writer.replace(sheets.UNNAMED_SHEET, report.unnamed_rows(items), links=True)
         try:
             writer.set_row_height(sheets.UNNAMED_SHEET, PHOTO_ROW_PX)
         except Exception as exc:
             print(f"sheets: unnamed rows not resized: {type(exc).__name__}")
-    if any(i.get("camera_name") for i in items):
+    if not REVIEW_HOLD and any(i.get("camera_name") for i in items):
         writer.replace(sheets.PROPOSAL_SHEET, report.proposal_rows(items), links=True)
         try:
             writer.set_row_height(sheets.PROPOSAL_SHEET, PHOTO_ROW_PX)
@@ -1228,6 +1230,7 @@ def main():
 
 
 CHEAP_LINK_COLUMN = 7  # 'До 20 €': the link in column H, right after G ('Сохранений')
+REVIEW_HOLD = True  # 'По фото: без названия', 'Предложение', 'Братья моделей списка' are being reviewed
 PHOTO_TIME_BUDGET_S = 90   # photo labeling of new 'Остальные' per full tick (trial)
 PHOTO_START_LIMIT_S = 9 * 60  # a tick that already ran this long skips it
 PHOTO_ROW_PX = 110

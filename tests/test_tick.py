@@ -6,6 +6,8 @@ from collections import Counter
 from pathlib import Path
 
 from tracker import models, report, tick
+
+tick.REVIEW_HOLD = False  # the review sheets are written in the tests
 from tracker.store import DataStore
 
 
