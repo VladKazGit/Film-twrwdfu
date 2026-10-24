@@ -265,9 +265,12 @@ def main():
         assert fast_ws.rows[1][0] == 1011 and fast_ws.sent[1][link_col] == fast_ws.rows[1][link_col]
         assert ss.sheets["Сводка"].mode == "RAW" and ss.sheets["Проверка"].rows[0] == report.CHECK_HEADER
         assert ss.sheets["Список"].rows[0][0] == "id" and len(ss.sheets["Список"].rows) >= 4
-        assert ss.sheets["Модели"].rows[0] == sheets.MODELS_HEADER + [sheets.MODELS_PRICE_HEADER] and len(ss.sheets["Модели"].rows) > 150
-        prices = {r[0]: r[5] for r in ss.sheets["Модели"].rows[1:]}
-        assert prices["Zenit E"] == report.model_prices(r5["summary"])["Zenit E"] and prices["Leica M6"] == sheets.MODELS_NO_PRICE, prices["Zenit E"]
+        assert ss.sheets["Модели"].rows[0] == sheets.MODELS_HEADER + [sheets.MODELS_PRICE_HEADER, sheets.MODELS_SALE_PRICE_HEADER]
+        assert len(ss.sheets["Модели"].rows) > 150
+        prices = {r[0]: r[5:7] for r in ss.sheets["Модели"].rows[1:]}
+        sold_zenit = [report.current_price(i) for i in r5["items"] if i.get("model") == "Zenit E" and i["status"] == "sold"]
+        assert prices["Zenit E"][0] == report.model_prices(r5["summary"])["Zenit E"] and prices["Leica M6"] == [sheets.MODELS_NO_PRICE] * 2
+        assert prices["Zenit E"][1] == (round(sum(sold_zenit) / len(sold_zenit)) if sold_zenit else sheets.MODELS_NO_PRICE), prices["Zenit E"]
         assert ss.sheets["Сводка"].rows[0][0] == "Обновлено"
         assert ss.sheets["Топ-10"].rows[2][0] == "Топ-10: чаще всего продаются", ss.sheets["Топ-10"].rows[:4]
         assert ss.sheets["Аналитика"].rows[0][0] == "Обновлено" and ss.sheets["Аналитика"].mode == "RAW"

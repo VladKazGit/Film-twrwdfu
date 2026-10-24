@@ -376,6 +376,17 @@ def model_prices(summary):
     return {m["model"]: m["mean_price"] for m in summary["models"] if m.get("mean_price") is not None}
 
 
+def model_sale_prices(items):
+    """{model: mean sale price} of the sold list cameras (without placeholder prices, flagged
+    listings and bundles, as 'Продажи')."""
+    sold = {}
+    for i in items:
+        if (i.get("group") == "list" and i.get("status") == "sold" and current_price(i) is not None
+                and not stat_flags(i) & SALES_EXCLUDED):
+            sold.setdefault(i.get("model"), []).append(current_price(i))
+    return {model: round(statistics.mean(prices)) for model, prices in sold.items()}
+
+
 def unread_description(item):
     """Carded without its description yet (a found one): out of 'До 20 €' and the letters until it
     is read - a manual or a part hides there ('Praktica MTL50': 'Mode d'emploi…')."""

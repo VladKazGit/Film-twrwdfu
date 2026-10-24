@@ -1171,7 +1171,8 @@ def write_sheets(writer, result, state_flags):
     writer.replace(sheets.CHECK_SHEET, report.check_rows(items), links=True)
     writer.replace(sheets.SUMMARY_SHEET, report.summary_rows(result["summary"]))
     try:  # 'Модели' belongs to the user: only the price column is written
-        writer.write_model_prices(report.model_prices(result["summary"]))
+        writer.write_model_prices({sheets.MODELS_PRICE_HEADER: report.model_prices(result["summary"]),
+                                   sheets.MODELS_SALE_PRICE_HEADER: report.model_sale_prices(items)})
     except Exception as exc:
         print(f"sheets: model prices not written: {type(exc).__name__}")
     writer.replace(sheets.TOP_SHEET, report.top_rows(items, result["run"]["at"]), links=True)
