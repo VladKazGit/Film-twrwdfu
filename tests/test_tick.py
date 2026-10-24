@@ -235,8 +235,9 @@ def main():
         assert rule["booleanRule"]["condition"]["values"][0]["userEnteredValue"] == "активен"
         assert rule["ranges"][0]["startColumnIndex"] == report.ITEM_HEADER.index("Статус")
         runs = ss.sheets["Запуски"].rows
-        assert runs[0] == sheets.RUNS_HEADER and runs[1][1] == "check-setup" and len(runs) == 3
-        assert updates["runs_header_v5"] and runs[2][1] == 0, "first tick: nothing counted as new in 'До 20 €'"
+        assert runs[0] == sheets.RUNS_HEADER and runs[2][1] == "check-setup" and len(runs) == 3, "newest on top"
+        assert updates["runs_header_v5"] and runs[1][1] == 0, "first tick: nothing counted as new in 'До 20 €'"
+        assert updates["runs_newest_first"]
         assert updates["cheap_ids"] == [1021]
         # Links clickable, other text kept literal.
         fast_ws = ss.sheets["Быстрые продажи"]
@@ -278,6 +279,8 @@ def main():
         root = Path(tempfile.mkdtemp())
         assert photos.is_dropped(dropped) and not photos.is_dropped(labelled)
         assert not photos.is_dropped(dict(dropped, model_source="manual")) and not photos.is_dropped(dict(dropped, group="list"))
+        assert photos.is_dropped(dict(labelled, photo_label={"verdict": ["gone"]})), "the listing is no longer online"
+        assert photos.is_dropped(dict(dropped, group="list", model_source="photo")), "moved by its photo, then rejected"
         photos.record_drops(root, [dropped])
         photos.record_drops(root, [dict(dropped, id=11), dropped])
         assert [r["id"] for r in photos.dropped_records(root)] == [11, 9]
@@ -400,26 +403,26 @@ def main():
         # 'До 20 €' follows 'Модели': the user deletes Zenit E, it leaves 'До 20 €' and is not re-added.
         models_ws = ss.sheets["Модели"]
         models_ws.rows = [r for r in models_ws.rows if r[0] != "Zenit E"]
-        state_flags = {"runs_header_v5": True,
+        state_flags = {"runs_header_v5": True, "runs_newest_first": True,
                        "cheap_ids": updates["cheap_ids"], "models_offered": updates["models_offered"],
                        "status_colors": updates["status_colors"], "new_rows_colors": updates["new_rows_colors"],
                        "fresh_rows_colors": updates["fresh_rows_colors"], "fresh_rows_green": True}
         assert {k: v for k, v in tick.write_sheets(writer, r5, state_flags).items() if k != "models_sheet"} == {"cheap_ids": []}, "Zenit E left 'До 20 €'"
-        assert ss.sheets["Запуски"].rows[-1][1] == 0
+        assert ss.sheets["Запуски"].rows[1][1] == 0
         assert [r[0] for r in ss.sheets["До 20 €"].rows[1:] if r[0] != ""] == [] and ["Zenit E"] not in [r[:1] for r in models_ws.rows]
         assert len(ss.sheets["До 20 €"].rows) == 2 and not any(ss.sheets["До 20 €"].rows[1]), "old data row blanked"
         # A model new to the dictionary is offered once; spelling in the sheet does not matter.
         models_ws.rows.append(["зенит-е"])
         offered = [m for m in updates["models_offered"] if m != "Zenit KM"]
         models_ws.rows = [r for r in models_ws.rows if r[0] != "Zenit KM"]
-        upd = tick.write_sheets(writer, r5, {"runs_header_v5": True,
+        upd = tick.write_sheets(writer, r5, {"runs_header_v5": True, "runs_newest_first": True,
                                              "cheap_ids": [400], "models_offered": offered,
                                              "status_colors": updates["status_colors"], "new_rows_color": True,
                                              "fresh_rows_green": True})
         assert upd.get("new_rows_colors") == ["До 20 €", "Список"], "old flag: only 'До 20 €' added"
         assert upd.get("fresh_rows_colors") == ["До 20 €", "Список"]
-        assert ss.sheets["Запуски"].rows[-1][1] == 1 and upd["cheap_ids"] == [1021], "Zenit E 1021 entered 'До 20 €'"
-        assert ss.sheets["Запуски"].rows[-1][2].endswith("В «До 20 €» (1): Zenit E — 15 €, id 1021"), ss.sheets["Запуски"].rows[-1][2]
+        assert ss.sheets["Запуски"].rows[1][1] == 1 and upd["cheap_ids"] == [1021], "Zenit E 1021 entered 'До 20 €'"
+        assert ss.sheets["Запуски"].rows[1][2].endswith("В «До 20 €» (1): Zenit E — 15 €, id 1021"), ss.sheets["Запуски"].rows[1][2]
         assert "Zenit KM" in upd["models_offered"] and models_ws.rows[-1][0] == "Zenit KM"
         assert [r[0] for r in ss.sheets["До 20 €"].rows[1:]] == [1021], "Cyrillic 'зенит-е' matches Zenit E"
 
@@ -622,6 +625,12 @@ def main():
     ss2.sheets["Запуски"].rows = [sheets.RUNS_HEADER_V4[:-1], ["2026-10-16 07:07"]]
     sheets.SheetWriter(ss2).ensure_runs_header()
     assert ss2.sheets["Запуски"].rows[0] == sheets.RUNS_HEADER and len(ss2.sheets["Запуски"].rows) == 2
+    # Rows written oldest first are turned around once; new ones go on top.
+    ss2.sheets["Запуски"].rows = [sheets.RUNS_HEADER, ["a"], ["b"], ["c"]]
+    sw2 = sheets.SheetWriter(ss2)
+    sw2.runs_newest_first()
+    sw2.append_run(["d"])
+    assert [r[0] for r in ss2.sheets["Запуски"].rows[1:]] == ["d", "c", "b", "a"]
     # Rows of the old order (v4, or shorter v3): 'Новых в «До 20 €»' and 'Комментарий' move to the front.
     old = ["2026-10-16 07:07", "да", 2, 40, 0.0, 300] + [0] * 14 + ["Добавлены (1): Zenit E — 15 €", 3]
     ss2.sheets["Запуски"].rows = [sheets.RUNS_HEADER_V4[:-1], old, ["2026-10-16 07:22", "", 2]]

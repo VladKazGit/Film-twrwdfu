@@ -342,7 +342,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 37
+VERSION = 38
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -513,7 +513,7 @@ _ACCESSORY_WORDS = re.compile(
     # cases: it / fr / nl / es ('Custodia in pelle originale Olympus OM series')
     r"|custodia|astuccio|\bfodero|\bhousse|\bhoes\b|\bfunda\b"
     r"|objektiv|\blens(?:es)?\b|obiettiv|objectif|\blente\b|blitz|\bflash|speedlite"
-    r"|winder|motor ?drive|anleitung|(?<!fully )(?<!full )\bmanual\b(?!\s*(?:focus|fokus|camera|kamera|slr|exposure|mode))"
+    r"|winder|motor ?drive|\bbooster\b|anleitung|(?<!fully )(?<!full )\bmanual\b(?!\s*(?:focus|fokus|camera|kamera|slr|exposure|mode))"
     r"|handbuch|mode d.emploi|istruzioni|handleiding"
     r"|zubehor|accessoire|accessori|toebehoren|\bfilter|deckel|\bprism|mattscheibe|focusing screen"
     r"|\badapter|batterie|\bbattery|\bgriff\b|\bgrip\b|stativ|tripod|treppiede|belichtungsmesser"
@@ -541,7 +541,9 @@ _MANUAL = re.compile(
     # 'manuel' is also a manual camera ('appareil photo argentique manuel'): as a document only
     r"|^manuel\b|\bmanuel\b(?=\s+(?:d.utilisation|d.utilisateur|utilisateur|de l.utilisateur|d.instructions?"
     r"|original|en\s|francais|anglais|allemand))"
-    r"|(?<!fully )(?<!full )\bmanual\b(?!\s*(?:focus|fokus|camera|kamera|slr|exposure|mode))")
+    r"|(?<!fully )(?<!full )\bmanual\b(?!\s*(?:focus|fokus|camera|kamera|slr|exposure|mode))"
+    # 'Lot of Nikon usermanuals': manuals in the plural or run together are documents
+    r"|user ?manuals?|\bmanuals\b|owner.?s manual")
 # Spare parts. Preceded by "for/per/für..." it is a camera sold for parts instead.
 _PARTS = re.compile(
     r"ricambi[oa]?\b|ersatzteil|spare parts?\b|pieces? detachees?|onderde(?:el|len)\b|calotta|top cover"
@@ -617,7 +619,9 @@ _DIGITAL = re.compile(
     r"|coolpix|powershot|lumix|cyber ?shot|dimage|finepix|\bsd ?-?karte|\bsd ?card|\d+ ?gb\b|\bz ?fc\b"
     r"|\beos \d{2,4}d\b|\beos \d{1,2}d\b|\bd\d{3,4}\b|\bk-(?:x|m|r|\d{1,2})\b|\*ist"
     # Minox digital miniatures of classic cameras ('Leica M3 Minox Miniaturizzata')
-    r"|\bminox\b|miniatur")
+    r"|\bminox\b|miniatur"
+    # Olympus OM-D / E-M10 / E-PL: Micro Four Thirds
+    r"|\bom-?d\b|\be-?m ?(?:1|5|10)\b|\be-?pl? ?\d")
 
 _LENS = re.compile(
     r"objektiv|obiettiv|objectif|\blens(?:es)?\b|\blente\b|lentille|zoom|\bf\s?/\s?\d|\bf\d[.,]\d"
@@ -817,13 +821,13 @@ _NAME_FILLER = re.compile(
     r"|biottica|bi-objectif|tlr|wetzlar|germany|japan|made|in|kleinbild\w*|mittelformat\w*|sucherkamera)$")
 _NAME_STOP = re.compile(
     r"^(?:mit|with|avec|con|und|and|et|e|met|y|\+|&|objektiv\w*|obiettiv\w*|objectif|lens|lente|lenzen|f|mm|"
-    r"\d+mm|\d+[.,]\d|\d+/\d+|\d{2,3}-\d{2,3}(?:mm)?|f=\S*|de|da|di|del|della|du|per|pour|for|fur|incl\w*|plus"
+    r"\d+mm|\d+[.,]\d|\d+/\d+|\d{2,3}-\d{2,3}(?:mm)?|f=\S*|f\d[.,]\d+|f/\S+|de|da|di|del|della|du|per|pour|for|fur|incl\w*|plus"
     r"|set|lot|kit|-|–|—|\||/|,|completa"
     r"|complet|komplett|funktion\w*|fonctionne\w*|funzionante|testet|teste|testato|tested|vendu|pas|anni|annees"
     r"|jahre|years|model|modell|modele|modello|type|typ|tipo|neuf|nuovo|new|neu|gebraucht|usato|avec|sans|ohne"
     r"|a|al|il|la|le|les|the|un|une|en|im|zu|zum|appareil|kamera|camera|fotocamera|macchina"
     # serial numbers read on a photo, condition words, lens names
-    r"|\d{5,}\w*|ottim[eoia]|buon[oa]|gut\w*|sehr|top|mint|excellent\w*|etat|bon|tres|perfekt\w*|perfett\w*"
+    r"|\d{5,}\w*|inc|ltd|co|gmbh|corp|ottim[eoia]|buon[oa]|gut\w*|sehr|top|mint|excellent\w*|etat|bon|tres|perfekt\w*|perfett\w*"
     r"|rokkor|nikkor|zuiko|takumar|hexanon|yashinon|tessar|pancolar|helios|industar|jupiter|summicron|elmar|planar"
     r"|sonnar|xenar|skopar|cosinon|fujinon|serenar|color)$")
 
@@ -876,7 +880,8 @@ def camera_name(text, from_photo=False):
     raw_tokens = {}
     for raw in re.findall(r"[\w\-]+", text):
         raw_tokens.setdefault(normalize(raw), raw)
-    norm = re.sub(r"[(),;:!?\"'«»*•’‘`´.]", " ", normalize(text))
+    norm = re.sub(r"\bf ?/ ?\d+(?:[.,]\d+)?|\bf\d+[.,]\d+", " | ", normalize(text))  # apertures: f/2.8, f1.8
+    norm = re.sub(r"[(),;:!?\"'«»*•’‘`´.]", " ", norm)
     for match in _NAME_BRAND_RX.finditer(norm):
         brand = _NAME_SPELLINGS[match.group(1)]
         model = []
@@ -953,7 +958,8 @@ _JUNK = [
     ("lens", re.compile(r"^\W*(?:[a-z]+ )?(?:af[- ]?s? |sp )?(?:nikkor|zuiko|takumar|rokkor|hexanon|serenar|yashinon"
                         r"|objektiv|obiettivo|objectif|lens|lente|tamron|tokina|soligor)\b")),
     ("modern AF", re.compile(
-        r"\bnikon f ?(?:50|55|60|65|70|75|80|90x?|100|401s?|501|601m?|801s?)\b|\bf-?(?:401|501|601|801)s?\b|\b401 ?s\b"
+        r"\bnikon f ?-?(?:50|55|60|65|70|75|80|90x?|100|401[sx]?|501|601m?|801s?)\b|\bf-?(?:401|501|601|801)[sx]?\b"
+        r"|\b401 ?s\b|\bom-?(?:101|707|88)\b"
         r"|\bn ?\d{4}s?\b(?=.*nikon)|\bnikon n ?\d{4}|\bminolta af\b|\baf ?\d{2}-\d{2,3}|dynax|maxxum|\beos\b|\bmz ?-?\d"
         r"|\bpentax z ?-?\d|\bsf ?\d\b|autofocus|auto focus|\b\d{3,4} ?af\b")),
 ]

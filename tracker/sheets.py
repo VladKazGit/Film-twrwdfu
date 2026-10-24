@@ -204,7 +204,15 @@ class SheetWriter:
             ws.insert_row(RUNS_HEADER, 1, value_input_option="RAW")
 
     def append_run(self, row):
-        self._get(RUNS_SHEET, RUNS_HEADER).append_row(row, value_input_option="RAW")
+        """The newest run goes on top, right under the header."""
+        self._get(RUNS_SHEET, RUNS_HEADER).insert_row(row, index=2, value_input_option="RAW")
+
+    def runs_newest_first(self):
+        """Rows written oldest first (before newest-on-top) turned around once; numbers stay numbers."""
+        ws = self._get(RUNS_SHEET, RUNS_HEADER)
+        rows = ws.get_values(value_render_option="UNFORMATTED_VALUE")
+        if len(rows) > 2:
+            ws.update(range_name="A1", values=[rows[0]] + rows[:0:-1], value_input_option="RAW")
 
     def sync_models(self, offered):
         """'Модели' belongs to the user and filters 'До 20 €'.

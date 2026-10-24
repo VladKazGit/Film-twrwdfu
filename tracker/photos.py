@@ -27,7 +27,7 @@ DROPPED_FILE = "photo_dropped.json"           # what the photo check dropped fro
 DROPPED_KEEP = 3000
 K = 7
 LOOK_SHARE = 0.6        # a model by look: its share of the K nearest reference photos
-LIST_SCORE_MIN = 0.02   # keep: the 5 nearest list-model photos this much closer than the 5 nearest others
+LIST_SCORE_MIN = 0.03   # keep: the 5 nearest list-model photos this much closer than the 5 nearest others
 NOT_CAMERA = 0.1        # 'is it a camera at all' below this, for titles without a camera word or brand
 OCR_SCORE = 0.6
 PAUSE = (2.0, 3.0)      # between photo downloads, as for every request to Vinted
@@ -265,10 +265,12 @@ def read_more_photos(items, client, budget_s, session=None):
 
 
 def is_dropped(item):
-    """A card of 'Остальные' the photo check drops (manual labels are never dropped)."""
+    """A card of 'Остальные' (or moved to 'Список' by its photo) that the photo check drops: the verdict
+    'drop', or 'gone' - the listing and its photo are no longer online. Manual labels are never dropped."""
     label = item.get("photo_label") or {}
-    return (item.get("group") == "rest" and item.get("model_source") != "manual"
-            and (label.get("verdict") or [""])[0] == "drop")
+    from_rest = item.get("group") == "rest" or item.get("model_source") == "photo"
+    return (from_rest and item.get("model_source") != "manual"
+            and (label.get("verdict") or [""])[0] in ("drop", "gone"))
 
 
 def record_drops(root, dropped):

@@ -1154,6 +1154,9 @@ def write_sheets(writer, result, state_flags):
     if not state_flags.get("runs_header_v5"):  # v5: 'Новых в «До 20 €»' and 'Комментарий' right after the time
         writer.ensure_runs_header()
         updates["runs_header_v5"] = True
+    if not state_flags.get("runs_newest_first"):  # the rows written oldest first are turned around once
+        writer.runs_newest_first()
+        updates["runs_newest_first"] = True
     writer.append_run(runs_row(result["run"], cheap_added))
     if result["daily"]:
         writer.replace(sheets.REST_SHEET, report.item_rows([i for i in items if i.get("group") == "rest"]), links=True)
