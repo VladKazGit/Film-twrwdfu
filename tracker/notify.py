@@ -52,7 +52,7 @@ def sale_stats(items):
     for i in items:
         price = report.current_price(i)
         if (i.get("group") == "list" and i.get("status") == "sold" and price is not None
-                and not report.stat_flags(i) & report.EXCLUDED_FLAGS):
+                and not report.stat_flags(i) & report.SALES_EXCLUDED):
             sold.setdefault(i.get("model"), []).append(i)
     stats = {}
     for model, cameras in sold.items():

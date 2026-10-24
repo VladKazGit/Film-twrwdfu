@@ -10,6 +10,8 @@ from . import clock, kinds, models
 BUCKETS = [(30, "< 30 мин"), (360, "30 мин – 6 ч"), (1440, "6–24 ч"), (10080, "1–7 дн"), (None, "> 7 дн")]
 FAST_MINUTES = 30
 EXCLUDED_FLAGS = {"accessory?", "digital?", "compact?", "price?"}
+# a bundle (several cameras, a lot) counts in 'Сводка' only: its price is not one camera's
+SALES_EXCLUDED = EXCLUDED_FLAGS | {"набор"}
 # Placeholder prices: 1 EUR, or up to 5 EUR when the seller waits for offers. Not the real price,
 # so out of the statistics, 'До 20 €', 'Продажи' and the letters; worked out from the current
 # price, so a camera that gets a real price comes back.
@@ -180,7 +182,7 @@ def fast_confidence(item):
     (late GitHub runs widen the upper estimate).
     """
     flags = set(item.get("flags") or [])
-    if item.get("status") != "sold" or stat_flags(item) & (EXCLUDED_FLAGS | {"preexisting", "night", "found"}):
+    if item.get("status") != "sold" or stat_flags(item) & (SALES_EXCLUDED | {"preexisting", "night", "found"}):
         return None
     if item.get("time_to_sell_max") is not None and item["time_to_sell_max"] <= FAST_MINUTES:
         return "точно"
@@ -321,7 +323,8 @@ def sales_rows(items):
     """'Продажи': sold list cameras, newest sale first, one line each. 'Перевыставлялась': the same
     seller listed the camera before and took it down unsold (see relist_chains)."""
     relisted = {chain[-1]["id"]: chain for chain in relist_chains(items) if chain[-1].get("status") == "sold"}
-    sold = sorted((i for i in items if i.get("group") == "list" and i.get("status") == "sold" and not placeholder_price(i)),
+    sold = sorted((i for i in items if i.get("group") == "list" and i.get("status") == "sold"
+                   and not placeholder_price(i) and not i.get("bundle")),
                   key=lambda i: (i.get("sold_detected_at") or "", i["id"]), reverse=True)
     rows = [SALES_HEADER]
     for i in sold:
@@ -421,7 +424,7 @@ def relist_chains(items):
     does not chain. The chains of two or more listings, each oldest first."""
     by_seller = {}
     for i in items:
-        if i.get("group") == "list" and i.get("seller_id") and i.get("model") and not stat_flags(i) & EXCLUDED_FLAGS:
+        if i.get("group") == "list" and i.get("seller_id") and i.get("model") and not stat_flags(i) & SALES_EXCLUDED:
             by_seller.setdefault((i["seller_id"], i["model"]), []).append(i)
     chains = []
     for cards in by_seller.values():
@@ -535,7 +538,7 @@ def top_rows(items, now):
     """'Топ-10': the models sold most often, the models with the highest sale prices and the most
     expensive sales. List cameras only, without placeholder prices or flagged listings; sale
     prices count above SALE_MIN_PRICE (no cheap, broken or parts-only sales)."""
-    counted = [i for i in items if i.get("group") == "list" and not stat_flags(i) & EXCLUDED_FLAGS]
+    counted = [i for i in items if i.get("group") == "list" and not stat_flags(i) & SALES_EXCLUDED]
     by_model = {}
     for item in counted:
         by_model.setdefault(item.get("model"), []).append(item)
@@ -637,7 +640,7 @@ def analytics_rows(items, now):
     of listing, condition, kit, early saves), repeated listings and prices by month. List cameras
     only, without placeholder prices or flagged listings. '< 30 мин' needs a known listing time,
     so only new listings count there."""
-    counted = [i for i in items if i.get("group") == "list" and not stat_flags(i) & EXCLUDED_FLAGS]
+    counted = [i for i in items if i.get("group") == "list" and not stat_flags(i) & SALES_EXCLUDED]
     new = [i for i in counted if _new_listing(i)]
     rows = [["Обновлено", now],
             ["«< 30 мин» — только новые объявления (время выставления известно до тика); «Продали за» — от выставления"],

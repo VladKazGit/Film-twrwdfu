@@ -469,6 +469,9 @@ def main():
         assert a[Z12]["flags"] == ["found"] and a[Z12]["uploaded_ago"] == "5 Monaten" and ZE not in a and PRIMA not in a
         assert [i["id"] for i in report.cheap_cameras(r["items"], 20.0)] == [Z12]
         assert report.fast_confidence({**a[Z12], "status": "sold", "time_to_sell_min": 0}) is None
+        quick = {**a[Z12], "flags": [], "status": "sold", "time_to_sell_min": 0, "time_to_sell_max": 10}
+        assert report.fast_confidence(quick) == "точно"
+        assert report.fast_confidence({**quick, "bundle": ["Zenit 12", "Zenit E"]}) is None, "a bundle: 'Сводка' only"
         for minute in range(52, 52 + 15 * 10, 15):  # finish the daily cheap pass over all brands
             now = f"2026-10-18 {9 + minute // 60:02d}:{minute % 60:02d}"
             tick.run_tick(store, FakeClient(base, pages_age, search), now=now)

@@ -43,7 +43,8 @@ def export(spreadsheet):
         comments = resp.json().get("comments", [])
     except Exception as exc:
         print(f"review: comments not read: {type(exc).__name__}")
-    return {"sheets": out, "comments": comments}
+    every = [{"title": ws.title, "rows": ws.row_count, "cols": ws.col_count} for ws in spreadsheet.worksheets()]
+    return {"sheets": out, "comments": comments, "all_sheets": every}
 
 
 def main():
