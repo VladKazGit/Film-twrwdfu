@@ -141,7 +141,7 @@ CASES = [
     ("Yashica Mat-124", None, "Yashica Mat-124"),
     ("Yashica Mat 124 G", None, "Yashica Mat-124G"),
     ("Yashica-Mat 124G", None, "Yashica Mat-124G"),
-    ("Yashica FX-3 Super", None, None),
+    ("Yashica FX-3 Super", None, "Yashica FX-3 Super"),  # its own model since 39
     ("Yashica FX-3 Super 2000", None, "Yashica FX-3 Super 2000"),
     ("Asahi Pentax Spotmatic", None, "Pentax Spotmatic"),
     ("Pentax Spotmatic F", None, "Pentax Spotmatic F"),

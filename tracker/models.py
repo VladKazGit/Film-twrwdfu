@@ -108,6 +108,7 @@ MODELS = [
     ("Olympus", "Olympus Pen FT", MECH, S35, ["pen ft"], None),
     ("Olympus", "Olympus Pen FV", MECH, S35, ["pen fv"], None),
     ("Minolta", "Minolta SR-T 101", MECH, S35, ["sr t 101!", "sr t 101 b!"], None),
+    ("Minolta", "Minolta SR-T 100X", MECH, S35, ["sr t 100 x!"], None),  # 1975
     # SR-T 303 is the European name of the SR-T 102
     ("Minolta", "Minolta SR-T 102", MECH, S35, ["sr t 102!", "sr t 303!", "sr t 303 b!"], None),
     ("Minolta", "Minolta SR-T 201", MECH, S35, ["sr t 201!"], None),
@@ -121,7 +122,10 @@ MODELS = [
     ("Konica", "Konica Autoreflex T4", MECH, S35, ["auto reflex t 4!"], None),
     ("Yashica", "Yashica FX-3", MECH, S35, ["fx 3"], r"super"),
     ("Yashica", "Yashica FX-3 Super 2000", MECH, S35, ["fx 3 super 2000!"], None),
+    ("Yashica", "Yashica FX-3 Super", MECH, S35, ["fx 3 super"], r"2000"),  # 1984
+    ("Yashica", "Yashica FX-2", MECH, S35, ["fx 2"], None),  # 1976
     ("Mamiya", "Mamiya C330", MECH, MED, ["c 330!", "c 330 professional!"], None),
+    ("Mamiya", "Mamiya C33", MECH, MED, ["c 33!"], None),  # 1965
     ("Mamiya", "Mamiya C330f", MECH, MED, ["c 330 f!", "c 330 professional f!", "c 330 pro f!"], None),
     ("Mamiya", "Mamiya C330s", MECH, MED, ["c 330 s!", "c 330 professional s!", "c 330 pro s!"], None),
     ("Mamiya", "Mamiya RB67", MECH, MED, ["rb 67!"], None),
@@ -208,6 +212,7 @@ MODELS = [
     ("Zenit", "Zenit 11", MECH, S35, ["^11"], None),
     ("Zenit", "Zenit 12SD", MECH, S35, ["^12 sd", "^12 cd"], None),
     ("Zenit", "Zenit 12XP", MECH, S35, ["^12 xp"], None),
+    ("Zenit", "Zenit 12", MECH, S35, ["^12"], None),  # 1983
     ("Zenit", "Zenit 122", MECH, S35, ["^122"], r"k(?![a-z0-9])"),
     ("Zenit", "Zenit 4", MECH, S35, ["^4"], None),
     ("Zenit", "Zenit 5", MECH, S35, ["^5"], None),
@@ -219,6 +224,8 @@ MODELS = [
     ("FED", "FED 5B", MECH, S35, ["^5 b", "^5 v"], None),
     ("FED", "FED 5C", MECH, S35, ["^5 c", "^5 s"], None),
     ("Zorki", "Zorki 4", MECH, S35, ["^4"], None),
+    ("Zorki", "Zorki 1", MECH, S35, ["^1"], None),  # 1948
+    ("Zorki", "Zorki 2C", MECH, S35, ["^2 c", "^2 s"], None),  # 1955, Зоркий-2С
     ("Zorki", "Zorki 4K", MECH, S35, ["^4 k"], None),
     # Ihagee Exa (Dresden, 1951-1987): 'Ihagee EXA-I', 'Exa Ia', 'Exa 1b'
     ("Exakta", "Ihagee Exa", MECH, S35, ['exa!'], None),
@@ -342,7 +349,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 38
+VERSION = 39
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -351,6 +358,7 @@ PRIORITY_SEARCH = ("Canon FX", "Canon FP", "Canon TL", "Canon TLb", "Canon TX", 
                    "Minolta SR-1", "Minolta SR-T 102", "Leica R9", "Canon T50", "Canon T60", "Canon T70", "Canon T80",
                    "Praktiflex", "Praktica FX", "Praktica FX2", "Praktica FX3", "Praktica IV", "Praktica IVB", "Praktica IVM", "Praktica IVBM", "Praktica IVF", "Praktica IVFB", "Praktica V", "Praktica VF", "Praktica Nova", "Praktica Nova B", "Praktica Nova I", "Praktica Nova IB", "Praktica Super TL2", "Praktica Super TL3", "Praktica L2", "Praktica LTL2", "Praktica LTL3", "Praktica LLC", "Praktica Mat", "Praktica MTL 50", "Praktica PLC2", "Praktica PLC3", "Praktica VLC", "Praktica VLC2", "Praktica VLC3", "Kiev 2", "Kiev 2A", "Kiev 3", "Kiev 3A", "Kiev 5", "Kiev 17", "Kiev 19", "Kiev 19M", "Kiev 20", "Kiev 88CM", "Kiev Salut", "Kiev Salut-S", "Kiev 90",
                    "Olympus M-1", "Olympus OM-2000", "Olympus FTL", "Olympus Pen F", "Olympus Pen FT", "Olympus Pen FV",
+                   "Minolta SR-T 100X", "Yashica FX-2", "Yashica FX-3 Super", "Zenit 12", "Zorki 1", "Zorki 2C", "Mamiya C33",
                    "Olympus OM-1 MD", "Leica CL", "Leica I", "Leica Ic", "Leica If", "Leica Ig", "Leica II", "Leica IIc", "Leica IIf", "Leica III", "Leica IIIa", "Leica IIIb", "Leica IIIc", "Leica IIIf", "Leica IIIg", "Ihagee Exa", "Ihagee Exa I", "Ihagee Exa Ia", "Ihagee Exa Ib", "Ihagee Exa Ic", "Ihagee Exa II", "Ihagee Exa IIa", "Ihagee Exa IIb", "Ihagee Exa 500")
 
 # Models that must not match when the text also contains this pattern.

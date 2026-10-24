@@ -122,18 +122,18 @@ Cron (каждые 2 ч) — только запасной перезапуск 
 - Canon: F-1, F-1n, FTb, FT QL, Pellix, FX, FP, TL, TLb, TX; дальномерные Canon P, Canon 7
 - Pentax: Spotmatic / SP, Spotmatic F, SV, K1000, KM, MX, KX
 - Olympus: OM-1, OM-1 MD, OM-1n, M-1 (первое имя OM-1), OM-3, OM-3Ti, OM-2000, FTL (M42); полукадровые зеркальные Pen F, Pen FT, Pen FV
-- Minolta: SR-1 (и SR-1s), SR-T 101, SR-T 102 (европейское имя — SR-T 303 / 303b), SR-T 201, SR-7
+- Minolta: SR-1 (и SR-1s), SR-T 100X, SR-T 101, SR-T 102 (европейское имя — SR-T 303 / 303b), SR-T 201, SR-7
 - Konica: Auto-Reflex, Autoreflex T / T2 / T3 / T4
-- Yashica: FX-3, FX-3 Super 2000
-- Средний формат: Mamiya C330 / C330f / C330s, Mamiya RB67 (Professional, Pro-S, Pro-SD), Yashica Mat-124, Yashica Mat-124G, Rolleiflex 2.8F
+- Yashica: FX-2, FX-3, FX-3 Super, FX-3 Super 2000
+- Средний формат: Mamiya C33, C330 / C330f / C330s, Mamiya RB67 (Professional, Pro-S, Pro-SD), Yashica Mat-124, Yashica Mat-124G, Rolleiflex 2.8F
 - Leica: M2, M3, M4, M4-2, M4-P, M5, M6; CL (1973; ≠ цифровая CL 2017 г.); винтовые (Barnack): I, Ic, If, Ig, II (II D), IIc, IIf, III, IIIa, IIIb, IIIc, IIIf, IIIg («IIIf», «III f», «3f»); Leicaflex, Leicaflex SL / SL2, R6, R6.2
 - Hasselblad: 500C, 500C/M, 501C, 503CX
 - Rollei: Rolleiflex SL35, SL350, SL35M
 - Praktica (L, M42 и ранние): L, L2, LTL, LTL2, LTL3, LLC, Super TL, Super TL2, Super TL3, Mat, MTL 3, MTL 5, MTL 5B, MTL 50, PLC2, PLC3, VLC, VLC2, VLC3, Nova, Nova B, Nova I (PL Nova I), Nova IB (PL Nova IB), FX, FX2, FX3, IV, IVB, IVM, IVBM, IVF, IVFB, V, VF; Praktiflex
-- Зенит: 3М, Е, В, ЕМ, ЕТ, TTL, 10, 11, 12сд (12CD), 12XP, 122; байонет «Зенит-4»: 4, 5, 6
+- Зенит: 3М, Е, В, ЕМ, ЕТ, TTL, 10, 11, 12, 12сд (12CD), 12XP, 122; байонет «Зенит-4»: 4, 5, 6
 - ФЭД: 2, 3, 4, 5 / 5В / 5С
 - Ihagee Exa (ГДР): Exa, Exa I, Ia, Ib, Ic, II, IIa, IIb, 500 (Exakta Varex и др. — не в списке)
-- Зоркий: 4, 4К
+- Зоркий: 1, 2С, 4, 4К
 - Киев: дальномеры 2, 2А, 3, 3А, 4, 4А, 4М, 4АМ, 5; зеркальные под Nikon F 17, 19, 19М, 20; средний формат 88, 88СМ, Салют / Салют-С, 90, 60 / 6С (Киев 35А, 30, Вега — не камеры списка)
 
 ### Полуавтоматические, гибридные, электронные
