@@ -380,7 +380,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 44
+VERSION = 45
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -744,10 +744,13 @@ def _marker_words(kind):
 
 # The multilingual base of words that mark no camera (tracker/markers.py) joins the rules above.
 _MANUAL = re.compile(f"{_MANUAL.pattern}|{_marker_words(markers.MANUAL)}")
+# Body parts: unlike _PARTS, not after a camera word or in a set ('Nikon F3 Analoge Kamera Set … Rückwand').
+_BODY_PARTS = re.compile(_marker_words(markers.PARTS))
 _STRONG_ACCESSORY = re.compile(f"{_STRONG_ACCESSORY.pattern}|{_marker_words(markers.PRINT)}")
 _LEAD_ACCESSORY = re.compile(f"{_LEAD_ACCESSORY.pattern}|{_marker_words(markers.PRINT)}|{_marker_words(markers.BOX)}")
 _BOX = re.compile(f"{_BOX.pattern}|{_marker_words(markers.BOX)}")
-_ACCESSORY_WORDS = re.compile(f"{_ACCESSORY_WORDS.pattern}|{_marker_words(markers.LEVEL)}")
+_ACCESSORY_WORDS = re.compile(
+    f"{_ACCESSORY_WORDS.pattern}|{_marker_words(markers.LEVEL)}|{_marker_words(markers.TUBES)}")
 _FOR_CAMERA = re.compile(f"{_FOR_CAMERA.pattern}|{_marker_words(markers.FOR_CAMERA)}")
 _NOT_SOLD_CAMERA = re.compile(f"{_NOT_SOLD_CAMERA.pattern}|{_marker_words(markers.NOT_SOLD)}")
 _WITH_WORDS = re.compile(f"{_WITH_WORDS.pattern}|{_marker_words(markers.WITH)}")
@@ -768,6 +771,10 @@ def _is_accessory(norm, model_span):
     part = _PARTS.search(norm)
     if part and not _WITH_WORDS.search(norm[:part.start()]) and not _FOR_BEFORE.search(norm[:part.start()]):
         return True  # "Calotta superiore Pentax ME Super ricambio originale"
+    body = _BODY_PARTS.search(norm)
+    if body and not (_WITH_WORDS.search(norm[:body.start()]) or _FOR_BEFORE.search(norm[:body.start()])
+                     or _CAMERA_WORDS.search(norm[:body.start()]) or _BUNDLE.search(norm)):
+        return True  # "Sportello posteriore Olympus OM10"
     manual = _MANUAL.search(norm)
     if manual and not _WITH_WORDS.search(norm[:manual.start()]) and not _KIT_WORDS.search(norm):
         return True  # "Notice appareil photo Nikon FE2", "Mamiya M645 ... multi language manual"
@@ -809,6 +816,9 @@ def _is_accessory(norm, model_span):
     acc = next((a for a in _ACCESSORY_WORDS.finditer(tail) if not _KIT_LENS.fullmatch(a.group(0))), None)
     # "Nikon F2 viseur DP1 + Nikon 100mm + Nikon 80-200": a camera sold with its finder and lenses.
     if _KIT_PLUS_LENS.search(tail):
+        return False
+    # "Mamiya RZ67 Pro Sekor Z 110mm f2.8 Lens, Extension Tubes & ...": its kit lens comes first.
+    if acc and _KIT_LENS.search(tail[:acc.start()]):
         return False
     # "Nikon F Waist Level Finder ... Case": accessory words, no camera, no "with".
     return bool(acc) and not _WITH_WORDS.search(tail[:acc.start()]) and not _CAMERA_WORDS.search(norm)
@@ -858,7 +868,7 @@ def accessory_words(title):
 def lead_word(description):
     """The accessory/part/manual word a description starts with, or None."""
     lead = _LEAD_FILLER.sub("", normalize(description or "")[:160])
-    m = _PARTS.match(lead) or _MANUAL.match(lead) or _LEAD_ACCESSORY.match(lead)
+    m = _PARTS.match(lead) or _MANUAL.match(lead) or _BODY_PARTS.match(lead) or _LEAD_ACCESSORY.match(lead)
     return m.group(0).strip() if m else None
 
 
@@ -868,7 +878,7 @@ def lead_is_accessory(description):
     no camera."""
     norm = normalize(description)[:160]
     lead = _LEAD_FILLER.sub("", norm)
-    first = _PARTS.match(lead) or _MANUAL.match(lead)
+    first = _PARTS.match(lead) or _MANUAL.match(lead) or _BODY_PARTS.match(lead)
     return bool(first) or (bool(_LEAD_ACCESSORY.match(lead)) and not _CAMERA_WORDS.search(norm[:80]))
 
 

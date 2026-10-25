@@ -160,6 +160,68 @@ LEVEL = {
     "sv": ["vattenpass"],
 }
 
+# Macro extension tubes / rings ('Canon EF extension tube bagues macro': the EF mount, not the
+# camera): an accessory word. Not 'bellows' - folding cameras have them.
+TUBES = {
+    "bg": ["удължителни пръстени", "макро пръстени"],
+    "cs": ["mezikroužky", "prodlužovací kroužky", "makro kroužky"],
+    "da": ["mellemringe", "makroringe"],
+    "de": ["Zwischenring", "Zwischenringe", "Makroringe", "Makro-Zwischenringe"],
+    "el": ["δακτύλιοι επέκτασης", "μακρο δακτύλιοι"],
+    "en": ["extension tube", "extension tubes", "extension rings", "macro tubes", "macro rings"],
+    "es": ["tubo de extensión", "tubos de extensión", "anillos macro"],
+    "et": ["vaheringid", "makrorõngad"],
+    "fi": ["välirenkaat", "makrorenkaat"],
+    "fr": ["bague allonge", "bagues allonges", "bagues allonge", "bagues macro", "bagues d'extension",
+           "tubes allonge", "tubes macro"],
+    "ga": ["feadáin síneadh"],
+    "hr": ["međuprstenovi", "makro prstenovi"],
+    "hu": ["közgyűrű", "közgyűrűk", "makrogyűrű"],
+    "it": ["tubi di prolunga", "anelli di prolunga", "tubi di estensione", "anelli macro", "tubi macro"],
+    "lt": ["tarpiniai žiedai", "makro žiedai"],
+    "lv": ["starpgredzeni", "makro gredzeni"],
+    "mt": ["tubi ta' estensjoni"],
+    "nl": ["tussenring", "tussenringen", "macro ringen", "macroringen"],
+    "pl": ["pierścienie pośrednie", "pierścienie makro", "tuleje makro"],
+    "pt": ["tubos de extensão", "anéis macro"],
+    "ro": ["inele de extensie", "tuburi de extensie", "inele macro"],
+    "sk": ["medzikrúžky", "makro krúžky"],
+    "sl": ["vmesni obročki", "makro obročki"],
+    "sv": ["mellanringar", "makroringar"],
+}
+
+# Body parts - bottom / top plate, back door, battery door ('Piastra inferiore Olympus OM10',
+# 'Sportello posteriore Olympus OM10'): a part anywhere in the title, unless a 'with' word comes
+# before it or 'for' does ('… per ricambi' is a camera for parts). A description that starts with it.
+PARTS = {
+    "bg": ["долна плоча", "горен капак", "заден капак"],
+    "cs": ["spodní kryt", "horní kryt", "zadní kryt", "zadní dvířka"],
+    "da": ["bundplade", "topdæksel", "bagklap", "bagdæksel"],
+    "de": ["Bodenplatte", "Bodendeckel", "Rückwand", "Kamerarückwand", "Deckkappe", "Batteriefachdeckel"],
+    "el": ["κάτω πλάκα", "πάνω καπάκι", "πίσω καπάκι"],
+    "en": ["bottom plate", "base plate", "top plate", "top cover", "back door", "back cover", "rear door",
+           "battery door"],
+    "es": ["placa inferior", "tapa inferior", "tapa superior", "tapa trasera", "puerta trasera"],
+    "et": ["põhjaplaat", "ülakaas", "tagakaas"],
+    "fi": ["pohjalevy", "yläkansi", "takakansi"],
+    "fr": ["plaque inférieure", "plaque de fond", "capot supérieur", "porte arrière", "dos du boîtier",
+           "trappe à pile", "trappe"],
+    "ga": ["clúdach cúil"],
+    "hr": ["donja ploča", "gornji poklopac", "stražnji poklopac", "stražnja vrata"],
+    "hu": ["alsó fedél", "felső fedél", "hátsó fedél", "hátlap"],
+    "it": ["piastra inferiore", "piastra", "sportello posteriore", "sportello", "dorso posteriore"],
+    "lt": ["apatinė plokštė", "viršutinis dangtelis", "galinis dangtelis"],
+    "lv": ["apakšējā plāksne", "augšējais vāciņš", "aizmugurējais vāciņš"],
+    "mt": ["għatu ta' wara"],
+    "nl": ["bodemplaat", "onderplaat", "bovenkap", "achterwand", "achterklep"],
+    "pl": ["płytka dolna", "dolna pokrywa", "górna pokrywa", "tylna pokrywa", "tylna klapka"],
+    "pt": ["placa inferior", "tampa inferior", "tampa superior", "tampa traseira", "porta traseira"],
+    "ro": ["placa inferioară", "capac inferior", "capac superior", "capac spate", "ușa din spate"],
+    "sk": ["spodný kryt", "horný kryt", "zadný kryt", "zadné dvierka"],
+    "sl": ["spodnja plošča", "zgornji pokrov", "zadnji pokrov", "zadnja vratca"],
+    "sv": ["bottenplatta", "topplock", "baklucka", "bakstycke"],
+}
+
 # Made for a camera ('Livella per fotocamera'): in a title without a model and without a camera
 # word before it, the thing is for a camera, not one.
 FOR_CAMERA = {
@@ -201,5 +263,6 @@ WITH = {
 
 KINDS = {  # name (Russian, for people) -> words by language
     "инструкция": MANUAL, "журнал / книга / каталог": PRINT, "коробка": BOX,
-    "камера не продаётся / пустая коробка": NOT_SOLD, "уровень": LEVEL, "«для камеры»": FOR_CAMERA,
+    "камера не продаётся / пустая коробка": NOT_SOLD, "уровень": LEVEL, "макрокольца / удлинительные трубки": TUBES,
+    "запчасти корпуса": PARTS, "«для камеры»": FOR_CAMERA,
 }
