@@ -12,7 +12,7 @@ def card(item_id, model, price, flags=(), group="list", status="active"):
 
 
 def main():
-    state = {"models_sheet": ["Zenit E", "Canon AE-1", "Praktica MTL 5"]}
+    state = {"models_sheet": ["Zenit E", "Canon AE-1", "Praktica MTL 5", "Olympus OM-10", "Canon T70"]}
     items = [card(1, "Zenit E", 15.0), card(2, "Canon AE-1", 120.0)]
     sent = []
     os.environ.pop("MAIL_USER", None)
@@ -29,20 +29,25 @@ def main():
                   card(5, "Canon AE-1", 10.0, flags=["accessory?"]),   # flagged: not in the sheet
                   card(6, "Pentax K1000", 15.0),                       # not in 'Модели'
                   card(9, "Praktica MTL 5", 9.0),                      # Praktica: no letters
-                  dict(card(7, "Zenit E", 18.0, status="sold"),       # not on sale; sales in the data
+                  card(12, "Canon T70", 10.0),                         # T50 / T60 / T70: no letters
+                  card(10, "Olympus OM-10", 15.0),                     # sells for 40: not 50 EUR below
+                  dict(card(11, "Olympus OM-10", 40.0, status="sold"),
                        listed_after="2026-10-16 10:00", sold_detected_at="2026-10-18 10:00"),
-                  dict(card(8, "Zenit E", 46.0, status="sold"),
+                  dict(card(7, "Zenit E", 70.0, status="sold"),       # not on sale; sales in the data
+                       listed_after="2026-10-16 10:00", sold_detected_at="2026-10-18 10:00"),
+                  dict(card(8, "Zenit E", 90.0, status="sold"),
                        listed_after="2026-10-16 10:00", sold_detected_at="2026-10-20 10:00")]
         items[1]["price_history"].append({"at": "2026-10-18 10:45", "price": 20.0})
         assert notify.run(items, state, "2026-10-18 10:47", sent.append) == 3 and len(sent) == 2
         body = sent[1].get_body(("plain",)).get_content()
         assert "items/3" in body and "items/4" in body and "items/2" in body and "items/5" not in body
         assert "items/9" not in body and "Praktica" not in body
+        assert "items/12" not in body and "items/10" not in body, "a skipped model; 15 EUR is not 50 below 40"
         assert "найдено поиском" in body and sent[1]["Subject"].startswith("⚡ Vinted «До 20 €»: Zenit E — 8 € и ещё 2")
         html = sent[1].get_body(("html",)).get_content()
         assert '<img src="https://images1.vinted.net/p3.jpg"' in html and "Kamera funktioniert" in html and "Kamera funktioniert" in body
-        assert "Продажи Zenit E в базе: в среднем 32 € (от 18 € до 46 €, продаж: 2)" in body, body
-        assert "Продажи Canon AE-1 в базе: пока нет" in body and "в среднем 32 €" in html
+        assert "Продажи Zenit E в базе: в среднем 80 € (от 70 € до 90 €, продаж: 2)" in body, body
+        assert "Продажи Canon AE-1 в базе: пока нет" in body and "в среднем 80 €" in html
         assert "Продаются в среднем за: 3 дня" in body and "Продаются в среднем за: 3 дня" in html, body
         assert body.index("Zenit E — 8 €") < body.index("Продажи Zenit E") < body.index("items/3"), "paragraphs in order"
         assert notify.run(items, state, "2026-10-18 10:52", sent.append) == 0 and len(sent) == 2, "each camera once"

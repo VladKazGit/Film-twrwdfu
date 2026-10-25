@@ -21,6 +21,8 @@ from .sheets import CHEAP_MAX_PRICE
 SMTP_HOST, SMTP_PORT = "smtp.gmail.com", 465
 NOTIFIED_KEEP = 5000
 MAIL_SKIP_BRANDS = {"Praktica", "Pentax", "Zeiss Ikon"}  # the user does not want letters about them (they stay in 'До 20 €')
+MAIL_SKIP_MODELS = {"Canon T50", "Canon T60", "Canon T70"}  # the same for these models
+MAIL_MARGIN = 50  # EUR: a letter only for a camera this much below its model's mean sale price, or with none known
 DESCRIPTION_CHARS = 300
 
 
@@ -128,9 +130,15 @@ def send(msg):
         smtp.send_message(msg)
 
 
-def _skipped_brand(item):
+def worth_a_letter(item, stats):
+    """Not a brand or model the user left out, and priced at least MAIL_MARGIN below the model's
+    mean sale price in the data - or no sale of the model known yet."""
     info = models.MODEL_INFO.get(item.get("model")) or {}
-    return (info.get("brand") or item.get("brand")) in MAIL_SKIP_BRANDS
+    if (info.get("brand") or item.get("brand")) in MAIL_SKIP_BRANDS or item.get("model") in MAIL_SKIP_MODELS:
+        return False
+    price = report.current_price(item)
+    known = stats.get(item.get("model"))
+    return known is None or (price is not None and price <= known[1] - MAIL_MARGIN)
 
 
 def run(items, state, now, send_fn=send):
@@ -145,10 +153,12 @@ def run(items, state, now, send_fn=send):
         state["notified"] = [i["id"] for i in current][-NOTIFIED_KEEP:]
         return 0
     done = set(state.get("notified") or [])
-    new = sorted((i for i in current if i["id"] not in done and not _skipped_brand(i)),
+    stats = sale_stats(items)
+    # Not mailed yet: one that passes later (its model's sales change) is mailed then.
+    new = sorted((i for i in current if i["id"] not in done and worth_a_letter(i, stats)),
                  key=lambda i: report.current_price(i) or 0)
     if not new:
         return 0
-    send_fn(message(new, now, stats=sale_stats(items)))
+    send_fn(message(new, now, stats=stats))
     state["notified"] = ((state.get("notified") or []) + [i["id"] for i in new])[-NOTIFIED_KEEP:]
     return len(new)
