@@ -1,0 +1,205 @@
+"""Words that mark a listing as no camera, by kind and language: the 24 languages of the EU
+(Vinted's sellers write in their own). Written as people spell them; models.py normalizes them
+like titles (lower case, no accents, Cyrillic in Latin letters, any apostrophe) and adds them to
+its rules. Each kind says where a word counts.
+
+Started from the listings that slipped into 'Список':
+  'Praktica MTL50' - 'Mode d'emploi, Notice d'utilisation, manuel' (a manual),
+  'Revue Canon AL-1' - a French magazine (revue; only before another brand, see models.py),
+  'Livella per fotocamera' - a spirit level, 'Fotocamera solo a scopo dimostrativo',
+  'Lot 3 ouvrages anciens Leica - M3' - books (ouvrages, publications),
+  'Scatola Nikon FE', 'Leica M4 scatola e istruzioni' ('Confezione originale'),
+  'SOLO SCATOLA VUOTA' (Olympus OM-10), 'Boîte vide' (Nikon MF3) - empty boxes.
+Words that also name camera things are left out ('magazine' is a film back too, 'manual' a
+mechanical camera, 'iris' a diaphragm, Romanian 'carte' is French for a card).
+"""
+
+# A manual or instructions: an accessory, unless kit / 'with' words say the camera comes too.
+# Title anywhere; a description that starts with it.
+MANUAL = {
+    "bg": ["ръководство", "инструкция за употреба", "упътване"],
+    "cs": ["návod k obsluze", "návod", "příručka"],
+    "da": ["brugsanvisning", "betjeningsvejledning", "vejledning"],
+    "de": ["Bedienungsanleitung", "Gebrauchsanweisung", "Gebrauchsanleitung", "Betriebsanleitung", "Handbuch"],
+    "el": ["εγχειρίδιο", "οδηγίες χρήσης"],
+    "en": ["user manual", "owner's manual", "instruction manual", "instructions", "user guide"],
+    "es": ["manual de instrucciones", "manual de usuario", "instrucciones"],
+    "et": ["kasutusjuhend", "juhend"],
+    "fi": ["käyttöohje", "ohjekirja"],
+    "fr": ["mode d'emploi", "notice d'utilisation", "manuel d'utilisation", "notice"],
+    "ga": ["lámhleabhar", "treoracha"],
+    "hr": ["upute za uporabu", "upute", "priručnik"],
+    "hu": ["használati útmutató", "kezelési útmutató", "kézikönyv", "útmutató"],
+    "it": ["manuale d'uso", "manuale di istruzioni", "libretto di istruzioni", "istruzioni", "libretto"],
+    "lt": ["naudojimo instrukcija", "instrukcija", "vadovas"],
+    "lv": ["lietošanas instrukcija", "instrukcija", "rokasgrāmata"],
+    "mt": ["manwal", "struzzjonijiet"],
+    "nl": ["handleiding", "gebruiksaanwijzing"],
+    "pl": ["instrukcja obsługi", "instrukcja"],
+    "pt": ["manual de instruções", "manual do utilizador", "manual do usuário", "instruções"],
+    "ro": ["manual de utilizare", "manual de instrucțiuni", "instrucțiuni de utilizare", "instrucțiuni"],
+    "sk": ["návod na obsluhu", "návod", "príručka"],
+    "sl": ["navodila za uporabo", "navodila", "priročnik"],
+    "sv": ["bruksanvisning", "instruktionsbok"],
+}
+
+# Printed matter - magazines, books, brochures, catalogues: an accessory unless a 'with' word comes
+# before it. Title anywhere; a description that starts with it (and names no camera).
+PRINT = {
+    "bg": ["списание", "книга", "брошура", "каталог"],
+    "cs": ["časopis", "kniha", "knihy", "brožura", "katalog", "prospekt"],
+    "da": ["tidsskrift", "bog", "bøger", "brochure", "katalog"],
+    "de": ["Zeitschrift", "Buch", "Bücher", "Broschüre", "Prospekt", "Katalog"],
+    "el": ["περιοδικό", "βιβλίο", "φυλλάδιο", "κατάλογος"],
+    "en": ["book", "books", "brochure", "catalogue", "catalog", "publication"],
+    "es": ["revista", "libro", "libros", "folleto", "catálogo"],
+    "et": ["ajakiri", "raamat", "brošüür", "kataloog"],
+    "fi": ["aikakauslehti", "kirja", "kirjat", "esite"],
+    "fr": ["livre", "livres", "ouvrage", "ouvrages", "publication", "publications", "brochure", "catalogue",
+           "prospectus"],
+    "ga": ["leabhar", "bróisiúr"],
+    "hr": ["časopis", "knjiga", "brošura", "katalog"],
+    "hu": ["folyóirat", "könyv", "prospektus", "katalógus"],
+    "it": ["rivista", "libro", "libri", "opuscolo", "depliant", "catalogo"],
+    "lt": ["žurnalas", "knyga", "brošiūra", "katalogas"],
+    "lv": ["žurnāls", "grāmata", "brošūra", "katalogs"],
+    "mt": ["rivista", "ktieb", "fuljett"],
+    "nl": ["tijdschrift", "boek", "boeken", "brochure", "catalogus"],
+    "pl": ["czasopismo", "książka", "książki", "broszura", "katalog", "prospekt"],
+    "pt": ["revista", "livro", "livros", "folheto", "catálogo"],
+    "ro": ["revistă", "broșură", "catalog"],
+    "sk": ["časopis", "kniha", "knihy", "brožúra", "katalóg"],
+    "sl": ["revija", "knjiga", "brošura", "katalog"],
+    "sv": ["tidskrift", "tidning", "bok", "böcker", "broschyr", "katalog"],
+}
+
+# A box or packaging: before the model it is what is sold ('Scatola Nikon FE'); after it the
+# camera comes boxed. A description that starts with it too.
+BOX = {
+    "bg": ["кутия", "опаковка"],
+    "cs": ["krabice", "krabička", "balení"],
+    "da": ["æske", "emballage"],
+    "de": ["Schachtel", "Verpackung", "Originalverpackung", "Karton", "Originalkarton"],
+    "el": ["κουτί", "συσκευασία"],
+    "en": ["box", "packaging"],
+    "es": ["caja", "embalaje"],
+    "et": ["karp", "pakend"],
+    "fi": ["laatikko", "pakkaus", "rasia"],
+    "fr": ["boîte", "emballage", "carton"],
+    "ga": ["bosca"],
+    "hr": ["kutija", "ambalaža"],
+    "hu": ["doboz", "csomagolás"],
+    "it": ["scatola", "confezione", "imballo", "imballaggio"],
+    "lt": ["dėžutė", "pakuotė"],
+    "lv": ["kaste", "kastīte", "iepakojums"],
+    "mt": ["kaxxa"],
+    "nl": ["doos", "verpakking"],
+    "pl": ["pudełko", "pudło", "opakowanie"],
+    "pt": ["caixa", "embalagem"],
+    "ro": ["cutie", "ambalaj"],
+    "sk": ["krabica", "krabička", "balenie"],
+    "sl": ["škatla", "škatlica", "embalaža"],
+    "sv": ["kartong", "förpackning"],
+}
+
+# The description says the camera in the photos is not sold, or only the (empty) box is.
+# Description anywhere.
+NOT_SOLD = {
+    "bg": ["празна кутия", "само кутия", "фотоапаратът не е включен"],
+    "cs": ["prázdná krabice", "pouze krabice", "fotoaparát není součástí"],
+    "da": ["tom æske", "kun æsken", "kameraet medfølger ikke"],
+    "de": ["leere Schachtel", "nur die Schachtel", "nur die Verpackung", "Kamera nicht enthalten",
+           "Kamera nicht im Lieferumfang"],
+    "el": ["άδειο κουτί", "μόνο το κουτί", "η κάμερα δεν περιλαμβάνεται"],
+    "en": ["empty box", "box only", "camera not included", "for display only"],
+    "es": ["caja vacía", "solo la caja", "cámara no incluida", "solo para exhibición"],
+    "et": ["tühi karp", "ainult karp", "kaamera ei kuulu komplekti"],
+    "fi": ["tyhjä laatikko", "pelkkä laatikko", "kamera ei sisälly"],
+    "fr": ["boîte vide", "uniquement la boîte", "appareil non inclus"],
+    "ga": ["bosca folamh"],
+    "hr": ["prazna kutija", "samo kutija", "fotoaparat nije uključen"],
+    "hu": ["üres doboz", "csak a doboz", "a fényképezőgép nem tartozék"],
+    "it": ["scatola vuota", "solo scatola", "fotocamera non inclusa", "solo a scopo dimostrativo"],
+    "lt": ["tuščia dėžutė", "tik dėžutė", "fotoaparatas neįeina"],
+    "lv": ["tukša kaste", "tikai kaste", "fotoaparāts nav iekļauts"],
+    "mt": ["kaxxa vojta"],
+    "nl": ["lege doos", "alleen de doos", "camera niet inbegrepen"],
+    "pl": ["puste pudełko", "samo pudełko", "aparat nie jest w zestawie", "aparat nie wchodzi w skład"],
+    "pt": ["caixa vazia", "só a caixa", "apenas a caixa", "câmera não incluída", "câmara não incluída"],
+    "ro": ["cutie goală", "doar cutia", "aparatul nu este inclus"],
+    "sk": ["prázdna krabica", "iba krabica", "fotoaparát nie je súčasťou"],
+    "sl": ["prazna škatla", "samo škatla", "fotoaparat ni vključen"],
+    "sv": ["tom kartong", "endast kartongen", "kameran ingår inte"],
+}
+
+# A spirit level for the hot shoe ('Livella per fotocamera'): an accessory word.
+LEVEL = {
+    "bg": ["либела", "нивелир"],
+    "cs": ["vodováha", "libela"],
+    "da": ["vaterpas"],
+    "de": ["Wasserwaage", "Libelle"],
+    "el": ["αλφάδι"],
+    "en": ["spirit level", "bubble level", "hot shoe level"],
+    "es": ["nivel de burbuja"],
+    "et": ["vesilood"],
+    "fi": ["vesivaaka"],
+    "fr": ["niveau à bulle"],
+    "ga": ["leibhéal"],
+    "hr": ["libela", "vaservaga"],
+    "hu": ["vízmérték", "libella"],
+    "it": ["livella"],
+    "lt": ["gulsčiukas"],
+    "lv": ["līmeņrādis"],
+    "mt": ["livell"],
+    "nl": ["waterpas"],
+    "pl": ["poziomica", "poziomnica"],
+    "pt": ["nível de bolha"],
+    "ro": ["nivelă", "nivel cu bulă"],
+    "sk": ["vodováha"],
+    "sl": ["libela", "vodna tehtnica"],
+    "sv": ["vattenpass"],
+}
+
+# Made for a camera ('Livella per fotocamera'): in a title without a model and without a camera
+# word before it, the thing is for a camera, not one.
+FOR_CAMERA = {
+    "bg": ["за фотоапарат", "за камера"],
+    "cs": ["pro fotoaparát", "k fotoaparátu", "na fotoaparát"],
+    "da": ["til kamera", "til kameraet"],
+    "de": ["für Kamera", "für die Kamera", "für Fotoapparat"],
+    "el": ["για φωτογραφική μηχανή", "για κάμερα"],
+    "en": ["for camera", "for the camera"],
+    "es": ["para cámara", "para la cámara"],
+    "et": ["kaamerale", "fotoaparaadile"],
+    "fi": ["kameraan", "kameralle"],
+    "fr": ["pour appareil photo", "pour appareil"],
+    "ga": ["le haghaidh ceamara"],
+    "hr": ["za fotoaparat", "za kameru"],
+    "hu": ["fényképezőgéphez", "kamerához"],
+    "it": ["per fotocamera", "per macchina fotografica"],
+    "lt": ["fotoaparatui"],
+    "lv": ["fotoaparātam"],
+    "mt": ["għall-kamera"],
+    "nl": ["voor camera", "voor fototoestel"],
+    "pl": ["do aparatu", "do aparatu fotograficznego"],
+    "pt": ["para câmera", "para câmara", "para máquina fotográfica"],
+    "ro": ["pentru aparat foto", "pentru aparatul foto", "pentru cameră"],
+    "sk": ["pre fotoaparát", "k fotoaparátu", "na fotoaparát"],
+    "sl": ["za fotoaparat"],
+    "sv": ["för kamera", "för kameran", "till kamera"],
+}
+
+# 'With' words: what follows comes with the camera ('Praktica MTL 5 com manual' is a camera with
+# its manual). They keep a listing a camera; the de/en/fr/it/nl/es ones are in models.py. Left
+# out: words that are also model or mount letters - Slavic 'z' / 's' / 'с', Spanish 'y'
+# ('Mamiya M645 … finder S … manual'), Latvian 'ar' (Konica Hexanon AR), Polish 'ze' (Mamiya ZE-X),
+# Lithuanian 'ir' (IR filters) - and 'se' / 'su' / 'sa' (Spanish 'se vende', Italian 'on').
+WITH = {
+    "da": ["med"], "el": ["με"], "et": ["koos"], "fi": ["kanssa"], "pl": ["wraz z"], "pt": ["com"],
+    "ro": ["cu"], "sv": ["med"],
+}
+
+KINDS = {  # name (Russian, for people) -> words by language
+    "инструкция": MANUAL, "журнал / книга / каталог": PRINT, "коробка": BOX,
+    "камера не продаётся / пустая коробка": NOT_SOLD, "уровень": LEVEL, "«для камеры»": FOR_CAMERA,
+}

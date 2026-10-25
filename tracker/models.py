@@ -16,6 +16,8 @@ may or may not be written):
 """
 import re
 import unicodedata
+
+from . import markers
 from dataclasses import dataclass
 
 JAPAN, EUROPE, EAST = "Japan", "Europe", "Eastern Bloc"
@@ -378,7 +380,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 43
+VERSION = 44
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -729,6 +731,26 @@ def kit_of(text):
     if no_lens or _BODY.search(norm):
         return "body", []
     return "unklar", []
+
+
+def _marker_words(kind):
+    """The phrases of a marker kind (tracker/markers.py) as one pattern: normalized like titles,
+    whole words, any apostrophe, a space or a dash between words."""
+    phrases = sorted({normalize(p) for words in kind.values() for p in words}, key=len, reverse=True)
+    parts = [re.escape(p).replace("'", ".").replace("\u2019", ".").replace("\\-", r"[\s\-]?")
+             .replace("\\ ", r"[\s\-]+") for p in phrases]
+    return r"\b(?:" + "|".join(parts) + r")\b"
+
+
+# The multilingual base of words that mark no camera (tracker/markers.py) joins the rules above.
+_MANUAL = re.compile(f"{_MANUAL.pattern}|{_marker_words(markers.MANUAL)}")
+_STRONG_ACCESSORY = re.compile(f"{_STRONG_ACCESSORY.pattern}|{_marker_words(markers.PRINT)}")
+_LEAD_ACCESSORY = re.compile(f"{_LEAD_ACCESSORY.pattern}|{_marker_words(markers.PRINT)}|{_marker_words(markers.BOX)}")
+_BOX = re.compile(f"{_BOX.pattern}|{_marker_words(markers.BOX)}")
+_ACCESSORY_WORDS = re.compile(f"{_ACCESSORY_WORDS.pattern}|{_marker_words(markers.LEVEL)}")
+_FOR_CAMERA = re.compile(f"{_FOR_CAMERA.pattern}|{_marker_words(markers.FOR_CAMERA)}")
+_NOT_SOLD_CAMERA = re.compile(f"{_NOT_SOLD_CAMERA.pattern}|{_marker_words(markers.NOT_SOLD)}")
+_WITH_WORDS = re.compile(f"{_WITH_WORDS.pattern}|{_marker_words(markers.WITH)}")
 
 
 def _camera_joined(head):
