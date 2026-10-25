@@ -240,7 +240,7 @@ def main():
         assert updates["fresh_rows_green"] and not added(sheets.LIGHT_YELLOW_3)
         assert updates["new_rows_colors"] == updates["fresh_rows_colors"] == ["До 20 €", "Список"]
         cheap_rows = ss.sheets["До 20 €"].rows
-        assert cheap_rows[0][-3:] == ["Группа", report.NEW_HEADER, report.FRESH_HEADER]
+        assert cheap_rows[0][-2:] == [report.NEW_HEADER, report.FRESH_HEADER] and len(cheap_rows[0]) == n + 3, "flags stay at n+1, n+2"
         assert {r[0] for r in cheap_rows[1:] if r[-2] == "да"} == {1021} and {r[0] for r in cheap_rows[1:] if r[-1] == "да"} == {1021}
         assert 400 in {r[0] for r in ss.sheets["Список"].rows[1:]} and "https://www.vinted.de/items/400" in {r[-1] for r in ss.sheets["Продажи"].rows[1:]}
         list_rows = ss.sheets["Список"].rows
@@ -428,8 +428,11 @@ def main():
         assert fast[2][-1] == "точно" and "bumped" in fast[2][report.ITEM_HEADER.index("Флаги")], "bumped, sold in 15 min"
         assert all(r[0] != 1010 for r in fast[1:]), "preexisting sale is not fast"
         cheap = ss.sheets["До 20 €"].rows
-        assert "Группа" in cheap[0] and [r[0] for r in cheap[1:]] == [1021], "sold Zenit 400 is not shown"
-        assert cheap[0][6:8] == ["Сохранений", "Ссылка"] and cheap[1][7].startswith("https://"), cheap[0]
+        assert "Группа" not in cheap[0] and [r[0] for r in cheap[1:]] == [1021], "sold Zenit 400 is not shown"
+        assert cheap[0][4:6] == ["Цена старт", sheets.MODELS_SALE_PRICE_HEADER] and len(cheap[0]) == len(report.ITEM_HEADER) + 3
+        model_1021 = next(i["model"] for i in r5["items"] if i["id"] == 1021)
+        assert cheap[1][5] == report.model_sale_prices(r5["items"]).get(model_1021, sheets.MODELS_NO_PRICE), cheap[1][:6]
+        assert cheap[0][7:9] == ["Сохранений", "Ссылка"] and cheap[1][8].startswith("https://"), cheap[0]
         assert cheap[0][report.ITEM_HEADER.index("Статус")] == "Статус" and cheap[0][-2:] == [report.NEW_HEADER, report.FRESH_HEADER]
         # 'До 20 €' follows 'Модели': the user deletes Zenit E, it leaves 'До 20 €' and is not re-added.
         models_ws = ss.sheets["Модели"]

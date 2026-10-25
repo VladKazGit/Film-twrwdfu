@@ -224,6 +224,12 @@ def item_row(item):
     ]
 
 
+def insert_column(rows, after, name, values):
+    """Rows with a new column `name` right after the column `after` (values: one per data row)."""
+    at = rows[0].index(after) + 1
+    return [list(row[:at]) + [cell] + list(row[at:]) for row, cell in zip(rows, [name] + list(values))]
+
+
 def move_column(rows, name, index):
     """Rows with the column named `name` moved to position `index` (the others keep their order)."""
     old = rows[0].index(name)

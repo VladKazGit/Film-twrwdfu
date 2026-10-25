@@ -378,7 +378,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 41
+VERSION = 42
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -641,6 +641,8 @@ _STRONG_ACCESSORY = re.compile(
     r"zubehor\b|acc?es+oires?\b|accessori[oe]?\b|accessor(?:y|ies)\b|toebehoren\b"
     r"|katalog|catalog|cataloghi|catalogue|depliant|prospekt|brochure|broschure|\bguide\b|\bguida\b|ratgeber|leitfaden|\bbuch\b|\bbook\b|\blibro\b|\blivre\b|\bposter\b|zeitschrift|rivista|\bflyer"
     r"|camera (?:strap|bag|case|accessor)|kamera(?:tasche|gurt)"
+    # books in the plural, works, publications: 'Lot 3 ouvrages anciens Leica - M3, Matheson, Causeries'
+    r"|\bouvrages?\b|\bpublications?\b|\blivres\b|\bbooks\b|\bbucher\b|\blibri\b|\bboeken\b|\bboek\b"
     r"|^revue (?:photo |appareil )?(?:canon|nikon|pentax|minolta|olympus|leica|contax|yashica|konica|rollei|hasselblad"
     r"|mamiya|fujica|asahi)\b")
 # Made for a camera, no model named: 'Livella per fotocamera', 'Cinghia per fotocamera'.

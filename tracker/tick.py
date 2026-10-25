@@ -1158,10 +1158,15 @@ def write_sheets(writer, result, state_flags):
     print(f"sheets: cheap sheet {len(cheap)} of {len(candidates)} list cameras at <= 20 EUR"
           f" (the others have models missing from the models sheet)")
     # 'До 20 €' is mostly old cheap cameras found by search: mark what entered the sheet in 12 h.
-    # The link right after 'Сохранений' (column H): the status column and the flag columns stay where they were.
-    cheap_rows = report.item_rows(cheap, with_group=True, new_since=new_since, new_old_listings=True,
-                                  fresh_since=fresh_since)
-    writer.replace(sheets.CHEAP_SHEET, report.move_column(cheap_rows, "Ссылка", CHEAP_LINK_COLUMN), links=True)
+    # The model's mean sale price right after 'Цена старт' (where 'Группа' was: all are 'Список'), the
+    # link right after 'Сохранений': the status column and the flag columns stay where they were.
+    sale = report.model_sale_prices(items)
+    cheap_rows = report.item_rows(cheap, new_since=new_since, new_old_listings=True, fresh_since=fresh_since)
+    price_of = {i["id"]: sale.get(i["model"], sheets.MODELS_NO_PRICE) for i in cheap}
+    cheap_rows = report.insert_column(cheap_rows, "Цена старт", sheets.MODELS_SALE_PRICE_HEADER,
+                                      [price_of[r[0]] for r in cheap_rows[1:]])
+    cheap_rows = report.move_column(cheap_rows, "Ссылка", cheap_rows[0].index("Сохранений") + 1)
+    writer.replace(sheets.CHEAP_SHEET, cheap_rows, links=True)
     # Cameras that entered 'До 20 €' since the previous tick (none counted on the very first one).
     cheap_ids = sorted(i["id"] for i in cheap)
     previous = state_flags.get("cheap_ids")
@@ -1249,7 +1254,8 @@ def write_sheets(writer, result, state_flags):
     yellow = set(state_flags.get("fresh_rows_colors") or [])
     green = set(updates.get("status_colors") or colored)
     n = len(report.ITEM_HEADER)
-    columns = {sheets.LIST_SHEET: (n, n + 1), sheets.CHEAP_SHEET: (n + 1, n + 2)}  # 12 h flag, 3 h flag
+    # 12 h flag, 3 h flag; 'До 20 €' has one column more (the mean sale price)
+    columns = {sheets.LIST_SHEET: (n, n + 1), sheets.CHEAP_SHEET: (n + 1, n + 2)}
     for title, (col_12h, col_3h) in columns.items():
         if not writer.has(title):
             continue
@@ -1299,7 +1305,6 @@ def main():
         return 1
 
 
-CHEAP_LINK_COLUMN = 7  # 'До 20 €': the link in column H, right after G ('Сохранений')
 REVIEW_HOLD = False  # 'По фото: без названия', 'Предложение', 'Братья моделей списка' are being reviewed
 PHOTO_TIME_BUDGET_S = 90   # photo labeling of new 'Остальные' per full tick (trial)
 PHOTO_START_LIMIT_S = 9 * 60  # a tick that already ran this long skips it

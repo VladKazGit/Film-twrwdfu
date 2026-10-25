@@ -20,7 +20,7 @@ from .sheets import CHEAP_MAX_PRICE
 
 SMTP_HOST, SMTP_PORT = "smtp.gmail.com", 465
 NOTIFIED_KEEP = 5000
-MAIL_SKIP_BRANDS = {"Praktica", "Pentax"}  # the user does not want letters about them (they stay in 'До 20 €')
+MAIL_SKIP_BRANDS = {"Praktica", "Pentax", "Zeiss Ikon"}  # the user does not want letters about them (they stay in 'До 20 €')
 DESCRIPTION_CHARS = 300
 
 

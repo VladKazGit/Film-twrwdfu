@@ -203,6 +203,8 @@ CASES = [
 # (title, expected flags, expected kit)
 FLAG_CASES = [
     ("Livella per fotocamera", ["accessory?"], None),
+    ("Lot 3 ouvrages anciens Leica – M3, Matheson, Causeries", ["accessory?"], None),
+    ("Zwei Bücher über Leica M3", ["accessory?"], None),
     ("Cinghia per fotocamera", ["accessory?"], None),
     ("Revue Canon Al-1", ["accessory?"], None),
     ("Appareil photo pour debutant", [], None),
