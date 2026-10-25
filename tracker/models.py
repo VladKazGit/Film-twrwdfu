@@ -378,7 +378,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 42
+VERSION = 43
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -634,7 +634,8 @@ _LEAD_FILLER = re.compile(
 _LEAD_ACCESSORY = re.compile(
     r"(?:brochure|broschure|prospekt|depliant|catalog|katalog|cataloghi|catalogue|manual|manuale|manuel|notice"
     r"|libretto|(?:bedienungs)?anleitung|istruzioni|handbuch|objektiv|obiettivo|objectif|lens|zoom|tasche|borsa"
-    r"|etui|blitz|flash|winder|sucher|viseur|mirino)")
+    r"|etui|blitz|flash|winder|sucher|viseur|mirino"
+    r"|scatol\w*|confezione|boites?\b|schachtel|verpackung|karton|doos\b|caja\b)")
 # Words that make a listing an accessory unless a "with" word comes before them.
 # Printed matter (catalogues, brochures, books) counts too.
 _STRONG_ACCESSORY = re.compile(
@@ -645,6 +646,9 @@ _STRONG_ACCESSORY = re.compile(
     r"|\bouvrages?\b|\bpublications?\b|\blivres\b|\bbooks\b|\bbucher\b|\blibri\b|\bboeken\b|\bboek\b"
     r"|^revue (?:photo |appareil )?(?:canon|nikon|pentax|minolta|olympus|leica|contax|yashica|konica|rollei|hasselblad"
     r"|mamiya|fujica|asahi)\b")
+# Boxes: before the model the box is what is sold ('Scatola Nikon FE'); after it, the camera comes boxed.
+_BOX = re.compile(r"\bscatol\w*|\bconfezione|\bboites?\b|schachtel|\bverpackung|\b(?:original)?karton\b|\bdoos\b"
+                  r"|\bcaja\b|\bbox\b")
 # Made for a camera, no model named: 'Livella per fotocamera', 'Cinghia per fotocamera'.
 _FOR_CAMERA = re.compile(r"\b(?:fur|for|pour|per|voor|para)\s+(?:(?:la|le|l|die|den|eine?n?|the|a|une?|il|de)\s+)?"
                          r"(?:kamera|camera|appareil|fotocamera|macchina|fototoestel|camara|spiegelreflex)")
@@ -661,7 +665,11 @@ _NOT_SOLD_CAMERA = re.compile(
     r"(?:d.exemple|d.illustration|indicatif|la demonstration|la photo))"
     rf"|camera{_GAP}\s+(?:not included|is not (?:included|for sale)|for (?:illustration|demonstration|display)"
     r" (?:purposes )?only|only for (?:illustration|demonstration|display)|niet inbegrepen|(?:wordt )?niet meegeleverd)"
-    r"|\b(?:une|la|cette|ma) revue (?:photo|appareil|sur|consacree|technique|canon|nikon|pentax|minolta|olympus|leica)")
+    r"|\b(?:une|la|cette|ma) revue (?:photo|appareil|sur|consacree|technique|canon|nikon|pentax|minolta|olympus|leica)"
+    # only the (empty) box: 'SOLO SCATOLA VUOTA'
+    r"|\bsolo (?:la )?scatola|scatola vuota|\bnur (?:die |der |den )?(?:original)?(?:verpackung|schachtel|karton|box)\b"
+    r"|\bleere (?:original)?(?:schachtel|verpackung|box|karton)|(?:uniquement|seulement) (?:la )?boite|boite vide"
+    r"|empty box|\bbox only|only the (?:original )?box|lege doos|alleen de doos")
 _LEADING_FILLER = re.compile(
     r"^(?:\W|(?:vintage|rare|ancien(?:ne)?|alt(?:e|er)?|old|lot|lotto|set|kit|neu|new|nuovo)\b)+")
 _MODEL_NUMBER = re.compile(r"[a-z]*\d+[a-z0-9]*")
@@ -747,6 +755,8 @@ def _is_accessory(norm, model_span):
             return True  # "Zoom Vivitar 70/210 per Nikon F"
         if _SEALS.search(head) and not _camera_joined(head):
             return True  # "Kit guarnizioni luce Canon AE-1 Program"
+        if _BOX.search(head) and not _camera_joined(head):
+            return True  # "Scatola Nikon FE": the box is sold
         if _COMPATIBLE_AFTER.match(norm[model_span[1]:]):
             return True  # "Canon FD 50mm 1:1.8 T50 passend": fits the camera
     if model_span is None:

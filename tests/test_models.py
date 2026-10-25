@@ -203,6 +203,10 @@ CASES = [
 # (title, expected flags, expected kit)
 FLAG_CASES = [
     ("Livella per fotocamera", ["accessory?"], None),
+    ("Scatola Nikon FE", ["accessory?"], None),
+    ("Leica R3 – Scatola originale – Ottime condizioni", [], None),
+    ("Nikon FM2 con scatola originale", [], None),
+    ("Pentax MX - Complet en boîte - Bon état et révisé (CLA)", [], None),
     ("Lot 3 ouvrages anciens Leica – M3, Matheson, Causeries", ["accessory?"], None),
     ("Zwei Bücher über Leica M3", ["accessory?"], None),
     ("Cinghia per fotocamera", ["accessory?"], None),
@@ -368,6 +372,12 @@ DESC_FLAG_CASES = [
     ("Revue Canon Al-1", "Je vends une revue appareil photo canon AL-1 Quick focus. Date de 1982.", ["accessory?"]),
     ("Livella per fotocamera", "livella a bolla per fotocamera. Fotocamera solo a scopo dimostrativo.", ["accessory?"]),
     ("Leica CL", "Fotocamera solo a scopo dimostrativo", ["accessory?"]),
+    ("Scatola Nikon FE", "Scatola Nikon FE piuttosto rara", ["accessory?"]),
+    ("Leica M4 scatola e istruzioni anni 50", "Confezione originale, certificato di garanzia e istruzioni Leica M4",
+     ["accessory?"]),
+    ("Olympus OM-10 50mm F1.8", "Scatola originale dell'epoca. SOLO SCATOLA VUOTA - fotocamera, obiettivo non inclusi.",
+     ["accessory?"]),
+    ("Leica R3 – Scatola originale", "Vendo Leica R3, solo corpo macchina, in ottime condizioni. Completa di scatola", []),
     ("Canon AE-1", "Kamera funktioniert, Objektiv nicht im Lieferumfang", []),
     ("Revue 400 SE", "Une Revue 400 SE en bon etat", []),
     ("Yashica Mat-124g", "brochure originale in ottime condizioni", ["accessory?"]),
