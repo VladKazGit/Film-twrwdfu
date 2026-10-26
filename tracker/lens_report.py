@@ -174,17 +174,21 @@ def manual_labels(writer):
     return labels
 
 
-CANON_SHEET = "Для Canon TX / AV-1"
-CANON_MOUNTS = ("Canon FD", "Canon FL")  # TX takes both; AV-1 FD (FL with stop-down metering)
-CANON_MODELS_HEADER = ["Модель", "Байонет", "В продаже", "Средняя цена, €", "Медиана, €", "Мин, €", "Продано",
-                       "Средняя цена продажи, €", "Продали за (медиана)", "Самое дешёвое сейчас"]
-CANON_OFFERS_HEADER = ["Модель", "Байонет", "Заголовок", "Цена, €", "Статус", "Выставлен на Vinted", "Состояние",
-                       "Сохранений", "Флаги", "Ссылка"]
+CANON_SHEET = "Для Canon TX / AV-1 / FTb QL"
+OLD_CANON_SHEETS = ("Для Canon TX / AV-1",)  # its first name
+# Which of the cameras a lens fits: FD on all three at full aperture; FL with stop-down metering.
+CANON_FIT = {"Canon FD": "Canon TX, AV-1, FTb QL",
+             "Canon FL": "Canon TX, FTb QL, AV-1 — замер на рабочей диафрагме"}
+CANON_MOUNTS = tuple(CANON_FIT)
+CANON_MODELS_HEADER = ["Модель", "Байонет", "Подходит к камерам", "В продаже", "Средняя цена, €", "Медиана, €", "Мин, €",
+                       "Продано", "Средняя цена продажи, €", "Продали за (медиана)", "Самое дешёвое сейчас"]
+CANON_OFFERS_HEADER = ["Модель", "Байонет", "Подходит к камерам", "Заголовок", "Цена, €", "Статус", "Выставлен на Vinted",
+                       "Состояние", "Сохранений", "Флаги", "Ссылка"]
 
 
 def canon_rows(cards, now):
-    """'Для Canon TX / AV-1': the lenses that fit them (Canon FD and FL) - per model, then the ones on
-    sale now, cheapest first within a model."""
+    """'Для Canon TX / AV-1 / FTb QL': the lenses that fit them (Canon FD and FL) and which camera each
+    fits - per model, then the ones on sale now, cheapest first within a model."""
     fit = [c for c in cards if c.get("mount") in CANON_MOUNTS]
     by_model = {}
     for c in fit:
@@ -197,18 +201,20 @@ def canon_rows(cards, now):
         sale = [report.current_price(c) for c in sold if report.current_price(c) is not None]
         cheapest = min((c for c in on_sale if c["status"] == "active" and counted(c) and report.current_price(c)),
                        key=report.current_price, default=None)
-        models_rows.append([name, group[0].get("mount") or "", len(on_sale), _mean(asking),
+        mount = group[0].get("mount") or ""
+        models_rows.append([name, mount, CANON_FIT.get(mount, ""), len(on_sale), _mean(asking),
                             round(statistics.median(asking)) if asking else "", min(asking, default=""), len(sold),
                             _mean(sale), report.format_on_sale(statistics.median([days_on_sale(c, now) for c in sold]))
                             if sold else "", cheapest["url"] if cheapest else ""])
-    models_rows.sort(key=lambda r: (-r[2], -r[6], r[0]))
+    models_rows.sort(key=lambda r: (-r[3], -r[7], r[0]))
     offers = sorted((c for c in fit if c["status"] in OPEN),
                     key=lambda c: (c["model"], report.current_price(c) or 0))
-    offer_rows = [[c["model"], c.get("mount") or "", c["title"], _num(report.current_price(c)),
+    offer_rows = [[c["model"], c.get("mount") or "", CANON_FIT.get(c.get("mount"), ""), c["title"],
+                   _num(report.current_price(c)),
                    report.STATUS_RU.get(c["status"], c["status"]), c.get("vinted_listed_est") or "",
                    c.get("condition") or "", _num(c.get("favourites")), _flags(c), c["url"]] for c in offers]
-    return ([["Обновлено", now, "", "Объективы Canon FD и FL: Canon TX — оба, AV-1 — FD (FL — с замером на рабочей "
-              "диафрагме)"], [], ["По моделям"], CANON_MODELS_HEADER] + models_rows
+    return ([["Обновлено", now, "", "Объективы Canon FD и FL для Canon TX, AV-1 и FTb QL: FD — на всех трёх, "
+              "FL — с замером на рабочей диафрагме"], [], ["По моделям"], CANON_MODELS_HEADER] + models_rows
             + [[], [f"В продаже сейчас: {len(offer_rows)}"], CANON_OFFERS_HEADER] + offer_rows)
 
 
@@ -216,6 +222,9 @@ def write(writer, cards, run):
     now = run["at"]
     unclear = unclear_rows(cards)
     cards = [c for c in cards if is_lens(c)]
+    for old in OLD_CANON_SHEETS:
+        if writer.has(old):
+            writer.delete(old)
     writer.replace(CANON_SHEET, canon_rows(cards, now), links=True)
     writer.replace(ITEMS_SHEET, item_rows(cards, now), links=True)
     if writer.has(OLD_UNCLEAR_SHEET):

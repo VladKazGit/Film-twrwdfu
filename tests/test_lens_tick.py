@@ -94,7 +94,8 @@ def main():
         assert cards[302]["mount"] == "Canon FD"
         canon = lens_report.canon_rows([c for c in cards.values() if lens_report.is_lens(c)], "2026-10-27 08:00")
         head = canon.index(lens_report.CANON_MODELS_HEADER)
-        assert canon[head + 1][:4] == ["Vivitar 28mm f/2.8 (Canon FD)", "Canon FD", 1, 20], canon[head + 1]
+        assert canon[head + 1][:5] == ["Vivitar 28mm f/2.8 (Canon FD)", "Canon FD", "Canon TX, AV-1, FTb QL", 1, 20]
+        assert canon[-1][2] == "Canon TX, AV-1, FTb QL", "which cameras fit, on the offers too"
         assert canon[-1][0] == "Vivitar 28mm f/2.8 (Canon FD)" and canon[-1][-1].endswith("/302"), "the offers below"
         assert all(not r or r[0] != "Helios-44M-4" for r in canon), "M42 does not fit"
         items = {300: {"description": "Helios 44M-4 58mm, funziona", "uploaded_ago": "2 Wochen"}, 301: {"description": "alt"}}
