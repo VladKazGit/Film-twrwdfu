@@ -213,6 +213,8 @@ FLAG_CASES = [
     ("Caja Canon AE-1", ["accessory?"], None),
     ("Poziomica do aparatu", ["accessory?"], None),
     ("Canon EF extension tube bagues macro", ["accessory?"], None),
+    ("Affiche publicité Canon 1966 encadrée vintage argentique", ["accessory?"], None),
+    ("Werbeplakat Nikon F2 gerahmt", ["accessory?"], None),
     ("Exaktar 200mm 1:3,5 für Canon Cameras A-1 AE-1 AE-1P AV-1 AT-1", ["accessory?"], None),
     ("Makinon 28mm 1:2,8 für Canon Cameras A-1 AE-1 AE-1P AV-1 AT-1", ["accessory?"], None),
     ("Samyang 14mm f/2.8 attacco Canon EF con Scatola", ["accessory?"], None),
