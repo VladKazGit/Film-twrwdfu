@@ -92,12 +92,11 @@ def main():
         cards = {c["id"]: c for c in store.load_active().values()}
         assert cards[300]["kind"] == cards[301]["kind"] == "unclear" and cards[302]["model"] == "Vivitar 28mm f/2.8 (Canon FD)"
         assert cards[302]["mount"] == "Canon FD"
-        canon = lens_report.canon_rows([c for c in cards.values() if lens_report.is_lens(c)], "2026-10-27 08:00")
-        head = canon.index(lens_report.CANON_MODELS_HEADER)
-        assert canon[head + 1][:5] == ["Vivitar 28mm f/2.8 (Canon FD)", "Canon FD", "Canon TX, AV-1, FTb QL", 1, 20]
-        assert canon[-1][2] == "Canon TX, AV-1, FTb QL", "which cameras fit, on the offers too"
-        assert canon[-1][0] == "Vivitar 28mm f/2.8 (Canon FD)" and canon[-1][-1].endswith("/302"), "the offers below"
-        assert all(not r or r[0] != "Helios-44M-4" for r in canon), "M42 does not fit"
+        canon = lens_report.canon_rows([c for c in cards.values() if lens_report.is_lens(c)])
+        assert canon[0] == lens_report.CANON_HEADER and len(canon) == 2, "only the lenses on sale now"
+        assert canon[1][:5] == ["Vivitar 28mm f/2.8 (Canon FD)", "Canon FD", "Canon TX, AV-1, FTb QL",
+                                "Vivitar 28mm f/2.8 Canon FD", 20.0] and canon[1][-1].endswith("/302"), canon[1]
+        assert not lens_report.canon_rows([dict(cards[302], status="sold")])[1:], "a sold one is not there"
         items = {300: {"description": "Helios 44M-4 58mm, funziona", "uploaded_ago": "2 Wochen"}, 301: {"description": "alt"}}
         r = lens_tick.run_check(store, FakeClient({1: [rec(2000, "x", 1.0)]}, search, items), now="2026-10-27 09:45",
                                 labels={301: "Tokina 28mm f/2.8 (C/Y)"})
@@ -105,6 +104,9 @@ def main():
         assert cards[300]["model"] == "Helios-44M-4" and cards[300]["kind"] == "lens" and r["run"]["by_description"] == 1
         assert cards[301]["model"] == "Tokina 28mm f/2.8 (C/Y)" and cards[301]["model_source"] == "manual"
         assert len(lens_report.unclear_rows(r["cards"])) == 1, "both now named"
+        lens_tick.apply_comments(cards, {300: "это Гелиос 44М-4?"})
+        row = lens_report.unclear_rows([dict(cards[300], kind="unclear", model_source=None)])[1]
+        assert row[lens_report.UNCLEAR_HEADER.index("Комментарий")] == "это Гелиос 44М-4?", "the user's comment stays"
         assert lens_report.unclear_rows([dict(cards[300], kind="unclear", unclear_reason=None, model_source=None)])[1][1]
         old = dict(cards[302], title="Vivitar 2x Teleconverter Canon FD")  # as if carded by older rules
         store.save(old)
@@ -136,6 +138,21 @@ def main():
 
         def batch_update(self, body):
             self.sent += body["requests"]
+
+    class Unclear:  # the sheet as the user left it: a comment on one row, one cleared
+        def get_all_values(self):
+            head = lens_report.UNCLEAR_HEADER
+            row = lambda i, text: [""] * head.index("id") + [str(i), "https://www.vinted.de/items/1", text]
+            return [head, row(300, "проверить фото"), row(301, "")]
+
+    class Writer:
+        def has(self, title):
+            return True
+
+        def _get(self, title, header=None):
+            return Unclear()
+
+    assert lens_report.unclear_comments(Writer()) == {300: "проверить фото", 301: ""}
 
     writer = sheets.SheetWriter(Book())
     assert writer.row_height(lens_report.UNCLEAR_SHEET, 2) == 150

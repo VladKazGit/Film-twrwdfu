@@ -161,7 +161,14 @@ def apply_labels(cards, labels):
     return changed
 
 
-def run_check(store, client, now=None, labels=None):
+def apply_comments(cards, comments):
+    """The user's comments on 'Не разобрано' go into the cards (so a rewrite keeps them)."""
+    for item_id, text in comments.items():
+        if item_id in cards:
+            cards[item_id]["comment"] = text
+
+
+def run_check(store, client, now=None, labels=None, comments=None):
     """One check. Returns {'run', 'cards', 'backfill_done', 'blocked'}."""
     now = now or clock.stamp()
     state = store.load_state()
@@ -174,6 +181,7 @@ def run_check(store, client, now=None, labels=None):
             stats["dropped"] += 1
         state["rules"] = lenses.VERSION
     stats["labelled"] = apply_labels(cards, labels or {})
+    apply_comments(cards, comments or {})
     first = "top_id" not in state
     previous = state.get("last_check_at")
     try:
@@ -295,6 +303,7 @@ def sheets_only():
         cards = {**store.load_closed(), **store.load_active()}
         writer = open_writer()
         apply_labels(cards, lens_report.manual_labels(writer))
+        apply_comments(cards, lens_report.unclear_comments(writer))
         lens_report.write(writer, list(cards.values()), {"at": clock.stamp()}, add_run=False)
     print(f"lens sheets rewritten: {len(cards)} cards")
     return 0
@@ -316,14 +325,15 @@ def main():
         from . import lens_report
 
         store = DataStore(root / "lenses")
-        writer, labels = None, {}
+        writer, labels, comments = None, {}, {}
         if not args.no_sheets:
             try:
                 writer = open_writer()
                 labels = lens_report.manual_labels(writer)
+                comments = lens_report.unclear_comments(writer)
             except Exception as exc:
                 print(f"lens sheets: not opened: {type(exc).__name__}: {env.redact(exc)}")
-        result = run_check(store, VintedClient(time_budget=CHECK_BUDGET_S), labels=labels)
+        result = run_check(store, VintedClient(time_budget=CHECK_BUDGET_S), labels=labels, comments=comments)
         print(log_line(result["run"]))
         if not args.local:
             datarepo.commit_and_push(root, f"lens check {result['run']['at']}")
