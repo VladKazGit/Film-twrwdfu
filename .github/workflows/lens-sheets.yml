@@ -1,0 +1,33 @@
+name: lens sheets
+
+# Rewrites the lens spreadsheet's sheets from the data as it is (tracker.lens_tick --sheets-only):
+# no Vinted requests, nothing pushed. Started by hand or by the maintainer when the sheets are wanted
+# before the next lens check.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sheets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -q -r requirements.txt
+
+      - name: Rewrite the lens sheets
+        env:
+          GOOGLE_SA_KEY: ${{ secrets.GOOGLE_SA_KEY }}
+          LENS_SHEET_ID: ${{ secrets.LENS_SHEET_ID }}
+          DATA_TOKEN: ${{ secrets.DATA_TOKEN }}
+          DATA_REPO: ${{ secrets.DATA_REPO }}
+        run: python -u -m tracker.lens_tick --sheets-only

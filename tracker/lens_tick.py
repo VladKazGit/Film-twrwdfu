@@ -15,6 +15,7 @@ cameras'; the lens sheet gets 'Объективы', 'Продажи', 'Свод�
 the user's). Logs show counts only. Exit code 10: the first collection is not done yet.
 
     python -m tracker.lens_tick [--local DIR] [--no-sheets]
+    python -m tracker.lens_tick --sheets-only   # the sheets from the data as it is, no Vinted requests
 """
 import argparse
 import sys
@@ -285,13 +286,30 @@ def open_writer():
     return sheets.SheetWriter(client.open_by_key(env.sheet_id("LENS_SHEET_ID")))
 
 
+def sheets_only():
+    """Rewrite the lens sheets from the data as it is (no Vinted requests, nothing pushed)."""
+    from . import datarepo, lens_report
+
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        store = DataStore(datarepo.clone(Path(tmp) / "data") / "lenses")
+        cards = {**store.load_closed(), **store.load_active()}
+        writer = open_writer()
+        apply_labels(cards, lens_report.manual_labels(writer))
+        lens_report.write(writer, list(cards.values()), {"at": clock.stamp()}, add_run=False)
+    print(f"lens sheets rewritten: {len(cards)} cards")
+    return 0
+
+
 def main():
     from . import datarepo
 
     parser = argparse.ArgumentParser(description="One lens check.")
     parser.add_argument("--local", help="use a local folder as the data store (no git)")
     parser.add_argument("--no-sheets", action="store_true", help="skip Google Sheets")
+    parser.add_argument("--sheets-only", action="store_true", help="rewrite the sheets from the data, no check")
     args = parser.parse_args()
+    if args.sheets_only:
+        return sheets_only()
     started = time.monotonic()
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         root = Path(args.local) if args.local else datarepo.clone(Path(tmp) / "data")

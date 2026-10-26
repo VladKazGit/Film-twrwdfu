@@ -218,7 +218,8 @@ def canon_rows(cards, now):
             + [[], [f"В продаже сейчас: {len(offer_rows)}"], CANON_OFFERS_HEADER] + offer_rows)
 
 
-def write(writer, cards, run):
+def write(writer, cards, run, add_run=True):
+    """Every tracker sheet of the lens spreadsheet; add_run: a row in 'Запуски' (not for a sheets-only update)."""
     now = run["at"]
     unclear = unclear_rows(cards)
     cards = [c for c in cards if is_lens(c)]
@@ -239,4 +240,5 @@ def write(writer, cards, run):
     writer.replace(SALES_SHEET, sales_rows(cards, now), links=True)
     writer.replace(SUMMARY_SHEET, summary_rows(cards, now), links=True)
     writer.replace(MODELS_SHEET, model_rows())
-    writer._get(RUNS_SHEET, RUNS_HEADER).insert_row(runs_row(run), index=2, value_input_option="RAW")
+    if add_run:
+        writer._get(RUNS_SHEET, RUNS_HEADER).insert_row(runs_row(run), index=2, value_input_option="RAW")
