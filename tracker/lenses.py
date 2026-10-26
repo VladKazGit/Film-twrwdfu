@@ -12,7 +12,7 @@ from . import markers, models
 
 
 
-VERSION = 2  # the rules changed: the lens check classifies every card again
+VERSION = 3  # the rules changed: the lens check classifies every card again and searches once more
 
 
 @dataclass(frozen=True)
@@ -274,38 +274,50 @@ def _model_span(norm):
     return None
 
 
+UNCLEAR_NO_FOCAL = "нет фокусного — модель не понять"
+UNCLEAR_HELIOS = "Гелиос: вариант не из списка или без номера"
+_HELIOS_WORD = re.compile(r"(?<![a-z])(?:helios|gelios)")
+
+
 def classify(title, description=None):
-    """{'model', 'mount', 'kind', 'flags'}: kind 'lens'; 'unclear' (a word of the list, but neither the
-    title nor the description tells the model); 'kit' (a camera with the lens: the camera tracker's);
-    'accessory' (a cap, hood, adapter, box or manual for it); None (nothing of the list). The mount
-    is the one the title names, else the model's. Flag 'parts?': a lens sold for parts."""
+    """{'model', 'mount', 'kind', 'flags', 'reason'}: kind 'lens'; 'unclear' (the tracker cannot tell
+    the model: a word of the list without a focal length, or a Helios not of the list or without its
+    number - 'reason' says which; the description is tried too); 'kit' (a camera with the lens: the
+    camera tracker's); 'accessory' (a cap, hood, adapter, box, manual or teleconverter); None (nothing
+    of the list). The mount is the one the title names, else the model's. Flags 'parts?' (for parts)
+    and 'set?' (several lenses in one listing)."""
     norm = models.normalize(title)
     hit = _model_span(norm)
-    # a word of the list and no focal length: the title cannot tell (with one, it is another lens)
+    # a word of the list and no focal length: the title cannot tell (with one, it is another lens);
+    # any Helios the series does not know
     family = _family_hit(norm) if not focals(norm) and not _ZOOM.search(norm) else None
+    reason = UNCLEAR_HELIOS if family and _HELIOS_WORD.match(norm, family.start()) else UNCLEAR_NO_FOCAL
+    if not hit and not family and _HELIOS_WORD.search(norm):
+        family, reason = _HELIOS_WORD.search(norm), UNCLEAR_HELIOS
     if not hit and family and description:
         found = _model_span(models.normalize(f"{title} {description[:400]}"))
         if found:
             hit = (family.start(), found[1], found[2])
     if not hit and not family:
-        return {"model": None, "mount": None, "kind": None, "flags": []}
+        return {"model": None, "mount": None, "kind": None, "flags": [], "reason": None}
     start = hit[0] if hit else family.start()
     name, mount = (hit[1], mount_of(norm) or hit[2]) if hit else (None, mount_of(norm))
     head = norm[:start]
     flags = (["parts?"] if _PARTS_ONLY.search(norm) else []) + (["set?"] if _SET.search(norm) else [])
     if _CONVERTER.search(norm):
-        return {"model": name, "mount": mount, "kind": "accessory", "flags": flags}
+        return {"model": name, "mount": mount, "kind": "accessory", "flags": flags, "reason": None}
     acc = _FOR_LENS.search(head)
     if acc and not _WITH.search(head[acc.end():]):
-        return {"model": name, "mount": mount, "kind": "accessory", "flags": flags}
+        return {"model": name, "mount": mount, "kind": "accessory", "flags": flags, "reason": None}
     cam = models.classify(title)
     if cam["model"] and not {"accessory?", "digital?", "compact?"} & set(cam["flags"]):
         spans = models.find_models(title)
         camera_first = spans and spans[0][0] < start
         joined = spans and _WITH.search(norm[start:spans[-1][0]])
         if camera_first or joined:
-            return {"model": name, "mount": mount, "kind": "kit", "flags": flags}
-    return {"model": name, "mount": mount, "kind": "lens" if name else "unclear", "flags": flags}
+            return {"model": name, "mount": mount, "kind": "kit", "flags": flags, "reason": None}
+    return {"model": name, "mount": mount, "kind": "lens" if name else "unclear", "flags": flags,
+            "reason": None if name else reason}
 
 
 def search_queries():

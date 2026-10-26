@@ -15,9 +15,11 @@ from . import clock, lenses, report
 
 ITEMS_SHEET, SALES_SHEET, SUMMARY_SHEET, MODELS_SHEET, RUNS_SHEET = (
     "Объективы", "Продажи", "Сводка", "Модели", "Запуски")
-UNCLEAR_SHEET, MANUAL_SHEET = "Без деталей", "Ручная разметка"
-UNCLEAR_HEADER = ["Фото", "Заголовок", "Цена, €", "Байонет", "Статус", "Впервые увиден", "Начало описания", "id",
-                  "Ссылка"]
+UNCLEAR_SHEET, MANUAL_SHEET = "Не разобрано", "Ручная разметка"
+OLD_UNCLEAR_SHEET = "Без деталей"  # the first name of 'Не разобрано'
+UNCLEAR_HEADER = ["Фото", "Почему", "Заголовок", "Цена, €", "Байонет", "Статус", "Впервые увиден",
+                  "Начало описания", "id", "Ссылка"]
+SET_REASON = "несколько объективов в объявлении — чья цена, не понять"
 MANUAL_HEADER = ["id или ссылка", "Модель", "Комментарий"]
 ITEMS_HEADER = ["Модель", "Байонет", "Заголовок", "Статус", "Цена старт, €", "Цена сейчас, €", "Сохранений",
                 "Выставлен на Vinted", "Впервые увиден", "Последний раз активен", "Продажа обнаружена", "В продаже",
@@ -149,9 +151,11 @@ def unclear_rows(cards):
     from . import photos
 
     rows = [UNCLEAR_HEADER]
-    for c in sorted((c for c in cards if c.get("kind") == "unclear" and not c.get("closed_at")),
-                    key=lambda c: c["first_seen"], reverse=True):
-        rows.append([photos.image_formula(c.get("photo")), c["title"], _num(report.current_price(c)),
+    todo = [c for c in cards if not c.get("closed_at") and c.get("model_source") != "manual"
+            and (c.get("kind") == "unclear" or "set?" in (c.get("flags") or []))]
+    for c in sorted(todo, key=lambda c: c["first_seen"], reverse=True):
+        why = (c.get("unclear_reason") or "нет фокусного — модель не понять") if c.get("kind") == "unclear" else SET_REASON
+        rows.append([photos.image_formula(c.get("photo")), why, c["title"], _num(report.current_price(c)),
                      c.get("mount") or "", report.STATUS_RU.get(c["status"], c["status"]), c["first_seen"],
                      " ".join((c.get("description") or "").split())[:DESCRIPTION_LIMIT], c["id"], c["url"]])
     return rows
@@ -175,6 +179,8 @@ def write(writer, cards, run):
     unclear = unclear_rows(cards)
     cards = [c for c in cards if is_lens(c)]
     writer.replace(ITEMS_SHEET, item_rows(cards, now), links=True)
+    if writer.has(OLD_UNCLEAR_SHEET):
+        writer.delete(OLD_UNCLEAR_SHEET)
     writer.replace(UNCLEAR_SHEET, unclear, links=True)
     writer.replace(SALES_SHEET, sales_rows(cards, now), links=True)
     writer.replace(SUMMARY_SHEET, summary_rows(cards, now), links=True)

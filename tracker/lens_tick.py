@@ -47,7 +47,8 @@ def new_card(rec, cls, now, listed_after, flags):
     price = rec.get("price")
     return {
         "id": rec["id"], "url": rec["url"], "title": rec["title"], "description": None,
-        "model": cls["model"], "kind": cls["kind"], "mount": cls["mount"], "brand": rec.get("brand"),
+        "model": cls["model"], "kind": cls["kind"], "unclear_reason": cls.get("reason"), "mount": cls["mount"],
+        "brand": rec.get("brand"),
         "condition": rec.get("condition"),
         "seller_id": rec.get("seller_id"), "photo": rec.get("photo"),
         "price_start": price, "price_final": None,
@@ -143,7 +144,7 @@ def reclassify(card):
     cls = lenses.classify(card["title"], card.get("description"))
     if cls["kind"] not in ("lens", "unclear"):
         return False
-    card.update(model=cls["model"], kind=cls["kind"], mount=cls["mount"],
+    card.update(model=cls["model"], kind=cls["kind"], mount=cls["mount"], unclear_reason=cls.get("reason"),
                 flags=[f for f in card.get("flags") or [] if f == "preexisting"] + cls["flags"])
     return True
 
@@ -154,7 +155,7 @@ def apply_labels(cards, labels):
     for item_id, model in labels.items():
         card = cards.get(item_id)
         if card and (card.get("model"), card.get("model_source")) != (model, "manual"):
-            card.update(model=model, kind="lens", model_source="manual")
+            card.update(model=model, kind="lens", model_source="manual", unclear_reason=None)
             changed += 1
     return changed
 
@@ -210,7 +211,8 @@ def run_check(store, client, now=None, labels=None):
             if card.get("kind") == "unclear" and card.get("description") and card.get("model_source") != "manual":
                 cls = lenses.classify(card["title"], card["description"])  # the description may tell the model
                 if cls["kind"] == "lens":
-                    card.update(model=cls["model"], kind="lens", mount=cls["mount"], model_source="description")
+                    card.update(model=cls["model"], kind="lens", mount=cls["mount"], model_source="description",
+                                unclear_reason=None)
                     stats["by_description"] += 1
         stats["deferred"] += max(0, len(queue) - ITEM_PAGES_MAX)
 
@@ -220,6 +222,9 @@ def run_check(store, client, now=None, labels=None):
         if "done" not in backfill:  # the first version counted searches by their place in the list
             backfill["done"] = queries[:len(queries) if backfill.get("done_at") else backfill.get("query", 0)]
             backfill.pop("query", None)
+        if backfill.get("rules", lenses.VERSION) != lenses.VERSION or "rules" not in backfill and lenses.VERSION >= 3:
+            backfill.update(done=[], page=1, done_at=None)  # rules that take what the searches skipped: once more
+        backfill["rules"] = lenses.VERSION
         pending = [q for q in queries if q not in backfill["done"]]
         backfill["done_at"] = backfill["done_at"] if not pending else None
         while pending and client.has_time():

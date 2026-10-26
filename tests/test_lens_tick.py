@@ -99,15 +99,18 @@ def main():
         assert cards[300]["model"] == "Helios-44M-4" and cards[300]["kind"] == "lens" and r["run"]["by_description"] == 1
         assert cards[301]["model"] == "Tokina 28mm f/2.8 (C/Y)" and cards[301]["model_source"] == "manual"
         assert len(lens_report.unclear_rows(r["cards"])) == 1, "both now named"
+        assert lens_report.unclear_rows([dict(cards[300], kind="unclear", unclear_reason=None, model_source=None)])[1][1]
         old = dict(cards[302], title="Vivitar 2x Teleconverter Canon FD")  # as if carded by older rules
         store.save(old)
         state = store.load_state()
         state["rules"] = 1
         state["backfill"] = {"query": 3, "page": 1, "done_at": None}  # the first version's counter
         store.save_state(state)
-        r = lens_tick.run_check(store, FakeClient({1: [rec(2000, "x", 1.0)]}, search), now="2026-10-27 11:30")
+        r = lens_tick.run_check(store, FakeClient({1: [rec(2000, "x", 1.0)]}), now="2026-10-27 11:30")
         assert 302 not in {c["id"] for c in r["cards"]} and r["run"]["dropped"] == 1, r["run"]
-        assert store.load_state()["backfill"]["done"][:3] == lenses.search_queries()[:3]
+        backfill = store.load_state()["backfill"]
+        assert backfill["rules"] == lenses.VERSION and backfill["done"] == lenses.search_queries(), "searched once more"
+        assert r["run"]["search_pages"] == len(lenses.search_queries())
 
     # The lens chain: 10 checks a day, back to back while the first collection runs, none at night.
     rng = random.Random(1)

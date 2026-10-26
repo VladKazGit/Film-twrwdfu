@@ -47,6 +47,8 @@ CASES = [
     # a word of the list without details: 'Без деталей'
     ("Obiettivo helios", None, "unclear"),
     ("Tokina Objektive", None, "unclear"),
+    ("Helios 44-4M Zenit", None, "unclear"),
+    ("Helios lens with a Sony E-mount adapter", None, "unclear"),
     # a camera with the lens: the camera tracker's
     ("Zenit E + Helios 44-2 58mm", "Helios-44-2", "kit"),
     ("Canon AE-1 Program mit FD 50mm 1.4", "Canon FD 50mm f/1.4 (SSC / nFD)", "kit"),
