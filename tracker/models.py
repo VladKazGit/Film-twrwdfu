@@ -380,7 +380,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 45
+VERSION = 46
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -564,7 +564,8 @@ _ACCESSORY_WORDS = re.compile(
     r"|zubehor\b|acc?es+oires?\b|accessori[oe]?\b|accessor(?:y|ies)\b|toebehoren\b"
     r"|katalog|catalog|cataloghi|catalogue|depliant|prospekt|brochure|broschure|\bguide\b|\bguida\b|ratgeber|leitfaden|\bbuch\b|\bbook\b|\blibro\b|\blivre\b|\bposter\b|zeitschrift|rivista|\bflyer")
 # Lens makers and zoom: 'Zoom Vivitar 70/210 per Nikon F' is a lens.
-_LENS_WORDS = re.compile(r"\bzoom\b|vivitar|tamron|\bsigma\b|tokina|soligor|hanimex")
+_LENS_WORDS = re.compile(r"\bzoom\b|vivitar|tamron|\bsigma\b|tokina|soligor|hanimex"
+                         r"|makinon|exaktar|\bkiron\b|samyang|rokinon|beroflex|danubia|revuenon|panagor|\bosawa\b|cimko")
 # A title without a model or camera words that names a lens maker or a zoom range may be a lens
 # ('Vivitar Series 1 70-210mm Makro-Zoom') or a compact ('Canon Prima Zoom 76'): no list model
 # from its description.
@@ -677,6 +678,11 @@ _LEADING_FILLER = re.compile(
 _MODEL_NUMBER = re.compile(r"[a-z]*\d+[a-z0-9]*")
 _WITH_WORDS = re.compile(r"\b(?:mit|with|avec|con|met|inkl|incl|inklusive|including|plus|und|and|et|e)\b|[+&]")
 _FOR_WORDS = re.compile(r"\b(?:fur|for|pour|per|voor|passend|passt|compatible|kompatibel|compatibile)\b")
+# 'für Canon Cameras', 'per fotocamera', 'pour appareils Nikon': the camera word after 'for' (with a
+# brand between at most) is what the thing fits.
+_FOR_TARGET = re.compile(
+    _FOR_WORDS.pattern + r"\s+(?:(?:" + "|".join(rx.pattern for rx in _BRAND_RX.values()) + r")\s+)?"
+    r"(?:kameras?|cameras?|appareils?(?: photo)?|fotocamer[ae]|macchin[ae](?: fotografiche?)?|fototoestel(?:len)?)\b")
 # Point-and-shoot signs. No camera of the list has a built-in flash or is a compact, so a
 # 'Pentax K2 Macro' with 'flash intégré' and a '35-70 tele-macro' zoom is a compact.
 _COMPACT = re.compile(
@@ -780,8 +786,9 @@ def _is_accessory(norm, model_span):
         return True  # "Notice appareil photo Nikon FE2", "Mamiya M645 ... multi language manual"
     if model_span is not None:
         head = norm[:model_span[0]]
-        if (_LENS_WORDS.search(head) or _FOR_WORDS.search(head)) and not _CAMERA_WORDS.search(head):
-            return True  # "Zoom Vivitar 70/210 per Nikon F"
+        # 'für Canon Cameras' is what the thing is for, not a camera on sale
+        if (_LENS_WORDS.search(head) or _FOR_WORDS.search(head)) and not _CAMERA_WORDS.search(_FOR_TARGET.sub(" ", head)):
+            return True  # "Zoom Vivitar 70/210 per Nikon F", "Exaktar 200mm 1:3,5 für Canon Cameras A-1"
         if _SEALS.search(head) and not _camera_joined(head):
             return True  # "Kit guarnizioni luce Canon AE-1 Program"
         if _BOX.search(head) and not _camera_joined(head):
@@ -1153,7 +1160,9 @@ def classify(title, description=None, vinted_brand=None):
     # An accessory/digital title does not get a camera model from its description
     # ('Lotto depliant e cataloghi Leica' -> description mentions an M3).
     norm_title = normalize(title)
-    lens_title = _LENS_TITLE.search(norm_title) and not _CAMERA_WORDS.search(norm_title)
+    lens = _LENS_TITLE.search(norm_title)
+    # 'Spotmaic SP mit Takumar + Revuenon': a lens after 'with' comes with the camera
+    lens_title = lens and not _CAMERA_WORDS.search(norm_title) and not _WITH_WORDS.search(norm_title[:lens.start()])
     if model is None and description and not NON_LIST_SERIES.search(norm_title) and not lens_title \
             and not {"accessory?", "digital?", "compact?"} & set(title_flags):
         norm_desc = normalize(description)

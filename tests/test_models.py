@@ -213,6 +213,9 @@ FLAG_CASES = [
     ("Caja Canon AE-1", ["accessory?"], None),
     ("Poziomica do aparatu", ["accessory?"], None),
     ("Canon EF extension tube bagues macro", ["accessory?"], None),
+    ("Exaktar 200mm 1:3,5 für Canon Cameras A-1 AE-1 AE-1P AV-1 AT-1", ["accessory?"], None),
+    ("Makinon 28mm 1:2,8 für Canon Cameras A-1 AE-1 AE-1P AV-1 AT-1", ["accessory?"], None),
+    ("Samyang 14mm f/2.8 attacco Canon EF con Scatola", ["accessory?"], None),
     ("Zwischenringe Canon FD", ["accessory?"], None),
     ("Canon AE-1 + Zwischenringe", [], None),
     ("Mamiya RZ67 Pro Sekor Z 110mm f2.8 Lens, Extension Tubes & extra 220 Film Back", [], None),
@@ -363,6 +366,7 @@ JUNK_CASES = [
 
 # (title, description, expected model): description search rules
 DESC_CASES = [
+    ("Spotmaic SP mit Takumar + Revuenon", "Pentax Spotmatic SP, funktioniert", "Pentax Spotmatic"),
     ("Canon EOS 5000", "Canon EF Objektiv 35-80 dabei", None),
     ("Canon EOS 5000", "Gehäuse wie Canon AE-1", None),
     ("Canon FD Anschluss", "Passt direkt auf Canon AE-1, A-1, FTb etc. Linsen sauber.", None),
