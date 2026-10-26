@@ -18,6 +18,7 @@ the user's). Logs show counts only. Exit code 10: the first collection is not do
     python -m tracker.lens_tick --sheets-only   # the sheets from the data as it is, no Vinted requests
 """
 import argparse
+import random
 import sys
 import tempfile
 import time
@@ -25,7 +26,7 @@ from collections import Counter
 from datetime import timedelta
 from pathlib import Path
 
-from . import clock, env, lenses, report
+from . import clock, datarepo, env, lenses, report
 from .store import DataStore
 from .vinted import BlockedError, VintedClient, VintedError, age_days
 
@@ -36,6 +37,7 @@ ITEM_PAGES_MAX = 220       # item pages per check (new ones first)
 # Item page checks by the lens's age on Vinted: (up to days, minutes between checks)
 RECHECK = ((3, 90), (14, 24 * 60), (None, 7 * 24 * 60))
 OTHER_IDS_MAX = 5000       # remembered listings out by their description: a search skips them
+PUSH_TRIES = 8             # the camera tracker pushes to the same data repo every few minutes
 BACKFILL_DONE = 0
 BACKFILL_PENDING = 10       # exit code: the first collection goes on
 
@@ -303,6 +305,37 @@ def log_line(run):
             f" | requests {run['requests']} | errors: {len(run['errors']) or 'none'}")
 
 
+def _pause(attempt):
+    time.sleep(random.uniform(3, 8) * attempt)
+
+
+def push_data(root, message, tries=PUSH_TRIES, pause=_pause):
+    """Commit the lens data and push it. The camera tracker pushes to the same repo every few minutes,
+    so a push it beat is replayed on top of theirs (the lenses have a folder of their own: no conflicts)
+    and tried again after a pause, up to `tries` times. False if nothing changed."""
+    git = datarepo._git
+    git(["add", "-A"], cwd=root)
+    if not git(["status", "--porcelain"], cwd=root).strip():
+        return False
+    git(["commit", "--quiet", "-m", message], cwd=root)
+    for attempt in range(tries):
+        try:
+            if attempt:
+                git(["pull", "--quiet", "--rebase", "origin", "HEAD"], cwd=root)
+            git(["push", "--quiet", "origin", "HEAD"], cwd=root)
+            if attempt:
+                print(f"lens data pushed at try {attempt + 1}")
+            return True
+        except datarepo.DataRepoError:
+            if attempt == tries - 1:
+                raise
+            try:  # a pull that stopped midway
+                git(["rebase", "--abort"], cwd=root)
+            except datarepo.DataRepoError:
+                pass
+            pause(attempt + 1)
+
+
 def open_writer():
     import gspread
 
@@ -314,7 +347,7 @@ def open_writer():
 
 def sheets_only():
     """Rewrite the lens sheets from the data as it is (no Vinted requests, nothing pushed)."""
-    from . import datarepo, lens_report
+    from . import lens_report
 
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         store = DataStore(datarepo.clone(Path(tmp) / "data") / "lenses")
@@ -328,8 +361,6 @@ def sheets_only():
 
 
 def main():
-    from . import datarepo
-
     parser = argparse.ArgumentParser(description="One lens check.")
     parser.add_argument("--local", help="use a local folder as the data store (no git)")
     parser.add_argument("--no-sheets", action="store_true", help="skip Google Sheets")
@@ -354,7 +385,7 @@ def main():
         result = run_check(store, VintedClient(time_budget=CHECK_BUDGET_S), labels=labels, comments=comments)
         print(log_line(result["run"]))
         if not args.local:
-            datarepo.commit_and_push(root, f"lens check {result['run']['at']}")
+            push_data(root, f"lens check {result['run']['at']}")
         if writer is not None:
             try:  # a sheet failure must not lose the data (already pushed)
                 lens_report.write(writer, result["cards"], result["run"])

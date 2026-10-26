@@ -203,7 +203,69 @@ def main():
     morning = lens_loop.first_check(late_night, datetime(2026, 10, 27, 23, 50, tzinfo=BERLIN), rng)
     assert morning.day == 28 and morning.hour == 7, morning
     assert lenses.search_queries()[0] == "helios 44"
+    push_race()
     print("lens tick tests passed")
+
+
+def push_race():
+    """The camera tracker pushes to the data repo right before each of the lens check's first pushes:
+    the lens data still gets there (replayed on top of the cameras'), and the cameras' too."""
+    import subprocess
+    from pathlib import Path
+
+    from tracker import datarepo
+
+    def git(*args, cwd=None):
+        return datarepo._git(["-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=cwd)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        remote, cameras, lens = tmp / "remote.git", tmp / "cameras", tmp / "lens"
+        subprocess.run(["git", "init", "--quiet", "--bare", "-b", "main", str(remote)], check=True)
+        git("clone", "--quiet", str(remote), str(cameras))
+        (cameras / "runs.jsonl").write_text("0\n")
+        git("add", "-A", cwd=cameras)
+        git("commit", "--quiet", "-m", "tick 0", cwd=cameras)
+        git("push", "--quiet", "origin", "HEAD:main", cwd=cameras)
+        git("clone", "--quiet", "--depth", "1", f"file://{remote.as_posix()}", str(lens))
+        for repo in (cameras, lens):
+            git("config", "user.name", "t", cwd=repo)
+            git("config", "user.email", "t@t", cwd=repo)
+        (lens / "lenses").mkdir()
+        (lens / "lenses" / "runs.jsonl").write_text("lens\n")
+
+        ticks = iter(range(1, 10))
+        real = datarepo._git
+
+        def racing(args, cwd=None):
+            if "push" in args and cwd == lens and racing.left:
+                racing.left -= 1
+                (cameras / "runs.jsonl").write_text(f"{next(ticks)}\n")
+                git("commit", "--quiet", "-am", "tick", cwd=cameras)
+                git("push", "--quiet", "origin", "HEAD", cwd=cameras)
+            return real(args, cwd)
+
+        racing.left = 3
+        pauses = []
+        datarepo._git = racing
+        try:
+            assert lens_tick.push_data(lens, "lens check", pause=pauses.append)
+        finally:
+            datarepo._git = real
+        assert pauses == [1, 2, 3], pauses
+        git("pull", "--quiet", cwd=cameras)
+        assert (cameras / "lenses" / "runs.jsonl").read_text() == "lens\n" and (cameras / "runs.jsonl").read_text() == "3\n"
+        assert not lens_tick.push_data(lens, "nothing new"), "nothing to push"
+        racing.left = 99  # the cameras win every time: the check fails after its tries
+        (lens / "lenses" / "runs.jsonl").write_text("lens 2\n")
+        datarepo._git = racing
+        try:
+            lens_tick.push_data(lens, "lens check 2", tries=3, pause=lambda attempt: None)
+            raise AssertionError("pushed although the cameras always won")
+        except datarepo.DataRepoError:
+            pass
+        finally:
+            datarepo._git = real
 
 
 if __name__ == "__main__":
