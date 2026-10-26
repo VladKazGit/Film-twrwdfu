@@ -208,7 +208,9 @@ def run_check(store, client, now=None):
            f"поиск {state['backfill']['query'] + 1} из {len(lenses.search_queries())}",
            "requests": client.requests_made, "errors": errors}
     store.append_run(run)
-    return {"run": run, "cards": list(cards.values()), "backfill_done": bool(state["backfill"]["done_at"]),
+    # The first collection ends when its lenses have their pages read too (checks go on back to back till then).
+    unread = any(not c.get("last_checked_at") and not c.get("closed_at") for c in cards.values())
+    return {"run": run, "cards": list(cards.values()), "backfill_done": bool(state["backfill"]["done_at"]) and not unread,
             "blocked": any(e.startswith("blocked") for e in errors)}
 
 

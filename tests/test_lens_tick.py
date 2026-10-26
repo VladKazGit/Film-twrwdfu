@@ -43,7 +43,7 @@ def main():
                                      rec(103, "Pentacon 50mm 1.8 M42", 30.0)]}
         # First check: marks the catalog's top, the first collection finds what is listed already.
         r1 = lens_tick.run_check(store, FakeClient({1: top}, search), now="2026-10-27 08:00")
-        assert r1["run"]["found"] == 2 and r1["run"]["new"] == 0 and r1["backfill_done"], r1["run"]
+        assert r1["run"]["found"] == 2 and r1["run"]["new"] == 0 and not r1["backfill_done"], "pages unread yet"
         assert r1["run"]["skipped_kits"] == 1 and r1["run"]["skipped_accessories"] == 1
         cards = {c["id"]: c for c in r1["cards"]}
         assert cards[100]["model"] == "Helios-44-2" and cards[100]["flags"] == ["preexisting"] and 103 in cards
@@ -59,6 +59,7 @@ def main():
         assert cards[1001]["listed_after"] == "2026-10-27 08:00" and cards[1001]["model"] == "Super-Takumar 50mm f/1.4"
         assert cards[100]["vinted_listed_est"] == "2026-10-06" and [p["price"] for p in cards[100]["price_history"]] == [40.0, 35.0]
         assert client.requests_made == 1 + 3, "nothing more to search: the first collection is done"
+        assert r2["backfill_done"], "searched and every page read"
         # Third check: the new one is sold; the 3-week-old one is not due again (daily); one without
         # Vinted's date counts from its first sighting (young: every check).
         client = FakeClient(catalog, search, {1001: {"status": "sold", "price": 110.0}})
