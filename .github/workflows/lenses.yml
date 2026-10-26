@@ -15,6 +15,10 @@ on:
         description: "Started by the previous run (internal)"
         type: boolean
         default: false
+      next_check:
+        description: "Time of the first check, from the previous run (internal)"
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -40,15 +44,22 @@ jobs:
         run: pip install -q -r requirements.txt
 
       - name: Lens checks
+        id: loop
         env:
           GOOGLE_SA_KEY: ${{ secrets.GOOGLE_SA_KEY }}
           LENS_SHEET_ID: ${{ secrets.LENS_SHEET_ID }}
           DATA_TOKEN: ${{ secrets.DATA_TOKEN }}
           DATA_REPO: ${{ secrets.DATA_REPO }}
-        run: python -u -m tracker.lens_loop ${{ inputs.force && '--force' || '' }}
+          NEXT_CHECK: ${{ inputs.next_check }}
+        run: >-
+          python -u -m tracker.lens_loop ${{ inputs.force && '--force' || '' }} ${{ inputs.chained && '--chained' || '' }}
+          --next-check "$NEXT_CHECK"
 
       - name: Start the next run
         if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run lenses.yml --repo "${{ github.repository }}" --ref "${{ github.ref_name }}" -f chained=true
+          NEXT_CHECK: ${{ steps.loop.outputs.next_check }}
+        run: >-
+          gh workflow run lenses.yml --repo "${{ github.repository }}" --ref "${{ github.ref_name }}"
+          -f chained=true -f next_check="$NEXT_CHECK"

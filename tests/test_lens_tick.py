@@ -180,9 +180,20 @@ def main():
     def sleep(seconds):
         clock["now"] += timedelta(seconds=seconds)
 
-    failures = lens_loop.run_loop(lambda: clock["now"], sleep, check, log=lambda *a: None, rng=rng)
+    failures, handed = lens_loop.run_loop(lambda: clock["now"], sleep, check, log=lambda *a: None, rng=rng)
     assert failures == 0 and len(calls) == 5, calls  # 3 back to back, then ~100 minutes apart within 5.5 hours
     assert (calls[1] - calls[0]).total_seconds() / 60 == 21 and (calls[3] - calls[2]).total_seconds() / 60 > 110
+    assert 95 <= (handed - calls[4]).total_seconds() / 60 - 20 <= 108, "the next run gets the next check's time"
+    # The next run checks at the time it was handed, not at its start; a late start checks at once.
+    start = clock["now"] = handed - timedelta(minutes=90)
+    calls.clear()
+    codes = iter([0, 0, 0, 0])
+    lens_loop.run_loop(lambda: clock["now"], sleep, check, first=handed, log=lambda *a: None, rng=rng)
+    assert calls[0] == handed, (start, calls)
+    assert lens_loop.first_check(handed + timedelta(minutes=3), handed, rng) == handed + timedelta(minutes=3)
+    late_night = datetime(2026, 10, 28, 0, 20, tzinfo=BERLIN)
+    morning = lens_loop.first_check(late_night, datetime(2026, 10, 27, 23, 50, tzinfo=BERLIN), rng)
+    assert morning.day == 28 and morning.hour == 7, morning
     assert lenses.search_queries()[0] == "helios 44"
     print("lens tick tests passed")
 
