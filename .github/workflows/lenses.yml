@@ -1,0 +1,54 @@
+name: lenses
+
+# The lens collector (tracker.lens_loop): its own chain of runs on its own machine, like the
+# cameras'. 10 checks a day in the 07:00-00:00 Berlin window; while the first collection runs, one
+# check right after another. Start: Run workflow by hand. Stop: Disable workflow (after the current
+# run) and cancel the run (at once).
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "First check at once, even outside the 07:00-00:00 Berlin window"
+        type: boolean
+        default: false
+      chained:
+        description: "Started by the previous run (internal)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: write  # start the next run
+
+concurrency:
+  group: lenses
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -q -r requirements.txt
+
+      - name: Lens checks
+        env:
+          GOOGLE_SA_KEY: ${{ secrets.GOOGLE_SA_KEY }}
+          LENS_SHEET_ID: ${{ secrets.LENS_SHEET_ID }}
+          DATA_TOKEN: ${{ secrets.DATA_TOKEN }}
+          DATA_REPO: ${{ secrets.DATA_REPO }}
+        run: python -u -m tracker.lens_loop ${{ inputs.force && '--force' || '' }}
+
+      - name: Start the next run
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run lenses.yml --repo "${{ github.repository }}" --ref "${{ github.ref_name }}" -f chained=true

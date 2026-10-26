@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 from . import markers, models
 
-LENS_CATEGORY_ID = 3061  # Vinted 'Objektive'
+
 
 
 @dataclass(frozen=True)

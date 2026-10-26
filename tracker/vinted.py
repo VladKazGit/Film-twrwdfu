@@ -22,6 +22,7 @@ PARTS_CATEGORY_ID = 3717  # mostly parts: a camera there must say it is one
 # The cheap check: these categories at once (not the parts, nearly all parts at that price)
 CHEAP_CATEGORY_IDS = (CATEGORY_ID, 3077, 3714)
 CAMERAS_AND_ACCESSORIES_ID = 3054  # the fresh search: every camera category, no clothing
+LENS_CATEGORY_ID = 3061  # 'Objektive': the lens collector (tracker.lens_tick)
 MAX_PAGES = 10  # total_entries is capped at 960 = 10 pages x 96
 
 USER_AGENT = (
@@ -459,6 +460,18 @@ class VintedClient:
             raise VintedError(f"search http {resp.status_code}")
         if not flight_payload(resp.text):
             raise BlockedError("search page without data")
+        return parse_catalog(resp.text)[0]
+
+    def lens_page(self, page, text=None):
+        """'Objektive': page `page` of the newest listings, or of a text search (relevance order)."""
+        params = {"catalog[]": LENS_CATEGORY_ID, "page": page, "order": "relevance" if text else "newest_first"}
+        if text:
+            params["search_text"] = text
+        resp = self.fetch(BASE_URL + "/catalog", params)
+        if resp.status_code != 200:
+            raise VintedError(f"lens page http {resp.status_code}")
+        if not flight_payload(resp.text):
+            raise BlockedError("lens page without data")
         return parse_catalog(resp.text)[0]
 
     def cheap_page(self, max_price):
