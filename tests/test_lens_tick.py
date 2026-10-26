@@ -87,7 +87,7 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         store = DataStore(tmp)
         search = {("helios 44", 1): [rec(300, "Obiettivo helios", 25.0), rec(301, "Tokina Objektive", 15.0),
-                                     rec(302, "Vivitar 28mm f/2.8 Canon FD", 20.0)]}
+                                     rec(302, "Vivitar 28mm f/2.8 Canon FD", 20.0), rec(303, "Objectif Tamron", 30.0)]}
         lens_tick.run_check(store, FakeClient({1: [rec(2000, "x", 1.0)]}, search), now="2026-10-27 08:00")
         cards = {c["id"]: c for c in store.load_active().values()}
         assert cards[300]["kind"] == cards[301]["kind"] == "unclear" and cards[302]["model"] == "Vivitar 28mm f/2.8 (Canon FD)"
@@ -97,11 +97,18 @@ def main():
         assert canon[1][:5] == ["Vivitar 28mm f/2.8 (Canon FD)", "Canon FD", "Canon TX, AV-1, FTb QL",
                                 "Vivitar 28mm f/2.8 Canon FD", 20.0] and canon[1][-1].endswith("/302"), canon[1]
         assert not lens_report.canon_rows([dict(cards[302], status="sold")])[1:], "a sold one is not there"
-        items = {300: {"description": "Helios 44M-4 58mm, funziona", "uploaded_ago": "2 Wochen"}, 301: {"description": "alt"}}
+        items = {300: {"description": "Helios 44M-4 58mm, funziona", "uploaded_ago": "2 Wochen"}, 301: {"description": "alt"},
+                 303: {"description": "Tamron AF 70-300mm f/4-5.6 Di LD Macro"}}
         r = lens_tick.run_check(store, FakeClient({1: [rec(2000, "x", 1.0)]}, search, items), now="2026-10-27 09:45",
                                 labels={301: "Tokina 28mm f/2.8 (C/Y)"})
         cards = {c["id"]: c for c in r["cards"]}
         assert cards[300]["model"] == "Helios-44M-4" and cards[300]["kind"] == "lens" and r["run"]["by_description"] == 1
+        # another lens of the maker by its description: out of the data, and a search does not card it again
+        assert 303 not in cards and 303 not in store.load_active() and r["run"]["out_by_description"] == 1
+        assert store.load_state()["other_ids"] == [303]
+        stats = lens_tick.Counter()
+        lens_tick._take(search[("helios 44", 1)][3:], cards, "2026-10-27 09:45", None, ["preexisting"], stats, {303})
+        assert 303 not in cards and not stats["found"]
         assert cards[301]["model"] == "Tokina 28mm f/2.8 (C/Y)" and cards[301]["model_source"] == "manual"
         assert len(lens_report.unclear_rows(r["cards"])) == 1, "both now named"
         lens_tick.apply_comments(cards, {300: "это Гелиос 44М-4?"})
@@ -117,7 +124,8 @@ def main():
         r = lens_tick.run_check(store, FakeClient({1: [rec(2000, "x", 1.0)]}), now="2026-10-27 11:30")
         assert 302 not in {c["id"] for c in r["cards"]} and r["run"]["dropped"] == 1, r["run"]
         backfill = store.load_state()["backfill"]
-        assert backfill["rules"] == lenses.VERSION and backfill["done"] == lenses.search_queries(), "searched once more"
+        assert backfill["rules"] == lenses.SEARCH_VERSION and backfill["done"] == lenses.search_queries(), "searched again"
+        assert store.load_state()["rules"] == lenses.VERSION
         assert r["run"]["search_pages"] == len(lenses.search_queries())
 
     # 'Не разобрано': every row as tall as row 2 (the user sets it for the photos).

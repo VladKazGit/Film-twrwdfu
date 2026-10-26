@@ -58,6 +58,17 @@ CASES = [
     ("Adapter M42 Sony E für Helios 44-2", "Helios-44-2", "accessory"),
     ("Gegenlichtblende für Jupiter-8", "Jupiter-8 50mm f/2", "accessory"),
     ("Helios 44-2 mit Adapter Sony E", "Helios-44-2", "lens"),
+    # adapters without a lens of the list: the adapter word first, or with no 'with' / lens word before it
+    ("Urth FD-E Adapter – Canon FD to Sony E – Brand New", None, "accessory"),
+    ("Adaptateur K&F Concept Canon FD vers Micro 4/3", None, "accessory"),
+    ("Adattatori Olympus sony minolta", None, "accessory"),
+    ("Canon FD/FL Lens adapter - Canon EOS EF Camera", None, "accessory"),
+    ("Tamron Adaptall-2 Adapter for Minolta SRT - Japan", None, "accessory"),
+    ("Pentacon Praktica M42 naar Praktica B (PB) lensadapter", None, "accessory"),
+    ("Tokina lens minolta adaptor", None, "unclear"),
+    ("Obiettivo canon fd 24mm vintage f 2.8 con adattatore", "Canon FD 24mm f/2.8", "lens"),
+    # a zoom range with '~' is not a focal length of the list
+    ("Tokina AT-X 16~28mm F2.8 PRO FX", None, None),
 ]
 
 
@@ -70,6 +81,22 @@ def main():
             print(f"FAIL: {title!r}: expected {model} / {kind}, got {got['model']} / {got['kind']}")
     assert "parts?" in lenses.classify("Helios 44-2 defekt, für Teile")["flags"]
     assert lenses.classify("Obiettivo helios", "Helios 44M-4 58mm in ottime condizioni")["model"] == "Helios-44M-4"
+    # The description names another lens of the maker: out; a focal length of the list, a filter size, the
+    # film, an f-number - still unclear; a Helios of another variant stays unclear.
+    kind = lambda title, description: lenses.classify(title, description)["kind"]
+    assert kind("Objectif Tamron", "Tamron AF 70-300mm f/4-5.6 Di LD Macro, parfait état") == "other"
+    assert kind("Obiettivo per reflex Soligor", "Lunghezza focale: 200mm - apertura massima 3.5") == "other"
+    assert lenses.classify("Objectif Tamron", "Tamron 28mm f/2.5 Adaptall 2")["model"] == "Tamron 28mm f/2.5 Adaptall"
+    assert kind("Super Albinar", "Super Albinar MC Auto 1:28 28mm 58 diametre") == "unclear", "a typo's aperture"
+    assert kind("Tamron Objektiv", "Filtergewinde 52mm, guter Zustand") == "unclear"
+    assert kind("Obiettivo Vivitar", "Teleobiettivo Vivitar 52mm") == "unclear", "52mm: a filter size"
+    assert kind("Vivitar lens", "Blende f/3.5 bis f/22, für 35mm Kameras") == "unclear"
+    assert kind("Obiettivo helios", "Helios 44-4M 58mm") == "unclear"
+    assert kind("Tamron Adaptall-2 per attacco Contax Yashica", "Guarda il mio profilo. Tamron Adaptall-2 adattatore") \
+        == "accessory"
+    assert kind("Tamron Adaptall-2 pour Canon FD", "Je vends une monture/adaptateur Tamron Adaptall-2") == "accessory"
+    assert kind("Obiettivo Tokina", "Obiettivo Tokina vintage, meccanico, con adattatore per canon") == "unclear"
+    assert kind("Rare Carl Zeiss Jena Pancolar", "Lens with Thorium. Use with adapter only") == "unclear"
     assert lenses.classify("Helios 44-2 M42 mit Adapter Sony E")["mount"] == "M42"
     assert lenses.classify("Vivitar 200mm f/3.5 Canon FD")["mount"] == "Canon FD", "the title's mount, not the model's"
     assert len(lenses.model_names()) > 60 and "Helios-44-2" in lenses.model_names()

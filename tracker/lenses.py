@@ -12,7 +12,8 @@ from . import markers, models
 
 
 
-VERSION = 3  # the rules changed: the lens check classifies every card again and searches once more
+VERSION = 4  # the rules changed: the lens check classifies every card again
+SEARCH_VERSION = 3  # changed: the searches pass once more too (rules that take what they used to skip)
 
 
 @dataclass(frozen=True)
@@ -132,7 +133,7 @@ _FOCAL = re.compile(r"(?<![\d.,])(\d{2,3})(?:[.,]\d)?\s?mm(?:\b|(?=f))|\bf\s?=\s
 _APERTURE = re.compile(r"\bf\s?/?\s?(\d{1,2}(?:[.,]\s?\d{1,2})?)(?![\d])|\b1\s?:\s?(\d{1,2}(?:[.,]\d{1,2})?)(?![\d])"
                        r"|(?<![\d.,:])(\d{1,2}(?:[.,]\d{1,2})?)\s?/\s?\d{2,3}\b")
 _BARE_APERTURE = re.compile(r"(?<![\d.,:/])(0[.,]95|1[.,]\d{1,2}|2[.,][0-8]|3[.,][35]|4[.,][05]|5[.,]6|6[.,]3)(?![\d.,]|\s?mm)")
-_ZOOM = re.compile(r"(?<![\d.,])(\d{2,3})\s?-\s?(\d{2,3})\s?mm\b")
+_ZOOM = re.compile(r"(?<![\d.,])(\d{2,3})\s?[-~]\s?(\d{2,3})\s?mm\b")
 _ZOOM_APERTURE = re.compile(r"\bf?\s?/?\s?(\d(?:[.,]\d)?)\s?-\s?(\d(?:[.,]\d)?)(?!\d|\s?mm)")
 
 
@@ -181,7 +182,7 @@ def mount_of(norm):
 
 # Things for a lens, not the lens: before the lens name, without a 'with' word between.
 _FOR_LENS = re.compile(
-    r"adapter|adaptor|adattatore|adaptateur|bague d.adaptation|\bdeckel|\bkappe|\bcaps?\b|bouchon|\btappo"
+    r"adapter|adaptor|adaptador|adattator|adaptateur|bague (?:d.)?adapta|speed ?booster|\bdeckel|\bkappe|\bcaps?\b|bouchon|\btappo"
     r"|gegenlichtblende|streulichtblende|sonnenblende|lens hood|\bhood\b|paraluce|pare[\s\-]?soleil|zonnekap"
     r"|\bfilter|\bfiltre|\bfiltro|\btasche|\bcase\b|\betui|custodia|\bkocher|\bbeutel|\bpouch"
     r"|" + models._marker_words(markers.BOX)[2:-2] + "|" + models._marker_words(markers.MANUAL)[2:-2]
@@ -190,6 +191,19 @@ _FOR_LENS = re.compile(
 _WITH = re.compile(r"\b(?:mit|with|avec|con|met|inkl|incl|inklusive|including|plus|com|med|und|and)\b|[+&]")
 _CONVERTER = re.compile(r"tele[\s\-]?(?:konverter|converter|convertisseur|convertitore|converteur)|\bextender\b"
                         r"|\bconverter\b|\bdoubler\b|\bmacro[\s\-]?(?:converter|adapter)")
+# An adapter (or a lens mount) without a lens of the list: its first adapter word has neither a 'with'
+# word nor a lens word before it ('Urth FD-E Adapter - Canon FD to Sony E', 'Tamron Adaptall-2 Adapter
+# for Minolta'; not 'Helios lens with a Sony E-mount adapter', 'Tokina lens minolta adaptor').
+_ADAPTER = re.compile(r"adapt(?:er|or|ador|ateur)|adattator|bague (?:d.)?adapta|speed ?booster|focal reducer")
+_LENS_WORD = re.compile(r"\blens(?:es)?\b(?![\s\-]*adapt)|\blent[ei]\b|obiettiv|objekti|objecti|objetiv|ottic|optik|zoom")
+
+
+def _adapter(text):
+    m = _ADAPTER.search(text)
+    return bool(m) and not _WITH.search(text[:m.start()]) and not any(
+        w.start() < m.start() for w in _LENS_WORD.finditer(text))
+
+
 _SET = re.compile(models._LOT.pattern + r"|\b\d+\s?(?:obiettivi|objektive|objectifs|lenses|lenzen|objetivos|lentes)\b")
 _PARTS_ONLY = re.compile(r"fur teile|for parts|pour pieces|per ricambi|als ersatzteil|defekt|defect|kaputt|not working")
 
@@ -278,15 +292,42 @@ UNCLEAR_NO_FOCAL = "нет фокусного — модель не понять
 UNCLEAR_HELIOS = "Гелиос: вариант не из списка или без номера"
 _HELIOS_WORD = re.compile(r"(?<![a-z])(?:helios|gelios)")
 
+# Sizes in a description that are not the lens's focal length: the filter thread or front diameter
+# ('Filtergewinde 52mm', 'Ø 55mm', 'diametro del filtro e di 72 mm', '62mm filter', a bare 'Teleobiettivo
+# Vivitar 52mm'), the film ('für 35mm Kameras', '35mm Dias'), f-numbers ('f/22', '1:28' - a typo's
+# 2.8), prices ('€80/90').
+_NOT_FOCAL = re.compile(
+    r"\b(?:filt\w*|diam\w*|durchmesser|gewinde|thread|filetage|filetto|o)\b[^\d]{0,15}\d{2}(?:[.,]\d)?\s?mm"
+    r"|(?<![\d.,])(?:46|49|52|62|67|72|77|82)\s?mm"
+    r"|\d{2}(?:[.,]\d)?\s?mm[^\d]{0,8}(?:filt|gewinde|thread|filetage|diam)"
+    r"|\b(?:fur|for|pour|per|voor|da)\s(?:\w+\s)?35\s?mm"
+    r"|\b35\s?mm[\s\-]*(?:film|kamera|camera|appareil|fotocamera|analog|slr|spiegelreflex|reflex|kleinbild"
+    r"|format|negati|dia|slide)"
+    r"|\bf\s?/\s?\d{1,2}(?:[.,]\d{1,2})?|\b1\s?:\s?\d{1,2}(?:[.,]\s?\d{1,2})?"
+    r"|€\s?\d+(?:\s?/\s?\d+)?|\d+\s?(?:€|eur\b|euro)")
+
+
+def _other_lens(norm):
+    """Title and description name a focal length (or a zoom) that no lens of the list with a word in the
+    text has: another lens of the maker ('Tamron Objektiv' - 'Tamron AF 70-300mm f/4-5.6'). A focal
+    length of the list stays unclear ('Super Albinar' - '1:28 28mm': a typo or another aperture)."""
+    text = _NOT_FOCAL.sub(" ", norm)
+    fs = focals(text)
+    if not fs and not _ZOOM.search(text):
+        return False
+    return not any(lens._family.search(norm) and not (lens._not and lens._not.search(norm))
+                   and (lens.focal is None or lens.focal in fs) for lens in LENSES)
+
 
 def classify(title, description=None):
     """{'model', 'mount', 'kind', 'flags', 'reason'}: kind 'lens'; 'unclear' (the tracker cannot tell
     the model: a word of the list without a focal length, or a Helios not of the list or without its
-    number - 'reason' says which; the description is tried too); 'kit' (a camera with the lens: the
-    camera tracker's); 'accessory' (a cap, hood, adapter, box, manual or teleconverter); None (nothing
-    of the list). The mount is the one the title names, else the model's. Flags 'parts?' (for parts)
-    and 'set?' (several lenses in one listing)."""
-    norm = models.normalize(title)
+    number - 'reason' says which; the description is tried too); 'other' (a word of the list without a
+    focal length in the title, but the description names one not of the list: another lens of the
+    maker); 'kit' (a camera with the lens: the camera tracker's); 'accessory' (a cap, hood, adapter,
+    box, manual or teleconverter); None (nothing of the list). The mount is the one the title names,
+    else the model's. Flags 'parts?' (for parts) and 'set?' (several lenses in one listing)."""
+    norm = models.normalize(title).replace("k&f", "kxf")  # the adapter maker K&F: not a 'with'
     hit = _model_span(norm)
     # a word of the list and no focal length: the title cannot tell (with one, it is another lens);
     # any Helios the series does not know
@@ -295,9 +336,12 @@ def classify(title, description=None):
     if not hit and not family and _HELIOS_WORD.search(norm):
         family, reason = _HELIOS_WORD.search(norm), UNCLEAR_HELIOS
     if not hit and family and description:
-        found = _model_span(models.normalize(f"{title} {description[:400]}"))
+        text = models.normalize(f"{title} {description[:400]}")
+        found = _model_span(text)
         if found:
             hit = (family.start(), found[1], found[2])
+        elif reason == UNCLEAR_NO_FOCAL and _other_lens(text):
+            return {"model": None, "mount": None, "kind": "other", "flags": [], "reason": None}
     if not hit and not family:
         return {"model": None, "mount": None, "kind": None, "flags": [], "reason": None}
     start = hit[0] if hit else family.start()
@@ -309,6 +353,10 @@ def classify(title, description=None):
     acc = _FOR_LENS.search(head)
     if acc and not _WITH.search(head[acc.end():]):
         return {"model": name, "mount": mount, "kind": "accessory", "flags": flags, "reason": None}
+    # no model: an adapter by its title, or by its description ('Adattatore per montare gli obiettivi...')
+    if not name and (_adapter(norm) or description and not _ADAPTER.search(norm) and not _LENS_WORD.search(norm)
+                     and _adapter(models.normalize(description[:200]).replace("k&f", "kxf"))):
+        return {"model": None, "mount": mount, "kind": "accessory", "flags": flags, "reason": None}
     cam = models.classify(title)
     if cam["model"] and not {"accessory?", "digital?", "compact?"} & set(cam["flags"]):
         spans = models.find_models(title)

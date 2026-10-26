@@ -35,6 +35,7 @@ SEARCH_PAGES_MAX = 10      # a search shows 960 listings at most
 ITEM_PAGES_MAX = 220       # item pages per check (new ones first)
 # Item page checks by the lens's age on Vinted: (up to days, minutes between checks)
 RECHECK = ((3, 90), (14, 24 * 60), (None, 7 * 24 * 60))
+OTHER_IDS_MAX = 5000       # remembered listings out by their description: a search skips them
 BACKFILL_DONE = 0
 BACKFILL_PENDING = 10       # exit code: the first collection goes on
 
@@ -119,11 +120,13 @@ def due(card, now):
     return clock.minutes_between(card["last_checked_at"], now) >= gap
 
 
-def _take(recs, cards, now, listed_after, flags, stats):
-    """Lenses of the list (and 'unclear' ones) from listing records: known ones seen, new ones carded.
-    Returns the hits (lenses of the list)."""
+def _take(recs, cards, now, listed_after, flags, stats, skip=()):
+    """Lenses of the list (and 'unclear' ones) from listing records: known ones seen, new ones carded
+    (not the ids in skip: another lens by its description). Returns the hits (lenses of the list)."""
     hits = 0
     for rec in recs:
+        if rec["id"] in skip:
+            continue
         cls = lenses.classify(rec["title"])
         if cls["kind"] not in ("lens", "unclear"):
             stats[f"skipped_{cls['kind']}"] += cls["kind"] is not None
@@ -139,15 +142,24 @@ def _take(recs, cards, now, listed_after, flags, stats):
 
 
 def reclassify(card):
-    """The card by the current rules (title, and the description for an unclear one). False: drop it."""
+    """The card by the current rules (title, and the description for an unclear one). Returns its kind:
+    'lens' and 'unclear' stay, any other leaves the data ('other': another lens by its description)."""
     if card.get("model_source") == "manual":
-        return True
+        return "lens"
     cls = lenses.classify(card["title"], card.get("description"))
-    if cls["kind"] not in ("lens", "unclear"):
-        return False
-    card.update(model=cls["model"], kind=cls["kind"], mount=cls["mount"], unclear_reason=cls.get("reason"),
-                flags=[f for f in card.get("flags") or [] if f == "preexisting"] + cls["flags"])
-    return True
+    if cls["kind"] in ("lens", "unclear"):
+        card.update(model=cls["model"], kind=cls["kind"], mount=cls["mount"], unclear_reason=cls.get("reason"),
+                    flags=[f for f in card.get("flags") or [] if f == "preexisting"] + cls["flags"])
+    return cls["kind"]
+
+
+def drop(cards, store, state, item_id):
+    """Out of the data. One out by its description (another lens, an adapter) is remembered: by its title
+    a search would card it again."""
+    card = cards.pop(item_id)
+    store.discard(item_id)
+    if lenses.classify(card["title"])["kind"] in ("lens", "unclear"):
+        state["other_ids"] = (state.get("other_ids", []) + [item_id])[-OTHER_IDS_MAX:]
 
 
 def apply_labels(cards, labels):
@@ -175,15 +187,16 @@ def run_check(store, client, now=None, labels=None, comments=None):
     cards = {**store.load_closed(), **store.load_active()}
     stats, errors = Counter(), []
     if state.get("rules") != lenses.VERSION:  # the rules changed: every card again, the ones out leave the data
-        for item_id in [i for i, c in cards.items() if not reclassify(c)]:
-            del cards[item_id]
-            store.discard(item_id)
-            stats["dropped"] += 1
+        for item_id, kind in [(i, reclassify(c)) for i, c in list(cards.items())]:
+            if kind not in ("lens", "unclear"):
+                drop(cards, store, state, item_id)
+                stats["dropped"] += 1
         state["rules"] = lenses.VERSION
     stats["labelled"] = apply_labels(cards, labels or {})
     apply_comments(cards, comments or {})
     first = "top_id" not in state
     previous = state.get("last_check_at")
+    skip = set(state.get("other_ids", []))
     try:
         # ---- new listings of the category, down to the previous check's newest id
         top = state.get("top_id", 0)
@@ -223,6 +236,9 @@ def run_check(store, client, now=None, labels=None, comments=None):
                     card.update(model=cls["model"], kind="lens", mount=cls["mount"], model_source="description",
                                 unclear_reason=None)
                     stats["by_description"] += 1
+                elif cls["kind"] != "unclear":  # another lens of the maker, an adapter
+                    drop(cards, store, state, card["id"])
+                    stats["out_by_description"] += 1
         stats["deferred"] += max(0, len(queue) - ITEM_PAGES_MAX)
 
         # ---- the first collection: every search of the list, as far as the budget goes
@@ -231,16 +247,17 @@ def run_check(store, client, now=None, labels=None, comments=None):
         if "done" not in backfill:  # the first version counted searches by their place in the list
             backfill["done"] = queries[:len(queries) if backfill.get("done_at") else backfill.get("query", 0)]
             backfill.pop("query", None)
-        if backfill.get("rules", lenses.VERSION) != lenses.VERSION or "rules" not in backfill and lenses.VERSION >= 3:
+        if (backfill.get("rules", lenses.SEARCH_VERSION) != lenses.SEARCH_VERSION
+                or "rules" not in backfill and lenses.SEARCH_VERSION >= 3):
             backfill.update(done=[], page=1, done_at=None)  # rules that take what the searches skipped: once more
-        backfill["rules"] = lenses.VERSION
+        backfill["rules"] = lenses.SEARCH_VERSION
         pending = [q for q in queries if q not in backfill["done"]]
         backfill["done_at"] = backfill["done_at"] if not pending else None
         while pending and client.has_time():
             text = pending[0]
             recs = client.lens_page(backfill["page"], text)
             stats["search_pages"] += 1
-            hits = _take(recs, cards, now, None, ["preexisting"], stats)
+            hits = _take(recs, cards, now, None, ["preexisting"], stats, skip)
             if len(recs) < 96 or hits == 0 or backfill["page"] >= SEARCH_PAGES_MAX:
                 backfill["done"].append(pending.pop(0))
                 backfill["page"] = 1
@@ -264,7 +281,7 @@ def run_check(store, client, now=None, labels=None, comments=None):
            "deferred": stats["deferred"], "skipped_kits": stats["skipped_kit"],
            "skipped_accessories": stats["skipped_accessory"], "open": len(open_cards), "total": len(cards),
            "unclear": sum(c.get("kind") == "unclear" for c in open_cards), "by_description": stats["by_description"],
-           "labelled": stats["labelled"], "dropped": stats["dropped"],
+           "out_by_description": stats["out_by_description"], "labelled": stats["labelled"], "dropped": stats["dropped"],
            "backfill": "готов" if state["backfill"]["done_at"] else
            f"поиск {len(state['backfill']['done']) + 1} из {len(lenses.search_queries())}",
            "requests": client.requests_made, "errors": errors}
@@ -280,7 +297,8 @@ def log_line(run):
             f" (sold {run['sold']}, deleted {run['deleted']}, reserved/hidden {run['reserved_hidden']},"
             f" deferred {run['deferred']}) | pages: catalog {run['catalog_pages']}, search {run['search_pages']}"
             f" | skipped kits {run['skipped_kits']}, accessories {run['skipped_accessories']}"
-            f" | open {run['open']} of {run['total']}, unclear {run['unclear']}, by description {run['by_description']},"
+            f" | open {run['open']} of {run['total']}, unclear {run['unclear']}, by description {run['by_description']}"
+            f" (out: other lenses, adapters {run.get('out_by_description', 0)}),"
             f" labelled {run['labelled']}, dropped {run['dropped']} | first collection {'done' if run['backfill'] == 'готов' else 'running'}"
             f" | requests {run['requests']} | errors: {len(run['errors']) or 'none'}")
 
