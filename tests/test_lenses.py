@@ -17,7 +17,7 @@ CASES = [
     ("Asahi Super Takumar 50mm F1.4", "Super-Takumar 50mm f/1.4", "lens"),
     ("Super-Takumar 55mm f/1.8", None, None),
     ("Super takumar 1.4 (8 elementi)", "Super-Takumar 50mm f/1.4", "lens"),
-    ("Canon FD 1.4", None, None),
+    ("Canon FD 1.4", None, "unclear"),
     ("SMC Takumar 1:1.8/55", "SMC Takumar 55mm f/1.8", "lens"),
     ("Super-Multi-Coated Takumar 135mm 3.5", "SMC Takumar 135mm f/3.5", "lens"),
     ("Jupiter-8 2/50 M39", "Jupiter-8 50mm f/2", "lens"),
@@ -25,7 +25,7 @@ CASES = [
     ("Jupiter 8M Kiev", "Jupiter-8M 50mm f/2", "lens"),
     ("Canon FD 50mm 1:1.4 S.S.C.", "Canon FD 50mm f/1.4 (SSC / nFD)", "lens"),
     ("Canon nFD 50mm f1.4", "Canon FD 50mm f/1.4 (SSC / nFD)", "lens"),
-    ("Canon FD 50mm 1.8", None, None),
+    ("Canon FD 50mm 1.8", "Canon FD 50mm f/1.8", "lens"),
     ("Nikkor 50mm 1:1.4 AI-S", "Nikkor 50mm f/1.4 (Pre-AI / AI / AI-S)", "lens"),
     ("Nikon AF Nikkor 50mm f/1.4D", None, None),
     ("Olympus OM Zuiko 50mm f1.8", "Zuiko 50mm f/1.8", "lens"),
@@ -39,6 +39,14 @@ CASES = [
     ("Minolta MD 50mm 1.7", "Minolta MD 50mm f/1.7", "lens"),
     ("Konica Hexanon AR 40mm 1.8", "Konica Hexanon AR 40mm f/1.8", "lens"),
     ("Orestor 135mm f/2.8", "Orestor 135mm", "lens"),
+    # every Canon FD lens, named by maker, focal length and aperture; '135/F3.5'
+    ("Vivitar 28mm f/2.8 Canon FD", "Vivitar 28mm f/2.8 (Canon FD)", "lens"),
+    ("Tokina 70-210mm f/4-5.6 FD", "Tokina 70-210mm f/4-5.6 (Canon FD)", "lens"),
+    ("Objektiv Canon FD 135mm 1:3.5", "Canon FD 135mm f/3.5", "lens"),
+    ("Obiettivo Konica 135/F3.5 Hexanon AR", "Konica Hexanon AR 135mm f/3.5", "lens"),
+    # a word of the list without details: 'Без деталей'
+    ("Obiettivo helios", None, "unclear"),
+    ("Tokina Objektive", None, "unclear"),
     # a camera with the lens: the camera tracker's
     ("Zenit E + Helios 44-2 58mm", "Helios-44-2", "kit"),
     ("Canon AE-1 Program mit FD 50mm 1.4", "Canon FD 50mm f/1.4 (SSC / nFD)", "kit"),
@@ -59,6 +67,9 @@ def main():
             bad += 1
             print(f"FAIL: {title!r}: expected {model} / {kind}, got {got['model']} / {got['kind']}")
     assert "parts?" in lenses.classify("Helios 44-2 defekt, für Teile")["flags"]
+    assert lenses.classify("Obiettivo helios", "Helios 44M-4 58mm in ottime condizioni")["model"] == "Helios-44M-4"
+    assert lenses.classify("Helios 44-2 M42 mit Adapter Sony E")["mount"] == "M42"
+    assert lenses.classify("Vivitar 200mm f/3.5 Canon FD")["mount"] == "Canon FD", "the title's mount, not the model's"
     assert len(lenses.model_names()) > 60 and "Helios-44-2" in lenses.model_names()
     print(f"{len(CASES) - bad}/{len(CASES)} passed")
     assert not bad

@@ -47,7 +47,8 @@ def new_card(rec, cls, now, listed_after, flags):
     price = rec.get("price")
     return {
         "id": rec["id"], "url": rec["url"], "title": rec["title"], "description": None,
-        "model": cls["model"], "mount": cls["mount"], "brand": rec.get("brand"), "condition": rec.get("condition"),
+        "model": cls["model"], "kind": cls["kind"], "mount": cls["mount"], "brand": rec.get("brand"),
+        "condition": rec.get("condition"),
         "seller_id": rec.get("seller_id"), "photo": rec.get("photo"),
         "price_start": price, "price_final": None,
         "price_history": [{"at": now, "price": price}] if price is not None else [],
@@ -109,20 +110,23 @@ def due(card, now):
         return False
     if not card.get("last_checked_at"):
         return True
+    if card.get("kind") == "unclear":  # 'Без деталей': kept up to date weekly
+        return clock.minutes_between(card["last_checked_at"], now) >= RECHECK[-1][1]
     age = clock.minutes_between(_listed(card), now) / 1440
     gap = next(minutes for limit, minutes in RECHECK if limit is None or age < limit)
     return clock.minutes_between(card["last_checked_at"], now) >= gap
 
 
 def _take(recs, cards, now, listed_after, flags, stats):
-    """Lenses of the list from listing records: known ones seen, new ones carded. Returns the hits."""
+    """Lenses of the list (and 'unclear' ones) from listing records: known ones seen, new ones carded.
+    Returns the hits (lenses of the list)."""
     hits = 0
     for rec in recs:
         cls = lenses.classify(rec["title"])
-        if cls["kind"] != "lens":
+        if cls["kind"] not in ("lens", "unclear"):
             stats[f"skipped_{cls['kind']}"] += cls["kind"] is not None
             continue
-        hits += 1
+        hits += cls["kind"] == "lens"
         card = cards.get(rec["id"])
         if card is None:
             cards[rec["id"]] = new_card(rec, cls, now, listed_after, flags)
@@ -132,12 +136,42 @@ def _take(recs, cards, now, listed_after, flags, stats):
     return hits
 
 
-def run_check(store, client, now=None):
-    """One check. Returns {'run', 'cards', 'backfill_done'}."""
+def reclassify(card):
+    """The card by the current rules (title, and the description for an unclear one). False: drop it."""
+    if card.get("model_source") == "manual":
+        return True
+    cls = lenses.classify(card["title"], card.get("description"))
+    if cls["kind"] not in ("lens", "unclear"):
+        return False
+    card.update(model=cls["model"], kind=cls["kind"], mount=cls["mount"],
+                flags=[f for f in card.get("flags") or [] if f == "preexisting"] + cls["flags"])
+    return True
+
+
+def apply_labels(cards, labels):
+    """'Ручная разметка': {id: model} - the user's model wins (an unclear card becomes a lens)."""
+    changed = 0
+    for item_id, model in labels.items():
+        card = cards.get(item_id)
+        if card and (card.get("model"), card.get("model_source")) != (model, "manual"):
+            card.update(model=model, kind="lens", model_source="manual")
+            changed += 1
+    return changed
+
+
+def run_check(store, client, now=None, labels=None):
+    """One check. Returns {'run', 'cards', 'backfill_done', 'blocked'}."""
     now = now or clock.stamp()
     state = store.load_state()
     cards = {**store.load_closed(), **store.load_active()}
     stats, errors = Counter(), []
+    if state.get("rules") != lenses.VERSION:  # the rules changed: every card again, the ones out leave the data
+        for item_id in [i for i, c in cards.items() if not reclassify(c)]:
+            del cards[item_id]
+            store.discard(item_id)
+            stats["dropped"] += 1
+        state["rules"] = lenses.VERSION
+    stats["labelled"] = apply_labels(cards, labels or {})
     first = "top_id" not in state
     previous = state.get("last_check_at")
     try:
@@ -173,19 +207,30 @@ def run_check(store, client, now=None):
             stats["item_pages"] += 1
             status = apply_page(card, page, now)
             stats[status] += status in ("sold", "deleted", "reserved", "hidden")
+            if card.get("kind") == "unclear" and card.get("description") and card.get("model_source") != "manual":
+                cls = lenses.classify(card["title"], card["description"])  # the description may tell the model
+                if cls["kind"] == "lens":
+                    card.update(model=cls["model"], kind="lens", mount=cls["mount"], model_source="description")
+                    stats["by_description"] += 1
         stats["deferred"] += max(0, len(queue) - ITEM_PAGES_MAX)
 
         # ---- the first collection: every search of the list, as far as the budget goes
-        backfill = state.setdefault("backfill", {"query": 0, "page": 1, "done_at": None})
+        backfill = state.setdefault("backfill", {"page": 1, "done_at": None})
         queries = lenses.search_queries()
-        while not backfill["done_at"] and client.has_time():
-            text = queries[backfill["query"]]
+        if "done" not in backfill:  # the first version counted searches by their place in the list
+            backfill["done"] = queries[:len(queries) if backfill.get("done_at") else backfill.get("query", 0)]
+            backfill.pop("query", None)
+        pending = [q for q in queries if q not in backfill["done"]]
+        backfill["done_at"] = backfill["done_at"] if not pending else None
+        while pending and client.has_time():
+            text = pending[0]
             recs = client.lens_page(backfill["page"], text)
             stats["search_pages"] += 1
             hits = _take(recs, cards, now, None, ["preexisting"], stats)
             if len(recs) < 96 or hits == 0 or backfill["page"] >= SEARCH_PAGES_MAX:
-                backfill.update(query=backfill["query"] + 1, page=1)
-                if backfill["query"] >= len(queries):
+                backfill["done"].append(pending.pop(0))
+                backfill["page"] = 1
+                if not pending:
                     backfill["done_at"] = now
             else:
                 backfill["page"] += 1
@@ -204,8 +249,10 @@ def run_check(store, client, now=None):
            "sold": stats["sold"], "deleted": stats["deleted"], "reserved_hidden": stats["reserved"] + stats["hidden"],
            "deferred": stats["deferred"], "skipped_kits": stats["skipped_kit"],
            "skipped_accessories": stats["skipped_accessory"], "open": len(open_cards), "total": len(cards),
+           "unclear": sum(c.get("kind") == "unclear" for c in open_cards), "by_description": stats["by_description"],
+           "labelled": stats["labelled"], "dropped": stats["dropped"],
            "backfill": "готов" if state["backfill"]["done_at"] else
-           f"поиск {state['backfill']['query'] + 1} из {len(lenses.search_queries())}",
+           f"поиск {len(state['backfill']['done']) + 1} из {len(lenses.search_queries())}",
            "requests": client.requests_made, "errors": errors}
     store.append_run(run)
     # The first collection ends when its lenses have their pages read too (checks go on back to back till then).
@@ -219,18 +266,18 @@ def log_line(run):
             f" (sold {run['sold']}, deleted {run['deleted']}, reserved/hidden {run['reserved_hidden']},"
             f" deferred {run['deferred']}) | pages: catalog {run['catalog_pages']}, search {run['search_pages']}"
             f" | skipped kits {run['skipped_kits']}, accessories {run['skipped_accessories']}"
-            f" | open {run['open']} of {run['total']} | first collection {'done' if run['backfill'] == 'готов' else 'running'}"
+            f" | open {run['open']} of {run['total']}, unclear {run['unclear']}, by description {run['by_description']},"
+            f" labelled {run['labelled']}, dropped {run['dropped']} | first collection {'done' if run['backfill'] == 'готов' else 'running'}"
             f" | requests {run['requests']} | errors: {len(run['errors']) or 'none'}")
 
 
-def write_sheets(result):
+def open_writer():
     import gspread
 
-    from . import lens_report, sheets
+    from . import sheets
 
     client = gspread.service_account_from_dict(env.google_sa_info())
-    writer = sheets.SheetWriter(client.open_by_key(env.sheet_id("LENS_SHEET_ID")))
-    lens_report.write(writer, result["cards"], result["run"])
+    return sheets.SheetWriter(client.open_by_key(env.sheet_id("LENS_SHEET_ID")))
 
 
 def main():
@@ -243,14 +290,23 @@ def main():
     started = time.monotonic()
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         root = Path(args.local) if args.local else datarepo.clone(Path(tmp) / "data")
+        from . import lens_report
+
         store = DataStore(root / "lenses")
-        result = run_check(store, VintedClient(time_budget=CHECK_BUDGET_S))
+        writer, labels = None, {}
+        if not args.no_sheets:
+            try:
+                writer = open_writer()
+                labels = lens_report.manual_labels(writer)
+            except Exception as exc:
+                print(f"lens sheets: not opened: {type(exc).__name__}: {env.redact(exc)}")
+        result = run_check(store, VintedClient(time_budget=CHECK_BUDGET_S), labels=labels)
         print(log_line(result["run"]))
         if not args.local:
             datarepo.commit_and_push(root, f"lens check {result['run']['at']}")
-        if not args.no_sheets:
+        if writer is not None:
             try:  # a sheet failure must not lose the data (already pushed)
-                write_sheets(result)
+                lens_report.write(writer, result["cards"], result["run"])
             except Exception as exc:
                 print(f"lens sheets failed: {type(exc).__name__}: {env.redact(exc)}")
     print(f"lens check took {(time.monotonic() - started) / 60:.1f} min")

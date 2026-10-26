@@ -82,6 +82,33 @@ def main():
         assert items_rows[0] == lens_report.ITEMS_HEADER and len(items_rows) == 4
         assert len(lens_report.model_rows()) > 60 and lens_report.runs_row(r3["run"])[0] == "2026-10-27 11:30"
 
+    # A word of the list without details: 'Без деталей', unless its description tells the model; the
+    # user's label wins; a change of the rules classifies the old cards again (a converter leaves).
+    with tempfile.TemporaryDirectory() as tmp:
+        store = DataStore(tmp)
+        search = {("helios 44", 1): [rec(300, "Obiettivo helios", 25.0), rec(301, "Tokina Objektive", 15.0),
+                                     rec(302, "Vivitar 28mm f/2.8 Canon FD", 20.0)]}
+        lens_tick.run_check(store, FakeClient({1: [rec(2000, "x", 1.0)]}, search), now="2026-10-27 08:00")
+        cards = {c["id"]: c for c in store.load_active().values()}
+        assert cards[300]["kind"] == cards[301]["kind"] == "unclear" and cards[302]["model"] == "Vivitar 28mm f/2.8 (Canon FD)"
+        assert cards[302]["mount"] == "Canon FD"
+        items = {300: {"description": "Helios 44M-4 58mm, funziona", "uploaded_ago": "2 Wochen"}, 301: {"description": "alt"}}
+        r = lens_tick.run_check(store, FakeClient({1: [rec(2000, "x", 1.0)]}, search, items), now="2026-10-27 09:45",
+                                labels={301: "Tokina 28mm f/2.8 (C/Y)"})
+        cards = {c["id"]: c for c in r["cards"]}
+        assert cards[300]["model"] == "Helios-44M-4" and cards[300]["kind"] == "lens" and r["run"]["by_description"] == 1
+        assert cards[301]["model"] == "Tokina 28mm f/2.8 (C/Y)" and cards[301]["model_source"] == "manual"
+        assert len(lens_report.unclear_rows(r["cards"])) == 1, "both now named"
+        old = dict(cards[302], title="Vivitar 2x Teleconverter Canon FD")  # as if carded by older rules
+        store.save(old)
+        state = store.load_state()
+        state["rules"] = 1
+        state["backfill"] = {"query": 3, "page": 1, "done_at": None}  # the first version's counter
+        store.save_state(state)
+        r = lens_tick.run_check(store, FakeClient({1: [rec(2000, "x", 1.0)]}, search), now="2026-10-27 11:30")
+        assert 302 not in {c["id"] for c in r["cards"]} and r["run"]["dropped"] == 1, r["run"]
+        assert store.load_state()["backfill"]["done"][:3] == lenses.search_queries()[:3]
+
     # The lens chain: 10 checks a day, back to back while the first collection runs, none at night.
     rng = random.Random(1)
     last = datetime(2026, 10, 27, 12, 0, tzinfo=BERLIN)

@@ -3,15 +3,22 @@
 'Объективы' - every lens tracked; 'Продажи' - the sold ones, newest sale first; 'Сводка' - per model:
 how many, on sale now, sold, mean / median / lowest / highest asking price, mean sale price, how long
 they take to sell, how long the unsold ones hang, the cheapest one on sale now; 'Модели' - the models
-and their Vinted searches; 'Запуски' - one row per check, newest on top.
-Lenses sold for parts and placeholder prices stay out of the prices.
+and their Vinted searches; 'Запуски' - one row per check, newest on top; 'Без деталей' - listings
+with a word of the list whose title and description do not tell the model (photo, title, price,
+link); 'Ручная разметка' - the user's: id or link -> model (it wins over the rules).
+Lenses sold for parts, sets of several lenses and placeholder prices stay out of the prices.
 """
+import re
 import statistics
 
 from . import clock, lenses, report
 
 ITEMS_SHEET, SALES_SHEET, SUMMARY_SHEET, MODELS_SHEET, RUNS_SHEET = (
     "Объективы", "Продажи", "Сводка", "Модели", "Запуски")
+UNCLEAR_SHEET, MANUAL_SHEET = "Без деталей", "Ручная разметка"
+UNCLEAR_HEADER = ["Фото", "Заголовок", "Цена, €", "Байонет", "Статус", "Впервые увиден", "Начало описания", "id",
+                  "Ссылка"]
+MANUAL_HEADER = ["id или ссылка", "Модель", "Комментарий"]
 ITEMS_HEADER = ["Модель", "Байонет", "Заголовок", "Статус", "Цена старт, €", "Цена сейчас, €", "Сохранений",
                 "Выставлен на Vinted", "Впервые увиден", "Последний раз активен", "Продажа обнаружена", "В продаже",
                 "Состояние", "Флаги", "id", "Ссылка"]
@@ -23,7 +30,7 @@ SUMMARY_HEADER = ["Модель", "Байонет", "Всего было", "В �
 MODELS_HEADER = ["Модель", "Байонет", "Поиск на Vinted"]
 RUNS_HEADER = ["Время", "Новых", "Найдено первым сбором", "Страниц объявлений", "Продано", "Удалено",
                "Резерв / скрыто", "Отложено", "В продаже всего", "Всего в базе", "Первый сбор", "Запросов", "Ошибки"]
-FLAG_RU = {"preexisting": "было до запуска", "parts?": "на запчасти?"}
+FLAG_RU = {"preexisting": "было до запуска", "parts?": "на запчасти?", "set?": "набор?"}
 DESCRIPTION_LIMIT = 150
 OPEN = ("active", "reserved", "hidden")
 
@@ -49,8 +56,12 @@ def days_on_sale(card, now):
 
 
 def counted(card):
-    """In the price statistics: not for parts, not a placeholder price."""
-    return "parts?" not in (card.get("flags") or []) and not report.placeholder_price(card)
+    """In the price statistics: not for parts, not a set of lenses, not a placeholder price."""
+    return not {"parts?", "set?"} & set(card.get("flags") or []) and not report.placeholder_price(card)
+
+
+def is_lens(card):
+    return card.get("kind", "lens") == "lens" and card.get("model")
 
 
 def _flags(card):
@@ -134,9 +145,37 @@ def runs_row(run):
             "; ".join(run["errors"])[:300]]
 
 
+def unclear_rows(cards):
+    from . import photos
+
+    rows = [UNCLEAR_HEADER]
+    for c in sorted((c for c in cards if c.get("kind") == "unclear" and not c.get("closed_at")),
+                    key=lambda c: c["first_seen"], reverse=True):
+        rows.append([photos.image_formula(c.get("photo")), c["title"], _num(report.current_price(c)),
+                     c.get("mount") or "", report.STATUS_RU.get(c["status"], c["status"]), c["first_seen"],
+                     " ".join((c.get("description") or "").split())[:DESCRIPTION_LIMIT], c["id"], c["url"]])
+    return rows
+
+
+def manual_labels(writer):
+    """{item id: model} from 'Ручная разметка' (created with its header if missing)."""
+    ws = writer._get(MANUAL_SHEET, MANUAL_HEADER)
+    labels = {}
+    for row in ws.get_all_values()[1:]:
+        if len(row) < 2 or not row[1].strip():
+            continue
+        match = re.search(r"(?:items/)?(\d{6,})", row[0])
+        if match:
+            labels[int(match.group(1))] = row[1].strip()
+    return labels
+
+
 def write(writer, cards, run):
     now = run["at"]
+    unclear = unclear_rows(cards)
+    cards = [c for c in cards if is_lens(c)]
     writer.replace(ITEMS_SHEET, item_rows(cards, now), links=True)
+    writer.replace(UNCLEAR_SHEET, unclear, links=True)
     writer.replace(SALES_SHEET, sales_rows(cards, now), links=True)
     writer.replace(SUMMARY_SHEET, summary_rows(cards, now), links=True)
     writer.replace(MODELS_SHEET, model_rows())

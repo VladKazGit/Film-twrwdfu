@@ -12,6 +12,8 @@ from . import markers, models
 
 
 
+VERSION = 2  # the rules changed: the lens check classifies every card again
+
 
 @dataclass(frozen=True)
 class Lens:
@@ -122,26 +124,59 @@ _HELIOS = re.compile(r"(?<![a-z])(?:helios|gelios)[\s\-.]*(\d{2,3})(?![\d.,])"
                      r"(?:[\s\-.]*(\d)(?![\d]|\s*[/.,:]\s*\d|\s?mm))?")
 _MC = re.compile(r"(?<![a-z])(?:mc|ms)(?![a-z])")
 
-# Numbers in a title: focal lengths ('50mm', 'f=50mm', '1.4/50', '1:1.4/50') and apertures ('f/1.4', 'F2',
-# '1:1.4', '1.4/50', a bare '1.4').
-_FOCAL = re.compile(r"(?<![\d.,])(\d{2,3})(?:[.,]\d)?\s?mm\b|\bf\s?=\s?(\d{2,3})\b"
-                    r"|(?<=[/:])\s?(\d{2,3})(?![\d.,]|\s?[.,]\d)")
-_APERTURE = re.compile(r"\bf\s?/?\s?(\d{1,2}(?:[.,]\d{1,2})?)(?![\d])|\b1\s?:\s?(\d{1,2}(?:[.,]\d{1,2})?)(?![\d])"
+# Numbers in a title: focal lengths ('50mm', 'f=50mm', '1.4/50', '1:1.4/50', '135/F3.5', '50/1.4') and
+# apertures ('f/1.4', 'F2', '1:1.4', '1.4/50', a bare '1.4'); zooms ('70-210mm', 'f/4-5.6').
+_FOCAL = re.compile(r"(?<![\d.,])(\d{2,3})(?:[.,]\d)?\s?mm(?:\b|(?=f))|\bf\s?=\s?(\d{2,3})\b"
+                    r"|(?<=[/:])\s?(\d{2,3})(?![\d.,]|\s?[.,]\d)"
+                    r"|(?<![\w.,])(\d{2,3})\s?/\s?f?\s?\d{1,2}(?:[.,]\d{1,2})?\b")
+_APERTURE = re.compile(r"\bf\s?/?\s?(\d{1,2}(?:[.,]\s?\d{1,2})?)(?![\d])|\b1\s?:\s?(\d{1,2}(?:[.,]\d{1,2})?)(?![\d])"
                        r"|(?<![\d.,:])(\d{1,2}(?:[.,]\d{1,2})?)\s?/\s?\d{2,3}\b")
-_BARE_APERTURE = re.compile(r"(?<![\d.,:/])(0[.,]95|1[.,]\d{1,2}|2[.,][0-8]|3[.,][35]|4[.,][05]|5[.,]6)(?![\d.,]|\s?mm)")
+_BARE_APERTURE = re.compile(r"(?<![\d.,:/])(0[.,]95|1[.,]\d{1,2}|2[.,][0-8]|3[.,][35]|4[.,][05]|5[.,]6|6[.,]3)(?![\d.,]|\s?mm)")
+_ZOOM = re.compile(r"(?<![\d.,])(\d{2,3})\s?-\s?(\d{2,3})\s?mm\b")
+_ZOOM_APERTURE = re.compile(r"\bf?\s?/?\s?(\d(?:[.,]\d)?)\s?-\s?(\d(?:[.,]\d)?)(?!\d|\s?mm)")
 
 
 def _num(text):
-    return float(text.replace(",", "."))
+    return float(text.replace(",", ".").replace(" ", ""))
 
 
 def focals(norm):
-    return {_num(next(g for g in m.groups() if g)) for m in _FOCAL.finditer(norm)}
+    return {_num(next(g for g in m.groups() if g)) for m in _FOCAL.finditer(_ZOOM.sub(" ", norm))}
 
 
 def apertures(norm):
     found = {_num(next(g for g in m.groups() if g)) for m in _APERTURE.finditer(norm)}
-    return found or {_num(m.group(1)) for m in _BARE_APERTURE.finditer(norm)}
+    if found <= {1.0}:  # '1:1:1,4' - a typo's 1, not an f/1 lens
+        found |= {_num(m.group(1)) for m in _BARE_APERTURE.finditer(norm)}
+    return found
+
+
+def _aperture_text(aps):
+    if not aps:
+        return ""
+    best = min(aps - {1.0}) if aps - {1.0} else min(aps)
+    return f"f/{best:g}"
+
+
+# The lens's own mount, when the title names it (an adapter's 'Sony E' is not one of these).
+MOUNTS = [
+    ("M42", r"\bm\s?42\b"), ("M39 (L39)", r"\bm\s?39\b|\bl\s?39\b|\bltm\b"),
+    ("Canon FD", r"\bn?fd\b|new fd"), ("Canon FL", r"\bfl\b"),
+    ("Nikon F", r"\bai[\s\-]?s\b|\bais\b|\bpre[\s\-]?ai\b|\bnon[\s\-]?ai\b|nikon f\b|\bf[\s\-]?mount|nikkor"),
+    ("Pentax K", r"\bpk\b|pentax[\s\-]*k\b|\bk[\s\-]?mount|\bk[\s\-]?bajonett"),
+    ("Olympus OM", r"\bom\b|zuiko"), ("Minolta SR", r"\bmd\b|\bmc[\s\-]?rokkor|rokkor|minolta sr"),
+    ("Konica AR", r"\bar\b|hexanon"), ("C/Y", r"\bc\s?/\s?y\b|contax\s?/\s?yashica|\bcy\b"),
+    ("Rollei QBM", r"\bqbm\b"), ("Leica M", r"leica m\b|\bm[\s\-]?mount|\bvm\b"),
+    ("Leica R", r"leica r\b|\br[\s\-]?mount"), ("Exakta", r"exakta|\bexa\b"),
+    ("Praktica PB", r"\bpb\b|prakticar"), ("Pentacon Six / Kiev 88", r"pentacon six|\bp6\b|kiev[\s\-]?(?:6|60|88)\b"),
+]
+_MOUNTS = [(label, re.compile(rx)) for label, rx in MOUNTS]
+
+
+def mount_of(norm):
+    """The first mount the normalized title names, or None."""
+    found = [(m.start(), label) for label, rx in _MOUNTS for m in [rx.search(norm)] if m]
+    return min(found)[1] if found else None
 
 
 # Things for a lens, not the lens: before the lens name, without a 'with' word between.
@@ -153,7 +188,52 @@ _FOR_LENS = re.compile(
     + "|" + models._marker_words(markers.PRINT)[2:-2])
 # 'With' for lenses: not the one-letter 'e' / 'et' of the camera rules ('Adapter M42 Sony E für Helios 44-2').
 _WITH = re.compile(r"\b(?:mit|with|avec|con|met|inkl|incl|inklusive|including|plus|com|med|und|and)\b|[+&]")
+_CONVERTER = re.compile(r"tele[\s\-]?(?:konverter|converter|convertisseur|convertitore|converteur)|\bextender\b"
+                        r"|\bconverter\b|\bdoubler\b|\bmacro[\s\-]?(?:converter|adapter)")
+_SET = re.compile(models._LOT.pattern + r"|\b\d+\s?(?:obiettivi|objektive|objectifs|lenses|lenzen|objetivos|lentes)\b")
 _PARTS_ONLY = re.compile(r"fur teile|for parts|pour pieces|per ricambi|als ersatzteil|defekt|defect|kaputt|not working")
+
+
+# Every Canon FD lens, not only those of the list: named by its maker, focal length and aperture.
+_FD = re.compile(r"\bn?fd\b|new fd")
+LENS_MAKERS = ["Vivitar", "Tokina", "Sigma", "Tamron", "Soligor", "Hanimex", "Makinon", "Kiron", "Exaktar", "Hoya",
+               "Cosina", "Osawa", "Panagor", "Samyang", "Beroflex", "Revuenon", "Porst", "Chinon", "Albinar",
+               "Kenko", "Vemar", "Sun", "Rikenon", "Prinzflex", "Paragon", "Danubia"]
+_MAKER = re.compile(r"\b(" + "|".join(m.lower() for m in LENS_MAKERS) + r")\b")
+FD_QUERIES = ("canon fd", "fd objektiv", "fd lens", "objectif fd", "obiettivo fd", "fd 50mm", "fd 28mm",
+              "fd 135mm", "fd zoom", "vivitar fd", "tokina fd", "sigma fd", "tamron fd", "soligor fd")
+
+
+def _fd_model(norm):
+    """(start, name) of a Canon FD lens by maker, focal length and aperture, or None without a focal length."""
+    fd = _FD.search(norm)
+    if not fd:
+        return None
+    zoom = _ZOOM.search(norm)
+    if zoom:
+        focal = f"{zoom.group(1)}-{zoom.group(2)}mm"
+        za = _ZOOM_APERTURE.search(norm[zoom.end():]) or _ZOOM_APERTURE.search(norm)
+        aps = apertures(norm)
+        aperture = f"f/{za.group(1)}-{za.group(2)}".replace(",", ".") if za else _aperture_text(aps)
+    else:
+        fs = focals(norm)
+        if not fs:
+            return None
+        focal = f"{min(fs):g}mm"
+        aps = apertures(norm)
+        aperture = _aperture_text(aps)
+    maker = _MAKER.search(norm)
+    head = f"{maker.group(1).capitalize()} {focal}" if maker else f"Canon FD {focal}"
+    name = " ".join(filter(None, [head, aperture])) + (" (Canon FD)" if maker else "")
+    return (maker.start() if maker else fd.start()), name
+
+
+# A word of the list without the details that tell the model ('Obiettivo helios', 'Tokina Objektive'):
+# for the sheet 'Без деталей' (its description may still tell).
+def _family_hit(norm):
+    hits = [m for m in [re.search(r"(?<![a-z])(?:helios|gelios)", norm), _FD.search(norm)]
+            + [lens._family.search(norm) for lens in LENSES] if m]
+    return min(hits, key=lambda m: m.start()) if hits else None
 
 
 def _model_span(norm):
@@ -188,20 +268,33 @@ def _model_span(norm):
                 continue
             return fam.start(), f"Orestor {min(fs):g}mm", lens.mount
         return fam.start(), lens.name, lens.mount
+    fd = _fd_model(norm)
+    if fd:
+        return fd[0], fd[1], "Canon FD"
     return None
 
 
-def classify(title):
-    """{'model', 'mount', 'kind'}: kind 'lens', 'kit' (a camera with the lens: the camera tracker's),
-    'accessory' (a cap, hood, adapter, box or manual for it) or None (no lens of the list); flags
-    'parts?' for a lens sold for parts."""
+def classify(title, description=None):
+    """{'model', 'mount', 'kind', 'flags'}: kind 'lens'; 'unclear' (a word of the list, but neither the
+    title nor the description tells the model); 'kit' (a camera with the lens: the camera tracker's);
+    'accessory' (a cap, hood, adapter, box or manual for it); None (nothing of the list). The mount
+    is the one the title names, else the model's. Flag 'parts?': a lens sold for parts."""
     norm = models.normalize(title)
     hit = _model_span(norm)
-    if not hit:
+    # a word of the list and no focal length: the title cannot tell (with one, it is another lens)
+    family = _family_hit(norm) if not focals(norm) and not _ZOOM.search(norm) else None
+    if not hit and family and description:
+        found = _model_span(models.normalize(f"{title} {description[:400]}"))
+        if found:
+            hit = (family.start(), found[1], found[2])
+    if not hit and not family:
         return {"model": None, "mount": None, "kind": None, "flags": []}
-    start, name, mount = hit
+    start = hit[0] if hit else family.start()
+    name, mount = (hit[1], mount_of(norm) or hit[2]) if hit else (None, mount_of(norm))
     head = norm[:start]
-    flags = ["parts?"] if _PARTS_ONLY.search(norm) else []
+    flags = (["parts?"] if _PARTS_ONLY.search(norm) else []) + (["set?"] if _SET.search(norm) else [])
+    if _CONVERTER.search(norm):
+        return {"model": name, "mount": mount, "kind": "accessory", "flags": flags}
     acc = _FOR_LENS.search(head)
     if acc and not _WITH.search(head[acc.end():]):
         return {"model": name, "mount": mount, "kind": "accessory", "flags": flags}
@@ -212,15 +305,15 @@ def classify(title):
         joined = spans and _WITH.search(norm[start:spans[-1][0]])
         if camera_first or joined:
             return {"model": name, "mount": mount, "kind": "kit", "flags": flags}
-    return {"model": name, "mount": mount, "kind": "lens", "flags": flags}
+    return {"model": name, "mount": mount, "kind": "lens" if name else "unclear", "flags": flags}
 
 
 def search_queries():
-    """Every Vinted search text of the list (Helios series first)."""
+    """Every Vinted search text of the list (Helios series first, the Canon FD searches last)."""
     out = list(HELIOS_QUERIES)
     for lens in LENSES:
         out += [q for q in lens.queries if q not in out]
-    return out
+    return out + [q for q in FD_QUERIES if q not in out]
 
 
 def model_names():
