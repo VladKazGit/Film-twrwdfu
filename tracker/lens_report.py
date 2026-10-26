@@ -231,8 +231,8 @@ def write(writer, cards, run, add_run=True):
     if writer.has(OLD_UNCLEAR_SHEET):
         writer.delete(OLD_UNCLEAR_SHEET)
     writer.replace(UNCLEAR_SHEET, unclear, links=True)
-    try:  # the rows as tall as row 1: the user sets its height for the photos in column A
-        height = writer.first_row_height(UNCLEAR_SHEET)
+    try:  # the rows as tall as row 2 (the first one under the header): the user sets it for the photos
+        height = writer.row_height(UNCLEAR_SHEET, 2)
         if height:
             writer.set_row_height(UNCLEAR_SHEET, height)
     except Exception as exc:

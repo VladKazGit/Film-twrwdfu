@@ -118,7 +118,7 @@ def main():
         assert backfill["rules"] == lenses.VERSION and backfill["done"] == lenses.search_queries(), "searched once more"
         assert r["run"]["search_pages"] == len(lenses.search_queries())
 
-    # 'Не разобрано': every row as tall as row 1 (the user sets it for the photos).
+    # 'Не разобрано': every row as tall as row 2 (the user sets it for the photos).
     from tracker import sheets
 
     class Sheet:
@@ -131,14 +131,14 @@ def main():
             return [Sheet()]
 
         def fetch_sheet_metadata(self, params=None):
-            assert params["ranges"] == [f"'{lens_report.UNCLEAR_SHEET}'!A1"]
+            assert params["ranges"] == [f"'{lens_report.UNCLEAR_SHEET}'!A2"]
             return {"sheets": [{"data": [{"rowMetadata": [{"pixelSize": 150}]}]}]}
 
         def batch_update(self, body):
             self.sent += body["requests"]
 
     writer = sheets.SheetWriter(Book())
-    assert writer.first_row_height(lens_report.UNCLEAR_SHEET) == 150
+    assert writer.row_height(lens_report.UNCLEAR_SHEET, 2) == 150
     writer.set_row_height(lens_report.UNCLEAR_SHEET, 150)
     dim = Book.sent[0]["updateDimensionProperties"]
     assert dim["properties"]["pixelSize"] == 150 and dim["range"]["startIndex"] == 1 and dim["range"]["endIndex"] == 40
