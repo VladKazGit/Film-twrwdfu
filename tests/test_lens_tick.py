@@ -92,6 +92,11 @@ def main():
         cards = {c["id"]: c for c in store.load_active().values()}
         assert cards[300]["kind"] == cards[301]["kind"] == "unclear" and cards[302]["model"] == "Vivitar 28mm f/2.8 (Canon FD)"
         assert cards[302]["mount"] == "Canon FD"
+        canon = lens_report.canon_rows([c for c in cards.values() if lens_report.is_lens(c)], "2026-10-27 08:00")
+        head = canon.index(lens_report.CANON_MODELS_HEADER)
+        assert canon[head + 1][:4] == ["Vivitar 28mm f/2.8 (Canon FD)", "Canon FD", 1, 20], canon[head + 1]
+        assert canon[-1][0] == "Vivitar 28mm f/2.8 (Canon FD)" and canon[-1][-1].endswith("/302"), "the offers below"
+        assert all(not r or r[0] != "Helios-44M-4" for r in canon), "M42 does not fit"
         items = {300: {"description": "Helios 44M-4 58mm, funziona", "uploaded_ago": "2 Wochen"}, 301: {"description": "alt"}}
         r = lens_tick.run_check(store, FakeClient({1: [rec(2000, "x", 1.0)]}, search, items), now="2026-10-27 09:45",
                                 labels={301: "Tokina 28mm f/2.8 (C/Y)"})
