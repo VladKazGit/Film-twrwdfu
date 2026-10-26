@@ -6,7 +6,7 @@ Started by tracker.lens_loop, 10 times a day (one right after another while the 
   has lenses of the list, as far as each check's budget goes; what it finds was listed before the
   tracker saw it ('preexisting': Vinted's upload date from the listing's page instead).
 - Item pages: every lens once (description, upload date, photo, status), then again by its age -
-  every check up to 3 days, daily up to 30 days, then every 5 days. A lens gone from Vinted is sold
+  every check up to 3 days, daily up to 2 weeks, then weekly. A lens gone from Vinted is sold
   (its page says 'Verkauft') or deleted.
 
 Only lenses of the list: a camera with the lens (the camera tracker counts it), a cap, hood, adapter,
@@ -33,7 +33,7 @@ NEW_PAGES_MAX = 6          # ~100 new lenses of every kind per check; 6 pages co
 SEARCH_PAGES_MAX = 10      # a search shows 960 listings at most
 ITEM_PAGES_MAX = 220       # item pages per check (new ones first)
 # Item page checks by the lens's age on Vinted: (up to days, minutes between checks)
-RECHECK = ((3, 90), (30, 24 * 60), (None, 5 * 24 * 60))
+RECHECK = ((3, 90), (14, 24 * 60), (None, 7 * 24 * 60))
 BACKFILL_DONE = 0
 BACKFILL_PENDING = 10       # exit code: the first collection goes on
 
