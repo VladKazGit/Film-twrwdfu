@@ -125,6 +125,16 @@ class SheetWriter:
             "range": {"sheetId": ws.id}, "cell": {"userEnteredFormat": {}},
             "fields": "userEnteredFormat.backgroundColor"}}]})
 
+    def first_row_height(self, title):
+        """The pixel height of row 1 (the header) - the user sets it, the data rows follow."""
+        meta = self.spreadsheet.fetch_sheet_metadata(params={
+            "ranges": [f"'{title}'!A1"], "fields": "sheets(data(rowMetadata(pixelSize)))"})
+        for sheet in meta.get("sheets", []):
+            for data in sheet.get("data") or []:
+                for row in data.get("rowMetadata") or []:
+                    return row.get("pixelSize")
+        return None
+
     def set_row_height(self, title, pixels):
         """Taller data rows (the header stays), e.g. room for photos."""
         ws = self._get(title)

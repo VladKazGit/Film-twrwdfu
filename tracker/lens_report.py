@@ -230,6 +230,12 @@ def write(writer, cards, run):
     if writer.has(OLD_UNCLEAR_SHEET):
         writer.delete(OLD_UNCLEAR_SHEET)
     writer.replace(UNCLEAR_SHEET, unclear, links=True)
+    try:  # the rows as tall as row 1: the user sets its height for the photos in column A
+        height = writer.first_row_height(UNCLEAR_SHEET)
+        if height:
+            writer.set_row_height(UNCLEAR_SHEET, height)
+    except Exception as exc:
+        print(f"lens sheets: row heights not set: {type(exc).__name__}")
     writer.replace(SALES_SHEET, sales_rows(cards, now), links=True)
     writer.replace(SUMMARY_SHEET, summary_rows(cards, now), links=True)
     writer.replace(MODELS_SHEET, model_rows())
