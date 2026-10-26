@@ -50,9 +50,10 @@ def google_sa_info():
     return info
 
 
-def sheet_id():
-    """Spreadsheet key. Accepts a full docs.google.com URL too."""
-    value = require("SHEET_ID")
+def sheet_id(name="SHEET_ID"):
+    """Spreadsheet key from the variable `name` (LENS_SHEET_ID: the lens sheet). Accepts a full
+    docs.google.com URL too."""
+    value = require(name)
     match = re.search(r"/d/([A-Za-z0-9_-]+)", value)
     return match.group(1) if match else value
 
