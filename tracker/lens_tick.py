@@ -232,13 +232,13 @@ def run_check(store, client, now=None, labels=None, comments=None):
             stats["item_pages"] += 1
             status = apply_page(card, page, now)
             stats[status] += status in ("sold", "deleted", "reserved", "hidden")
-            if card.get("kind") == "unclear" and card.get("description") and card.get("model_source") != "manual":
+            if card.get("description") and card.get("model_source") != "manual":
                 cls = lenses.classify(card["title"], card["description"])  # the description may tell the model
-                if cls["kind"] == "lens":
+                if cls["kind"] == "lens" and card.get("kind") == "unclear":
                     card.update(model=cls["model"], kind="lens", mount=cls["mount"], model_source="description",
                                 unclear_reason=None)
                     stats["by_description"] += 1
-                elif cls["kind"] != "unclear":  # another lens of the maker, an adapter
+                elif cls["kind"] not in ("lens", "unclear"):  # another lens of the maker, an adapter, a case
                     drop(cards, store, state, card["id"])
                     stats["out_by_description"] += 1
         stats["deferred"] += max(0, len(queue) - ITEM_PAGES_MAX)
@@ -300,7 +300,7 @@ def log_line(run):
             f" deferred {run['deferred']}) | pages: catalog {run['catalog_pages']}, search {run['search_pages']}"
             f" | skipped kits {run['skipped_kits']}, accessories {run['skipped_accessories']}"
             f" | open {run['open']} of {run['total']}, unclear {run['unclear']}, by description {run['by_description']}"
-            f" (out: other lenses, adapters {run.get('out_by_description', 0)}),"
+            f" (out: other lenses, adapters, cases {run.get('out_by_description', 0)}),"
             f" labelled {run['labelled']}, dropped {run['dropped']} | first collection {'done' if run['backfill'] == 'готов' else 'running'}"
             f" | requests {run['requests']} | errors: {len(run['errors']) or 'none'}")
 

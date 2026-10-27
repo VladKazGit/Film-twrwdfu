@@ -69,6 +69,12 @@ CASES = [
     ("Obiettivo canon fd 24mm vintage f 2.8 con adattatore", "Canon FD 24mm f/2.8", "lens"),
     # a zoom range with '~' is not a focal length of the list
     ("Tokina AT-X 16~28mm F2.8 PRO FX", None, None),
+    # hoods, caps, cases, filters, manuals without a lens of the list: wherever the word stands
+    ("Minolta D57KB pare soleil metal", None, "accessory"),
+    ("Mode emploi tamron adaptall-2", None, "accessory"),
+    ("Canon FD Libretto Obiettivi Vintage '80", None, "accessory"),
+    ("Vivitar lens case lot van 3 fotografie", None, "accessory"),
+    ("Set original Canon FD  Camera Body Cap + Rear lens cap", None, "accessory"),
 ]
 
 
@@ -97,6 +103,17 @@ def main():
     assert kind("Tamron Adaptall-2 pour Canon FD", "Je vends une monture/adaptateur Tamron Adaptall-2") == "accessory"
     assert kind("Obiettivo Tokina", "Obiettivo Tokina vintage, meccanico, con adattatore per canon") == "unclear"
     assert kind("Rare Carl Zeiss Jena Pancolar", "Lens with Thorium. Use with adapter only") == "unclear"
+    # The description says it is a thing for the lens: out, even with a model in the title; a thing that
+    # comes with the lens stays.
+    assert kind("Canon FD 35-70mm f4 AF", "Custodia per obiettivo Canon FD 35-70mm f/4 AF") == "accessory"
+    assert kind("Elmarit R 2.8 28mm", "Paraluce per Elmarit R 2.8 28mm Leitz Wetzlar Germany") == "accessory"
+    assert kind("Bague extension macro Minolta Rokkor 50mm", "Bague tube adaptateur macro pour Minolta Rokkor") \
+        == "accessory"
+    assert kind("Obiettivo 50mm FD", "Compreso paraluce") == "lens"
+    assert kind("Helios 44-2 58mm f/2", "Adapter für Sony E inklusive. Schönes Objektiv") == "lens"
+    assert kind("Super Takumar 50mm 1.4", "Deckel vorne und hinten vorhanden") == "lens"
+    assert kind("Objektiv 50 mm SMC Pentax-M 1:1,7", "Ohne Deckel") == "lens"
+    assert kind("Objectif canon FD 1.8/50 mm", "Avec sa boîte d'origine") == "lens"
     assert lenses.classify("Helios 44-2 M42 mit Adapter Sony E")["mount"] == "M42"
     assert lenses.classify("Vivitar 200mm f/3.5 Canon FD")["mount"] == "Canon FD", "the title's mount, not the model's"
     assert len(lenses.model_names()) > 60 and "Helios-44-2" in lenses.model_names()

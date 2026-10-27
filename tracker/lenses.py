@@ -12,7 +12,7 @@ from . import markers, models
 
 
 
-VERSION = 4  # the rules changed: the lens check classifies every card again
+VERSION = 5  # the rules changed: the lens check classifies every card again
 SEARCH_VERSION = 3  # changed: the searches pass once more too (rules that take what they used to skip)
 
 
@@ -181,27 +181,52 @@ def mount_of(norm):
 
 
 # Things for a lens, not the lens: before the lens name, without a 'with' word between.
-_FOR_LENS = re.compile(
-    r"adapter|adaptor|adaptador|adattator|adaptateur|bague (?:d.)?adapta|speed ?booster|\bdeckel|\bkappe|\bcaps?\b|bouchon|\btappo"
+_ADAPTER = r"adapt(?:er|or|ador|ateur)|adattator|bague (?:d.)?adapta|speed ?booster|focal reducer"
+_CAPS_HOODS_CASES = (
+    r"\bdeckel|\bkappe|\bcaps?\b|bouchon|\btappo"
     r"|gegenlichtblende|streulichtblende|sonnenblende|lens hood|\bhood\b|paraluce|pare[\s\-]?soleil|zonnekap"
-    r"|\bfilter|\bfiltre|\bfiltro|\btasche|\bcase\b|\betui|custodia|\bkocher|\bbeutel|\bpouch"
-    r"|" + models._marker_words(markers.BOX)[2:-2] + "|" + models._marker_words(markers.MANUAL)[2:-2]
-    + "|" + models._marker_words(markers.PRINT)[2:-2])
+    r"|\bfilter|\bfiltre|\bfiltro|\btasche|\bcase\b|\betui|custodia|\bkocher|\bbeutel|\bpouch")
+_PAPER = (models._marker_words(markers.MANUAL)[2:-2] + "|" + models._marker_words(markers.PRINT)[2:-2]
+          + r"|\bmode\s(?:d.\s?)?emploi\b")
+_FOR_LENS = re.compile(_ADAPTER + "|" + _CAPS_HOODS_CASES + "|" + models._marker_words(markers.BOX)[2:-2]
+                       + "|" + _PAPER)
 # 'With' for lenses: not the one-letter 'e' / 'et' of the camera rules ('Adapter M42 Sony E für Helios 44-2').
 _WITH = re.compile(r"\b(?:mit|with|avec|con|met|inkl|incl|inklusive|including|plus|com|med|und|and)\b|[+&]")
 _CONVERTER = re.compile(r"tele[\s\-]?(?:konverter|converter|convertisseur|convertitore|converteur)|\bextender\b"
                         r"|\bconverter\b|\bdoubler\b|\bmacro[\s\-]?(?:converter|adapter)")
-# An adapter (or a lens mount) without a lens of the list: its first adapter word has neither a 'with'
-# word nor a lens word before it ('Urth FD-E Adapter - Canon FD to Sony E', 'Tamron Adaptall-2 Adapter
-# for Minolta'; not 'Helios lens with a Sony E-mount adapter', 'Tokina lens minolta adaptor').
-_ADAPTER = re.compile(r"adapt(?:er|or|ador|ateur)|adattator|bague (?:d.)?adapta|speed ?booster|focal reducer")
-_LENS_WORD = re.compile(r"\blens(?:es)?\b(?![\s\-]*adapt)|\blent[ei]\b|obiettiv|objekti|objecti|objetiv|ottic|optik|zoom")
+# A thing for lenses without a lens of the list in the title: its first thing word (not a box: after the
+# lens name it is the lens's own) has neither a 'with' word nor a lens word before it ('Urth FD-E Adapter
+# - Canon FD to Sony E', 'Minolta D57KB pare soleil metal', 'Canon FD Libretto Obiettivi'; not 'Helios
+# lens with a Sony E-mount adapter', 'Tokina lens minolta adaptor').
+_THING = re.compile(_ADAPTER + "|" + _CAPS_HOODS_CASES + "|" + _PAPER)
+_ADAPTER_RX = re.compile(_ADAPTER)
+_LENS_WORD = re.compile(r"\blens(?:es)?\b(?![\s\-]*(?:adapt|case|cap|hood|filter|pouch|bag|tube))|\blent[ei]\b"
+                        r"|obiettiv|objekti|objecti|objetiv|ottic|optik|zoom")
 
 
-def _adapter(text):
-    m = _ADAPTER.search(text)
-    return bool(m) and not _WITH.search(text[:m.start()]) and not any(
-        w.start() < m.start() for w in _LENS_WORD.finditer(text))
+def _thing_first(text, rx=_THING):
+    """The first match of rx in text, when no 'with' word and no lens word come before it."""
+    m = rx.search(text)
+    if m and not _WITH.search(text[:m.start()]) and not any(w.start() < m.start() for w in _LENS_WORD.finditer(text)):
+        return m
+    return None
+
+
+# A description that says the listing is a thing for the lens: it starts (within its first three words)
+# with a case, hood, cap, filter, adapter or box 'for' a lens ('Custodia per obiettivo Canon FD 35-70mm',
+# 'Paraluce per Elmarit R 28mm'), or with a manual or booklet ('Mode d'emploi objectif Tamron'); not
+# when it says the thing comes with the lens ('Adapter für Sony E inklusive', 'Compreso paraluce').
+_FOR_WORDS = {"per", "fur", "fuer", "for", "pour", "voor", "para", "dla", "do", "til", "pro"}
+_INCLUDED = re.compile(r"inklusive|inkl\b|inbegriffen|dabei|inclus[oa]?|included|compris|compres[oa]|incluid[oa]")
+_PAPER_RX = re.compile(_PAPER)
+
+
+def _thing_by_description(description):
+    text = models.normalize(description[:200]).replace("k&f", "kxf")
+    m = _thing_first(text, _FOR_LENS)
+    if not m or len(text[:m.start()].split()) > 2 or _INCLUDED.search(text) or _WITH.search(text):
+        return False
+    return bool(_PAPER_RX.match(text, m.start())) or bool(_FOR_WORDS & set(text[m.end():].split()[:3]))
 
 
 _SET = re.compile(models._LOT.pattern + r"|\b\d+\s?(?:obiettivi|objektive|objectifs|lenses|lenzen|objetivos|lentes)\b")
@@ -353,10 +378,14 @@ def classify(title, description=None):
     acc = _FOR_LENS.search(head)
     if acc and not _WITH.search(head[acc.end():]):
         return {"model": name, "mount": mount, "kind": "accessory", "flags": flags, "reason": None}
-    # no model: an adapter by its title, or by its description ('Adattatore per montare gli obiettivi...')
-    if not name and (_adapter(norm) or description and not _ADAPTER.search(norm) and not _LENS_WORD.search(norm)
-                     and _adapter(models.normalize(description[:200]).replace("k&f", "kxf"))):
+    # no model: a thing for lenses by its title, or an adapter by its description ('Adattatore per montare
+    # gli obiettivi...')
+    if not name and (_thing_first(norm) or description and not _THING.search(norm) and not _LENS_WORD.search(norm)
+                     and _thing_first(models.normalize(description[:200]).replace("k&f", "kxf"), _ADAPTER_RX)):
         return {"model": None, "mount": mount, "kind": "accessory", "flags": flags, "reason": None}
+    # the description says it is a thing for the lens ('Custodia per obiettivo Canon FD 35-70mm f/4 AF')
+    if description and _thing_by_description(description):
+        return {"model": name, "mount": mount, "kind": "accessory", "flags": flags, "reason": None}
     cam = models.classify(title)
     if cam["model"] and not {"accessory?", "digital?", "compact?"} & set(cam["flags"]):
         spans = models.find_models(title)

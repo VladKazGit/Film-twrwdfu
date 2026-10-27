@@ -80,6 +80,11 @@ def main():
         assert any(r[0] == "Volna-3 80mm f/2.8" and r[2] == 0 for r in summary[3:]), "every model of the list shows"
         items_rows = lens_report.item_rows(r3["cards"], "2026-10-27 11:30")
         assert items_rows[0] == lens_report.ITEMS_HEADER and len(items_rows) == 4
+        # newest listings first (by id); 'да' for a new listing of the last 12 hours, not for the first collection's
+        at, new = lens_report.ITEMS_HEADER.index("id"), lens_report.ITEMS_HEADER.index(lens_report.NEW_HEADER)
+        assert [r[at] for r in items_rows[1:]] == [1001, 103, 100] and [r[new] for r in items_rows[1:]] == ["да", "", ""]
+        later = lens_report.item_rows(r3["cards"], "2026-10-27 21:46")
+        assert later[1][at] == 1001 and later[1][new] == "", "12 hours later it is not new"
         assert len(lens_report.model_rows()) > 60 and lens_report.runs_row(r3["run"])[0] == "2026-10-27 11:30"
 
     # A word of the list without details: 'Без деталей', unless its description tells the model; the
@@ -92,20 +97,26 @@ def main():
         cards = {c["id"]: c for c in store.load_active().values()}
         assert cards[300]["kind"] == cards[301]["kind"] == "unclear" and cards[302]["model"] == "Vivitar 28mm f/2.8 (Canon FD)"
         assert cards[302]["mount"] == "Canon FD"
-        canon = lens_report.canon_rows([c for c in cards.values() if lens_report.is_lens(c)])
+        canon = lens_report.canon_rows([c for c in cards.values() if lens_report.is_lens(c)], "2026-10-27 08:00")
         assert canon[0] == lens_report.CANON_HEADER and len(canon) == 2, "only the lenses on sale now"
+        link, new = lens_report.CANON_HEADER.index("Ссылка"), lens_report.CANON_HEADER.index(lens_report.NEW_HEADER)
         assert canon[1][:5] == ["Vivitar 28mm f/2.8 (Canon FD)", "Canon FD", "Canon TX, AV-1, FTb QL",
-                                "Vivitar 28mm f/2.8 Canon FD", 20.0] and canon[1][-1].endswith("/302"), canon[1]
-        assert not lens_report.canon_rows([dict(cards[302], status="sold")])[1:], "a sold one is not there"
+                                "Vivitar 28mm f/2.8 Canon FD", 20.0] and canon[1][link].endswith("/302"), canon[1]
+        assert canon[1][new] == "", "found by the first collection: not new"
+        assert not lens_report.canon_rows([dict(cards[302], status="sold")], "2026-10-27 08:00")[1:], "a sold one is not"
         items = {300: {"description": "Helios 44M-4 58mm, funziona", "uploaded_ago": "2 Wochen"}, 301: {"description": "alt"},
-                 303: {"description": "Tamron AF 70-300mm f/4-5.6 Di LD Macro"}}
-        r = lens_tick.run_check(store, FakeClient({1: [rec(2000, "x", 1.0)]}, search, items), now="2026-10-27 09:45",
+                 303: {"description": "Tamron AF 70-300mm f/4-5.6 Di LD Macro"},
+                 2001: {"description": "Custodia per obiettivo Canon FD 35-70mm f/4 AF"}}
+        catalog = {1: [rec(2001, "Canon FD 35-70mm f4 AF", 20.0), rec(2000, "x", 1.0)]}
+        r = lens_tick.run_check(store, FakeClient(catalog, search, items), now="2026-10-27 09:45",
                                 labels={301: "Tokina 28mm f/2.8 (C/Y)"})
         cards = {c["id"]: c for c in r["cards"]}
         assert cards[300]["model"] == "Helios-44M-4" and cards[300]["kind"] == "lens" and r["run"]["by_description"] == 1
-        # another lens of the maker by its description: out of the data, and a search does not card it again
-        assert 303 not in cards and 303 not in store.load_active() and r["run"]["out_by_description"] == 1
-        assert store.load_state()["other_ids"] == [303]
+        # another lens of the maker, or a case for a lens, by its description: out of the data, and a search
+        # does not card it again
+        assert 303 not in cards and 303 not in store.load_active() and r["run"]["out_by_description"] == 2, r["run"]
+        assert r["run"]["new"] == 1 and 2001 not in cards and 2001 not in store.load_active()
+        assert sorted(store.load_state()["other_ids"]) == [303, 2001]
         stats = lens_tick.Counter()
         lens_tick._take(search[("helios 44", 1)][3:], cards, "2026-10-27 09:45", None, ["preexisting"], stats, {303})
         assert 303 not in cards and not stats["found"]
@@ -161,6 +172,36 @@ def main():
             return Unclear()
 
     assert lens_report.unclear_comments(Writer()) == {300: "проверить фото", 301: ""}
+
+    # New rows light green 3: the rule is added once per sheet (a sheet that has it gets none).
+    class Lens:
+        def __init__(self, sheet_id, title):
+            self.id, self.title, self.row_count = sheet_id, title, 10
+
+    class LensBook:
+        sent = []
+
+        def worksheets(self):
+            return [Lens(1, lens_report.ITEMS_SHEET), Lens(2, lens_report.CANON_SHEET)]
+
+        def fetch_sheet_metadata(self, params=None):
+            letter = sheets.column_letter(lens_report.ITEMS_HEADER.index(lens_report.NEW_HEADER))
+            have = {"booleanRule": {"condition": {"values": [{"userEnteredValue": f'=${letter}2="да"'}]}}}
+            return {"sheets": [{"properties": {"title": lens_report.ITEMS_SHEET}, "conditionalFormats": [have]},
+                               {"properties": {"title": lens_report.CANON_SHEET}}]}
+
+        def batch_update(self, body):
+            self.sent += body["requests"]
+
+    lens_report.color_new_rows(sheets.SheetWriter(LensBook()),
+                               {lens_report.ITEMS_SHEET: lens_report.ITEMS_HEADER,
+                                lens_report.CANON_SHEET: lens_report.CANON_HEADER})
+    assert len(LensBook.sent) == 1, LensBook.sent
+    rule = LensBook.sent[0]["addConditionalFormatRule"]["rule"]
+    letter = sheets.column_letter(lens_report.CANON_HEADER.index(lens_report.NEW_HEADER))
+    assert rule["ranges"][0]["sheetId"] == 2 and rule["ranges"][0]["endColumnIndex"] == len(lens_report.CANON_HEADER)
+    assert rule["booleanRule"]["condition"]["values"][0]["userEnteredValue"] == f'=${letter}2="да"'
+    assert rule["booleanRule"]["format"]["backgroundColor"] == sheets.LIGHT_GREEN_3
 
     writer = sheets.SheetWriter(Book())
     assert writer.row_height(lens_report.UNCLEAR_SHEET, 2) == 150
