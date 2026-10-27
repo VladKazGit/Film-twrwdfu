@@ -380,7 +380,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 47
+VERSION = 48
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -756,7 +756,8 @@ _STRONG_ACCESSORY = re.compile(f"{_STRONG_ACCESSORY.pattern}|{_marker_words(mark
 _LEAD_ACCESSORY = re.compile(f"{_LEAD_ACCESSORY.pattern}|{_marker_words(markers.PRINT)}|{_marker_words(markers.BOX)}")
 _BOX = re.compile(f"{_BOX.pattern}|{_marker_words(markers.BOX)}")
 _ACCESSORY_WORDS = re.compile(
-    f"{_ACCESSORY_WORDS.pattern}|{_marker_words(markers.LEVEL)}|{_marker_words(markers.TUBES)}")
+    f"{_ACCESSORY_WORDS.pattern}|{_marker_words(markers.LEVEL)}|{_marker_words(markers.TUBES)}"
+    f"|{_marker_words(markers.ADAPTER)}")
 _FOR_CAMERA = re.compile(f"{_FOR_CAMERA.pattern}|{_marker_words(markers.FOR_CAMERA)}")
 _NOT_SOLD_CAMERA = re.compile(f"{_NOT_SOLD_CAMERA.pattern}|{_marker_words(markers.NOT_SOLD)}")
 _WITH_WORDS = re.compile(f"{_WITH_WORDS.pattern}|{_marker_words(markers.WITH)}")

@@ -223,6 +223,35 @@ PARTS = {
     "sv": ["bottenplatta", "topplock", "baklucka", "bakstycke"],
 }
 
+# Mount adapters and adapter rings ('Anello adattatore URTH Canon EF-FD': EF to FD, not the EF
+# camera): an accessory word.
+ADAPTER = {
+    "bg": ["адаптер", "преходник"],
+    "cs": ["adaptér", "redukce"],
+    "da": ["adapter", "adapterring"],
+    "de": ["Adapter", "Adapterring", "Objektivadapter", "Bajonettadapter"],
+    "el": ["αντάπτορας", "προσαρμογέας"],
+    "en": ["adapter", "adaptor", "mount adapter", "adapter ring", "lens adapter"],
+    "es": ["adaptador", "anillo adaptador"],
+    "et": ["adapter"],
+    "fi": ["adapteri", "sovitin"],
+    "fr": ["adaptateur", "bague d'adaptation", "bague adaptatrice"],
+    "ga": ["cuibheoir"],
+    "hr": ["adapter", "prilagodnik"],
+    "hu": ["adapter", "átalakító"],
+    "it": ["adattatore", "anello adattatore"],
+    "lt": ["adapteris"],
+    "lv": ["adapteris"],
+    "mt": ["adapter"],
+    "nl": ["adapter", "adapterring", "verloopring"],
+    "pl": ["adapter", "przejściówka", "redukcja"],
+    "pt": ["adaptador", "anel adaptador"],
+    "ro": ["adaptor", "inel adaptor"],
+    "sk": ["adaptér", "redukcia"],
+    "sl": ["adapter", "prilagojevalnik"],
+    "sv": ["adapter", "adapterring"],
+}
+
 # Made for a camera ('Livella per fotocamera'): in a title without a model and without a camera
 # word before it, the thing is for a camera, not one.
 FOR_CAMERA = {
@@ -265,5 +294,5 @@ WITH = {
 KINDS = {  # name (Russian, for people) -> words by language
     "инструкция": MANUAL, "журнал / книга / каталог": PRINT, "коробка": BOX,
     "камера не продаётся / пустая коробка": NOT_SOLD, "уровень": LEVEL, "макрокольца / удлинительные трубки": TUBES,
-    "запчасти корпуса": PARTS, "«для камеры»": FOR_CAMERA,
+    "запчасти корпуса": PARTS, "адаптер": ADAPTER, "«для камеры»": FOR_CAMERA,
 }
