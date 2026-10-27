@@ -231,9 +231,10 @@ def main():
             return [(r["index"], r["rule"]["booleanRule"]["condition"]["values"][0]["userEnteredValue"])
                     for r in rules if r["rule"]["booleanRule"]["format"]["backgroundColor"] == color]
         L = sheets.column_letter
-        assert added(sheets.LIGHT_BLUE_3) == [(1, f'=${L(n)}2="да"'), (1, f'=${L(n + 1)}2="да"')]
+        assert added(sheets.LIGHT_BLUE_3) == [(1, f'=${L(n + 1)}2="да"'), (1, f'=${L(n + 1)}2="да"')]
         assert [f for f in added(sheets.LIGHT_GREEN_3) if f[1].startswith("=")] == [
-            (1, f'=${L(n + 1)}2="да"'), (1, f'=${L(n + 2)}2="да"')], "3-hour rows: light green 3"
+            (1, f'=${L(n + 2)}2="да"'), (1, f'=${L(n + 2)}2="да"')], "3-hour rows: light green 3"
+        assert updates["list_sale_price_v1"]
         list_rules = ss.rules[ss.sheets["Список"].id]
         assert [r["booleanRule"]["format"]["backgroundColor"] for r in list_rules] == [
             sheets.LIGHT_GREEN_3, sheets.LIGHT_GREEN_3, sheets.LIGHT_BLUE_3], "status, 3 h above 12 h"
@@ -244,7 +245,23 @@ def main():
         assert {r[0] for r in cheap_rows[1:] if r[-2] == "да"} == {1021} and {r[0] for r in cheap_rows[1:] if r[-1] == "да"} == {1021}
         assert 400 in {r[0] for r in ss.sheets["Список"].rows[1:]} and "https://www.vinted.de/items/400" in {r[-1] for r in ss.sheets["Продажи"].rows[1:]}
         list_rows = ss.sheets["Список"].rows
-        assert list_rows[0][-2:] == [report.NEW_HEADER, report.FRESH_HEADER] and len(list_rows[0]) == n + 2
+        assert list_rows[0][-2:] == [report.NEW_HEADER, report.FRESH_HEADER] and len(list_rows[0]) == n + 3
+        at = list_rows[0].index("Сохранений") + 1
+        assert list_rows[0][at] == sheets.MODELS_SALE_PRICE_HEADER, "the mean sale price right after 'Сохранений'"
+        price_400 = next(r[at] for r in list_rows[1:] if r[0] == 400)
+        model_400 = next(i["model"] for i in r5["items"] if i["id"] == 400)
+        assert price_400 == report.model_sale_prices(r5["items"]).get(model_400, sheets.MODELS_NO_PRICE), price_400
+        # The row colours made before the column follow the flags one column right.
+        ss2 = FakeSpreadsheet()
+        ss2.sheets["Список"] = FakeWorksheet("Список")
+        w2 = sheets.SheetWriter(ss2)
+        w2.color_new_rows("Список", n, n + 2, 0, sheets.LIGHT_BLUE_3)
+        w2.color_new_rows("Список", n + 1, n + 2, 0, sheets.LIGHT_GREEN_3)
+        assert w2.retarget_row_rules("Список", {n: n + 1, n + 1: n + 2}, n + 3) == 2
+        moved = ss2.rules[ss2.sheets["Список"].id]
+        assert sorted(r["booleanRule"]["condition"]["values"][0]["userEnteredValue"] for r in moved) == sorted(
+            [f'=${L(n + 1)}2="да"', f'=${L(n + 2)}2="да"'])
+        assert all(r["ranges"][0]["endColumnIndex"] == n + 3 for r in moved)
         marked = {r[0] for r in list_rows[1:] if r[-2] == "да"}
         assert marked == {1020, 1021}, marked  # new listings first seen 17.10 07:07; bumped 400 and older ones are not
         assert {r[0] for r in list_rows[1:] if r[-1] == "да"} == {1020, 1021}, "07:07 is within 3 h of the 07:07 tick"
@@ -437,7 +454,7 @@ def main():
         # 'До 20 €' follows 'Модели': the user deletes Zenit E, it leaves 'До 20 €' and is not re-added.
         models_ws = ss.sheets["Модели"]
         models_ws.rows = [r for r in models_ws.rows if r[0] != "Zenit E"]
-        state_flags = {"runs_header_v5": True, "runs_newest_first": True, "review_colors_cleared_v1": True,
+        state_flags = {"runs_header_v5": True, "runs_newest_first": True, "review_colors_cleared_v1": True, "list_sale_price_v1": True,
                        "cheap_ids": updates["cheap_ids"], "models_offered": updates["models_offered"],
                        "status_colors": updates["status_colors"], "new_rows_colors": updates["new_rows_colors"],
                        "fresh_rows_colors": updates["fresh_rows_colors"], "fresh_rows_green": True}
@@ -449,7 +466,7 @@ def main():
         models_ws.rows.append(["зенит-е"])
         offered = [m for m in updates["models_offered"] if m != "Zenit KM"]
         models_ws.rows = [r for r in models_ws.rows if r[0] != "Zenit KM"]
-        upd = tick.write_sheets(writer, r5, {"runs_header_v5": True, "runs_newest_first": True, "review_colors_cleared_v1": True,
+        upd = tick.write_sheets(writer, r5, {"runs_header_v5": True, "runs_newest_first": True, "review_colors_cleared_v1": True, "list_sale_price_v1": True,
                                              "cheap_ids": [400], "models_offered": offered,
                                              "status_colors": updates["status_colors"], "new_rows_color": True,
                                              "fresh_rows_green": True})

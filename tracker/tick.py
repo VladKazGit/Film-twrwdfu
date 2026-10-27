@@ -1151,8 +1151,14 @@ def write_sheets(writer, result, state_flags):
 
     new_since = clock.stamp(clock.parse(result["run"]["at"]) - timedelta(hours=NEW_ROWS_HOURS))
     fresh_since = clock.stamp(clock.parse(result["run"]["at"]) - timedelta(hours=FRESH_ROWS_HOURS))
-    writer.replace(sheets.LIST_SHEET, report.item_rows([i for i in items if i.get("group") == "list"],
-                                                       new_since=new_since, fresh_since=fresh_since), links=True)
+    sale = report.model_sale_prices(items)
+    # 'Список': the model's mean sale price right after 'Сохранений' (the flag columns move one right)
+    list_items = [i for i in items if i.get("group") == "list"]
+    list_rows = report.item_rows(list_items, new_since=new_since, fresh_since=fresh_since)
+    price_of = {i["id"]: sale.get(i["model"], sheets.MODELS_NO_PRICE) for i in list_items}
+    list_rows = report.insert_column(list_rows, "Сохранений", sheets.MODELS_SALE_PRICE_HEADER,
+                                     [price_of[r[0]] for r in list_rows[1:]])
+    writer.replace(sheets.LIST_SHEET, list_rows, links=True)
     candidates = report.cheap_cameras(items, sheets.CHEAP_MAX_PRICE)
     cheap = [i for i in candidates if i.get("model") and sheets.model_key(i["model"]) in allowed]
     print(f"sheets: cheap sheet {len(cheap)} of {len(candidates)} list cameras at <= 20 EUR"
@@ -1160,7 +1166,6 @@ def write_sheets(writer, result, state_flags):
     # 'До 20 €' is mostly old cheap cameras found by search: mark what entered the sheet in 12 h.
     # The model's mean sale price right after 'Цена старт' (where 'Группа' was: all are 'Список'), the
     # link right after 'Сохранений': the status column and the flag columns stay where they were.
-    sale = report.model_sale_prices(items)
     cheap_rows = report.item_rows(cheap, new_since=new_since, new_old_listings=True, fresh_since=fresh_since)
     price_of = {i["id"]: sale.get(i["model"], sheets.MODELS_NO_PRICE) for i in cheap}
     cheap_rows = report.insert_column(cheap_rows, "Цена старт", sheets.MODELS_SALE_PRICE_HEADER,
@@ -1254,8 +1259,14 @@ def write_sheets(writer, result, state_flags):
     yellow = set(state_flags.get("fresh_rows_colors") or [])
     green = set(updates.get("status_colors") or colored)
     n = len(report.ITEM_HEADER)
-    # 12 h flag, 3 h flag; 'До 20 €' has one column more (the mean sale price)
-    columns = {sheets.LIST_SHEET: (n, n + 1), sheets.CHEAP_SHEET: (n + 1, n + 2)}
+    # 12 h flag, 3 h flag; both sheets have one column more than ITEM_HEADER (the mean sale price)
+    columns = {sheets.LIST_SHEET: (n + 1, n + 2), sheets.CHEAP_SHEET: (n + 1, n + 2)}
+    if not state_flags.get("list_sale_price_v1") and writer.has(sheets.LIST_SHEET):
+        try:  # 'Список' got the sale price column: its row colours follow the flags one column right
+            writer.retarget_row_rules(sheets.LIST_SHEET, {n: n + 1, n + 1: n + 2}, n + 3)
+            updates["list_sale_price_v1"] = True
+        except Exception as exc:
+            print(f"sheets: list row colours not moved: {type(exc).__name__}: {env.redact(exc)}")
     for title, (col_12h, col_3h) in columns.items():
         if not writer.has(title):
             continue

@@ -166,6 +166,31 @@ class SheetWriter:
                                           "values": [{"userEnteredValue": f'=${letter}2="да"'}]},
                             "format": {"backgroundColor": color}}}}}]})
 
+    def retarget_row_rules(self, title, moves, width):
+        """Point the row-colour rules of a sheet ('=$AA2="да"') at moved flag columns: moves = {old
+        column index: new one}; the rules' range becomes `width` columns. Returns how many changed."""
+        meta = self.spreadsheet.fetch_sheet_metadata(
+            params={"fields": "sheets(properties(sheetId,title),conditionalFormats)"})
+        letters = {column_letter(old): column_letter(new) for old, new in moves.items()}
+        requests = []
+        for sheet in meta.get("sheets", []):
+            if sheet["properties"]["title"] != title:
+                continue
+            for index, rule in enumerate(sheet.get("conditionalFormats", [])):
+                boolean = rule.get("booleanRule") or {}
+                values = boolean.get("condition", {}).get("values") or [{}]
+                found = re.fullmatch(r'=\$([A-Z]+)2="да"', values[0].get("userEnteredValue", ""))
+                if not found or found.group(1) not in letters:
+                    continue
+                ranges = [dict(r, endColumnIndex=width) for r in rule["ranges"]]
+                condition = dict(boolean["condition"], values=[{"userEnteredValue": f'=${letters[found.group(1)]}2="да"'}])
+                requests.append({"updateConditionalFormatRule": {
+                    "index": index, "sheetId": sheet["properties"]["sheetId"],
+                    "rule": {"ranges": ranges, "booleanRule": dict(boolean, condition=condition)}}})
+        if requests:
+            self.spreadsheet.batch_update({"requests": requests})
+        return len(requests)
+
     def recolor_rules(self, titles, old, new):
         """Change the background of existing conditional-format rules from `old` to `new`.
         Returns how many rules changed."""
