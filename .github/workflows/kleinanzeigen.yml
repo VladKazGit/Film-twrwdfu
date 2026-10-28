@@ -1,7 +1,7 @@
 name: kleinanzeigen
 
 # The Kleinanzeigen collector (tracker.ka_loop): its own chain of runs on its own machine, like the
-# lenses'. A check every ~20 minutes in the 07:00-00:00 Berlin window; while the first collection runs,
+# lenses'. A check every ~30 minutes in the 07:00-00:00 Berlin window; while the first collection runs,
 # one check right after another. Start: Run workflow by hand. Stop: Disable workflow (after the current
 # run) and cancel the run (at once).
 on:

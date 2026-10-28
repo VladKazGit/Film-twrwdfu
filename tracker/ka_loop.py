@@ -1,5 +1,5 @@
 """Kleinanzeigen checks for one GitHub Actions run (up to ~5.5 hours): a chain of its own, like the
-lenses' (tracker.lens_loop), on its own machine. A check every ~20 minutes (a few minutes either way, at
+lenses' (tracker.lens_loop), on its own machine. A check every ~30 minutes (a few minutes either way, at
 random) in the 07:00-00:00 Berlin window; while the first collection runs (a check exits with code 10),
 one check right after another. Before each check the latest code from main is fetched; right before its
 time budget ends the workflow starts the next run and hands it the time of its first check
@@ -19,8 +19,8 @@ from . import env
 from .loop import FAILED_IN_ROW_MAX, _sleep_until, _update_code, seconds_until
 
 WINDOW_START_HOUR = 7
-GAP_MIN = 20
-JITTER_MIN = 3
+GAP_MIN = 30
+JITTER_MIN = 4
 FIRST_CHECK_MIN = (3, 12)    # the day's first check: 07:03-07:12
 BACKFILL_PAUSE_S = 60        # between checks while the first collection runs
 BUDGET_MIN = 330             # a 6-hour job limit minus one check and setup

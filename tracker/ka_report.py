@@ -6,14 +6,16 @@ Kleinanzeigen spreadsheet (secret KA_SHEET_ID): 'Список' (every camera, ne
 Comparison spreadsheet (secret COMPARE_SHEET_ID): 'Сравнение' - per model, Vinted next to
 Kleinanzeigen: listings and their mean price, sales (taken down on Kleinanzeigen) and their mean
 price, how long they were on sale. Both without placeholder prices, flagged listings and bundles.
+By brand: Canon, Nikon, Zenit first, then the others A-Z; within a brand the most listings first.
 """
 import statistics
 
-from . import clock, report, sheets
+from . import clock, models, report, sheets
 from .store import DataStore
 
 LIST_SHEET, REMOVED_SHEET, SUMMARY_SHEET, RUNS_SHEET = "Список", "Снятые", "Сводка", "Запуски"
 COMPARE_SHEET = "Сравнение"
+COMPARE_BRANDS = ["Canon", "Nikon", "Zenit"]  # first in 'Сравнение', the other brands after them A-Z
 NEW_HEADER = "Новая (12 ч)"
 NEW_HOURS = 12
 FAST_MINUTES = 30
@@ -221,9 +223,10 @@ def compare_rows(ka_cards, vinted_items, now):
     rows = [COMPARE_HEADER]
     names = set(ka) | set(vinted)
 
-    def order(name):
-        both = name in ka and name in vinted
-        return (not both, -((vinted.get(name) or {}).get("total", 0) + (ka.get(name) or {}).get("total", 0)), name)
+    def order(name):  # by brand (Canon, Nikon, Zenit first), then the most listings first
+        brand = models.MODEL_INFO.get(name, {}).get("brand") or name.split()[0]
+        rank = COMPARE_BRANDS.index(brand) if brand in COMPARE_BRANDS else len(COMPARE_BRANDS)
+        return (rank, brand, -((vinted.get(name) or {}).get("total", 0) + (ka.get(name) or {}).get("total", 0)), name)
 
     for name in sorted(names, key=order):
         v, k = vinted.get(name) or {}, ka.get(name) or {}

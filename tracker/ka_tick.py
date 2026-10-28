@@ -1,14 +1,16 @@
 """One Kleinanzeigen check: cameras of the list (the same dictionary as Vinted's, tracker.models) on
-kleinanzeigen.de, category Foto. Started by tracker.ka_loop every ~20 minutes in the 07:00-00:00 Berlin
+kleinanzeigen.de, category Foto. Started by tracker.ka_loop every ~30 minutes in the 07:00-00:00 Berlin
 window.
 
-- New listings: the newest pages of the types 'Kamera' and 'Kamera & Zubehör' down to listings an hour
-  old and below the previous check's newest id (up to MAX_PAGES): a camera of the list gets a card.
+- New listings: the newest pages of the types 'Kamera' and 'Kamera & Zubehör' down to listings
+  WINDOW_MIN old and below the previous check's newest id (up to MAX_PAGES): a camera of the list gets a
+  card - unless it has no price: 'VB' alone, 1 EUR or 'VB' up to 5 EUR ask for offers, they are skipped
+  (and dropped from the data when a tracked one turns so).
   Its listing time is Kleinanzeigen's own ('Heute, 10:47'). An older id on top again was pushed up
   ('bumped'); a 'TOP' placement carries no date.
 - First collection: a text search for every model of the list (newest first, up to 10 pages, while a
   page has cameras of the list): what is on sale already is 'preexisting' (its listing date is known).
-  Then every model's search once a day the same way (MODEL_SEARCH_PER_CHECK, the longest-waiting
+  Then every model's search every two days the same way (MODEL_SEARCH_PER_CHECK, the longest-waiting
   first): listings of other types ('Weitere', 'Zubehör') come in as 'found'.
 - Results carry the description's first ~250 characters: a new listing's page is read once (the whole
   description, the condition). A sighting on a page of results counts as a check. A tracked listing
@@ -36,13 +38,14 @@ from .store import DataStore
 CHECK_BUDGET_S = 8 * 60
 BACKFILL_BUDGET_S = 20 * 60
 MAX_PAGES = {"camera": 8, "camera_and_equipment": 4}
-WINDOW_MIN = 40           # read the newest pages down to listings this old: presence of the young ones
+WINDOW_MIN = 35           # read the newest pages down to listings this old: presence of the young ones
 FULL_PAGE = 25
 MODEL_PAGES = 10
-MODEL_SEARCH_PER_CHECK = 6  # ~50 checks a day: every model about once a day
-AD_PAGES_MAX = 15
+MODEL_SEARCH_PER_CHECK = 4  # ~34 checks a day: every model about every two days
+AD_PAGES_MAX = 10
+OFFERS_PRICE = 5.0  # 'VB' up to this asks for offers ('1 € VB'): no price, skipped
 # Page checks by the listing's age in minutes: (up to, minutes between checks)
-RECHECK = ((3 * 60, 40), (1440, 240), (7 * 1440, 1440), (30 * 1440, 3 * 1440), (None, 7 * 1440))
+RECHECK = ((3 * 60, 60), (1440, 240), (7 * 1440, 1440), (30 * 1440, 3 * 1440), (None, 7 * 1440))
 SIGNAL_FLAGS = {"accessory?", "digital?", "compact?"}
 OLD_FLAGS = {"preexisting", "found", "bumped"}
 DESCRIPTION_KEEP = 1500
@@ -58,8 +61,15 @@ def listed_minutes(card, now):
     return clock.minutes_between(_as_stamp(card.get("listed_at") or card["first_seen"]), now)
 
 
+def no_price(price, vb):
+    """No real price: 'VB' alone, 1 EUR or less, or 'VB' up to OFFERS_PRICE - the seller waits for offers."""
+    return price is None or price <= report.PLACEHOLDER_PRICE or (vb and price <= OFFERS_PRICE)
+
+
 def classify(rec):
-    """The list model of a listing, or None (no model, or an accessory / digital / compact)."""
+    """The list model of a listing, or None (no model, an accessory / digital / compact, or no price)."""
+    if no_price(rec["price"], rec["vb"]):
+        return None
     cls = models.classify(rec["title"], rec.get("description"))
     return None if not cls["model"] or SIGNAL_FLAGS & set(cls["flags"]) else cls
 
@@ -145,6 +155,11 @@ class Check:
                 flags = flags_for(rec)
                 card = self.cards[rec["id"]] = new_card(rec, cls, self.now, flags)
                 self.stats[flags[0] if flags else "new"] += 1
+            elif no_price(rec["price"], rec["vb"]):  # turned to 'VB' alone or '1 € VB': out of the data
+                del self.cards[rec["id"]]
+                self.store.discard(rec["id"])
+                self.stats["dropped"] += 1
+                continue
             else:
                 if card.get("closed_at"):  # taken down by mistake (a page that failed to load): back on sale
                     card.update(closed_at=None, removed_detected_at=None, price_final=None)
@@ -250,9 +265,14 @@ class Check:
             self.stats[apply_ad(card, ad, self.now)] += 1
 
     def reclassify(self):
-        """Bundles by the current rules; the dictionary changed: the cards again (out: no longer a camera
-        of the list)."""
-        for card in self.cards.values():
+        """Bundles by the current rules; open cards without a price now leave the data; the dictionary
+        changed: the cards again (out: no longer a camera of the list)."""
+        for item_id, card in list(self.cards.items()):
+            if not card.get("closed_at") and no_price(report.current_price(card), card.get("vb")):
+                del self.cards[item_id]
+                self.store.discard(item_id)
+                self.stats["dropped"] += 1
+                continue
             bundle = models.bundle_names(card["title"])
             if bundle != card.get("bundle", []):
                 card["bundle"] = bundle

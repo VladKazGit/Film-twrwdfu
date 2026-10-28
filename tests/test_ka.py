@@ -93,10 +93,12 @@ def test_checks():
         ae1 = rec(500, "Canon AE-1 analog mit 50mm", "Heute, 11:50", "120 € VB")
         sony = rec(499, "Sony A6400", "Heute, 11:45", "500 €")
         lot = rec(498, "Canon AE-1 und Canon A-1 Konvolut", "Heute, 11:30", "200 €")
-        old = rec(300, "Canon AE-1 Program", "Heute, 10:00", "90 €")  # older than the hour: the last page
+        old = rec(300, "Canon AE-1 Program", "Heute, 10:00", "90 €")  # older than the window: the last page
+        offer = rec(497, "Zeiss Ikon Ikonta 521/16", "Heute, 11:20", "1 € VB")  # 'make an offer': skipped
+        vb_only = rec(496, "Nikon FM2 Body", "Heute, 11:10", "VB")
         fm2 = rec(200, "Nikon FM2 Gehäuse", "12.10.2026", "350 €", kind=None)
         manual = rec(201, "Bedienungsanleitung Nikon FM2", "11.10.2026", "5 €", kind=None)
-        client = FakeClient(types={("camera", 1): [ae1, sony, lot] * 7 + [old]},
+        client = FakeClient(types={("camera", 1): [ae1, sony, lot, offer, vb_only] * 4 + [old]},
                             searches={("Nikon FM2", 1): [fm2, manual]})
         result = ka_tick.run_check(store, client, NOW)
         run, cards = result["run"], {c["id"]: c for c in result["cards"]}
@@ -129,6 +131,14 @@ def test_checks():
         cards = {c["id"]: c for c in ka_tick.run_check(store, client, "2026-10-28 12:40")["cards"]}
         assert cards[500]["status"] == "active" and not cards[500]["closed_at"]
 
+        # a tracked listing that turns to 'VB' alone leaves the data at the next check
+        lot_vb = rec(498, "Canon AE-1 und Canon A-1 Konvolut", "Heute, 11:30", "VB")
+        result = ka_tick.run_check(store, FakeClient(types={("camera", 1): [ae1, newer, lot_vb, old]}), "2026-10-28 13:10")
+        assert 498 not in {c["id"] for c in result["cards"]} and result["run"]["dropped"] == 1
+        assert 498 not in store.load_active()
+        assert ka_tick.no_price(None, True) and ka_tick.no_price(1.0, True) and ka_tick.no_price(5.0, True)
+        assert not ka_tick.no_price(5.0, False) and not ka_tick.no_price(40.0, True)
+
         # sheets
         all_cards = list(cards.values())
         rows = ka_report.list_rows(all_cards, later)
@@ -148,7 +158,7 @@ def test_checks():
 
 def test_due():
     card = {"listed_at": "2026-10-28 11:00", "first_seen": "2026-10-28 11:05", "last_seen_active": "2026-10-28 11:05"}
-    assert not ka_tick.due(card, "2026-10-28 11:40") and ka_tick.due(card, "2026-10-28 11:45")
+    assert not ka_tick.due(card, "2026-10-28 12:00") and ka_tick.due(card, "2026-10-28 12:05")
     card = {"listed_at": "2026-10-25", "first_seen": "2026-10-28 08:00", "last_seen_active": "2026-10-28 08:00"}
     assert not ka_tick.due(card, "2026-10-28 20:00") and ka_tick.due(card, "2026-10-29 08:00")  # daily
     card["last_checked_at"] = "2026-10-29 08:00"
@@ -161,7 +171,7 @@ def test_loop():
     rng = random.Random(1)
     at = datetime(2026, 10, 28, 12, 0, tzinfo=BERLIN)
     gap = (ka_loop.next_check(at, False, rng) - at).total_seconds() / 60
-    assert 17 <= gap <= 23, gap
+    assert 26 <= gap <= 34, gap
     assert ka_loop.next_check(at, True, rng) - at == timedelta(seconds=ka_loop.BACKFILL_PAUSE_S)
     night = ka_loop.next_check(datetime(2026, 10, 28, 23, 55, tzinfo=BERLIN), False, rng)
     assert (night.day, night.hour) == (29, 7) and 3 <= night.minute <= 12, night
