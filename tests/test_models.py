@@ -219,6 +219,7 @@ FLAG_CASES = [
     ("Canon AE-1 + adattatore", [], None),
     ("Werbeplakat Nikon F2 gerahmt", ["accessory?"], None),
     ("Yongnuo 50 mm f1.8 Nikon F", ["accessory?"], None),
+    ("Mode emploi canon ae 1", ["accessory?"], None),
     ("Meike 85mm F1.8 AF Canon EF", ["accessory?"], None),
     ("Exaktar 200mm 1:3,5 für Canon Cameras A-1 AE-1 AE-1P AV-1 AT-1", ["accessory?"], None),
     ("Makinon 28mm 1:2,8 für Canon Cameras A-1 AE-1 AE-1P AV-1 AT-1", ["accessory?"], None),

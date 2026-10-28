@@ -5,12 +5,12 @@ Kleinanzeigen spreadsheet (secret KA_SHEET_ID): 'Список' (every camera, ne
 'Запуски' (a row per check, newest on top).
 Comparison spreadsheet (secret COMPARE_SHEET_ID): 'Сравнение' - per model, Vinted next to
 Kleinanzeigen: listings and their mean price, sales (taken down on Kleinanzeigen) and their mean
-price, how long they were on sale. Both without placeholder prices, flagged listings and bundles.
+price, how long they were on sale; then the latest price snapshot of other marketplaces (tracker.snapshot). Both without placeholder prices, flagged listings and bundles.
 By brand: Canon, Nikon, Zenit first, then the others A-Z; within a brand the most listings first.
 """
 import statistics
 
-from . import clock, models, report, sheets
+from . import clock, models, report, sheets, snapshot
 from .store import DataStore
 
 LIST_SHEET, REMOVED_SHEET, SUMMARY_SHEET, RUNS_SHEET = "Список", "Снятые", "Сводка", "Запуски"
@@ -217,11 +217,19 @@ def vinted_model_stats(items):
                 "days": _median(s["days"])} for m, s in out.items()}
 
 
-def compare_rows(ka_cards, vinted_items, now):
+def compare_rows(ka_cards, vinted_items, now, snap=None):
+    """Vinted next to Kleinanzeigen; with a price snapshot of other marketplaces (tracker.snapshot), its
+    listings and mean asking price per site at the end."""
     ka = ka_model_stats(ka_cards, now)
     vinted = vinted_model_stats(vinted_items)
-    rows = [COMPARE_HEADER]
-    names = set(ka) | set(vinted)
+    header, snap_stats = list(COMPARE_HEADER), {}
+    if snap:
+        day = "{2}.{1}".format(*snap["date"].split("-"))
+        for site in snap["sites"]:
+            header += [f"{snapshot.SITES[site]} (срез {day}): объявлений", f"{snapshot.SITES[site]} (срез {day}): средняя цена, €"]
+        snap_stats = snapshot.model_stats(snap)
+    rows = [header]
+    names = set(ka) | set(vinted) | set(snap_stats)
 
     def order(name):  # by brand (Canon, Nikon, Zenit first), then the most listings first
         brand = models.MODEL_INFO.get(name, {}).get("brand") or name.split()[0]
@@ -238,6 +246,9 @@ def compare_rows(ka_cards, vinted_items, now):
                      _num(k.get("removed")), _num(k.get("removed_mean")), report.format_on_sale(k.get("removed_days")),
                      _num(diff), f"{round(100 * diff / v['mean']):+d} %" if diff is not None and v["mean"] else "",
                      _num(sale_diff)])
+        for site in (snap or {}).get("sites", []):
+            s = snap_stats.get(name, {}).get(site) or {}
+            rows[-1] += [_num(s.get("all")), _num(s.get("mean"))]
     return rows
 
 
@@ -245,4 +256,5 @@ def write_compare(writer, ka_cards, root, now):
     """'Сравнение' in the comparison spreadsheet; Vinted's cameras come from the same data repo."""
     vinted = DataStore(root)
     items = list({**vinted.load_closed(), **vinted.load_active()}.values())
-    writer.replace(COMPARE_SHEET, compare_rows(ka_cards, items, now))
+    snaps = snapshot.load_all(root)
+    writer.replace(COMPARE_SHEET, compare_rows(ka_cards, items, now, snaps[-1] if snaps else None))

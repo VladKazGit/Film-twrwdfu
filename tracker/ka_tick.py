@@ -344,7 +344,7 @@ def open_writer(secret):
 
 
 def main():
-    from . import datarepo, ka_report
+    from . import datarepo, ka_report, snapshot
     from .lens_tick import push_data
 
     parser = argparse.ArgumentParser(description="One Kleinanzeigen check.")
@@ -363,9 +363,18 @@ def main():
             push_data(root, f"ka check {result['run']['at']}")
         if not args.no_sheets:
             done = {"at": result["run"]["at"]}
+            state = store.load_state()
+            snaps = snapshot.load_all(root)
+            written = state.get("snapshots_written", [])
+
+            def write_snapshots(w):
+                state["snapshots_written"] = written + snapshot.write(w, snaps, written)
+
             writes = (("ka", "KA_SHEET_ID", lambda w: ka_report.write(w, result["cards"], result["run"])),
                       ("compare", "COMPARE_SHEET_ID",
                        lambda w: ka_report.write_compare(w, result["cards"], root, result["run"]["at"])))
+            if any(s["date"] not in written for s in snaps):  # a new price snapshot: its own spreadsheet
+                writes += (("snapshot", "SNAPSHOT_SHEET_ID", write_snapshots),)
             for name, secret, write in writes:
                 try:  # a sheet failure must not lose the data (already pushed)
                     write(open_writer(secret))
@@ -374,7 +383,6 @@ def main():
                     done[name] = f"{type(exc).__name__}: {env.redact(exc, 150)}"
                     print(f"{name} sheets failed: {done[name]}")
             # the sheets' outcome in the data: seen before the run's log is out (5.5 hours)
-            state = store.load_state()
             state["sheets"] = done
             store.save_state(state)
             if not args.local:

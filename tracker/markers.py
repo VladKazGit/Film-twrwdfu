@@ -26,7 +26,7 @@ MANUAL = {
     "es": ["manual de instrucciones", "manual de usuario", "instrucciones"],
     "et": ["kasutusjuhend", "juhend"],
     "fi": ["käyttöohje", "ohjekirja"],
-    "fr": ["mode d'emploi", "notice d'utilisation", "manuel d'utilisation", "notice"],
+    "fr": ["mode d'emploi", "mode emploi", "notice d'utilisation", "manuel d'utilisation", "notice"],
     "ga": ["lámhleabhar", "treoracha"],
     "hr": ["upute za uporabu", "upute", "priručnik"],
     "hu": ["használati útmutató", "kezelési útmutató", "kézikönyv", "útmutató"],
