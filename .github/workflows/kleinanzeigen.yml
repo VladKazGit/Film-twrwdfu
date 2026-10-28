@@ -1,0 +1,66 @@
+name: kleinanzeigen
+
+# The Kleinanzeigen collector (tracker.ka_loop): its own chain of runs on its own machine, like the
+# lenses'. A check every ~20 minutes in the 07:00-00:00 Berlin window; while the first collection runs,
+# one check right after another. Start: Run workflow by hand. Stop: Disable workflow (after the current
+# run) and cancel the run (at once).
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "First check at once, even outside the 07:00-00:00 Berlin window"
+        type: boolean
+        default: false
+      chained:
+        description: "Started by the previous run (internal)"
+        type: boolean
+        default: false
+      next_check:
+        description: "Time of the first check, from the previous run (internal)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  actions: write  # start the next run
+
+concurrency:
+  group: kleinanzeigen
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -q -r requirements.txt
+
+      - name: Kleinanzeigen checks
+        id: loop
+        env:
+          GOOGLE_SA_KEY: ${{ secrets.GOOGLE_SA_KEY }}
+          KA_SHEET_ID: ${{ secrets.KA_SHEET_ID }}
+          COMPARE_SHEET_ID: ${{ secrets.COMPARE_SHEET_ID }}
+          DATA_TOKEN: ${{ secrets.DATA_TOKEN }}
+          DATA_REPO: ${{ secrets.DATA_REPO }}
+          NEXT_CHECK: ${{ inputs.next_check }}
+        run: >-
+          python -u -m tracker.ka_loop ${{ inputs.force && '--force' || '' }} ${{ inputs.chained && '--chained' || '' }}
+          --next-check "$NEXT_CHECK"
+
+      - name: Start the next run
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEXT_CHECK: ${{ steps.loop.outputs.next_check }}
+        run: >-
+          gh workflow run kleinanzeigen.yml --repo "${{ github.repository }}" --ref "${{ github.ref_name }}"
+          -f chained=true -f next_check="$NEXT_CHECK"
