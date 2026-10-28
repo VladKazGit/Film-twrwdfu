@@ -4,10 +4,12 @@ Public pages only, no account: the newest listings of the category Foto (c245) o
 'Kamera & Zubehör', and a listing's own page. Single-threaded, 2-3 s between requests. Kleinanzeigen
 has no 'sold': a listing taken down redirects to the category - sold or withdrawn, nobody can tell.
 
-Search result items carry the title, the whole description and the photo in a JSON block, then the
+Search result items carry the title, the description's first ~250 characters and the photo in a
+JSON block (the whole description is on the listing's page), then the
 listing time ('Heute, 10:47', 'Gestern, 18:02', '27.10.2026') and the price ('140 € VB', 'VB',
 'Zu verschenken'; a reduced one shows the old price struck through).
 """
+import html as html_lib
 import json
 import random
 import re
@@ -104,23 +106,27 @@ def parse_search(html, now, kind):
 _AD_TITLE = re.compile(r'id="viewad-title"[^>]*>(.*?)</h1>', re.S)
 _AD_PRICE = re.compile(r'id="viewad-price"[^>]*>(.*?)</', re.S)
 _AD_DATE = re.compile(r'id="viewad-extra-info"[^>]*>(.*?)</div>', re.S)
+_AD_DESCRIPTION = re.compile(r'id="viewad-description-text"[^>]*>(.*?)</p>', re.S)
 _AD_DETAIL = re.compile(r'class="addetailslist--detail">\s*([^<]+?)\s*<span[^>]*>\s*([^<]+?)\s*</span>')
 
 
 def parse_ad(html, final_url, url):
-    """A listing's page: {'status': 'active' | 'reserved' | 'gone', 'price', 'vb', 'date', 'condition'}.
-    A listing taken down redirects away from its own address."""
+    """A listing's page: {'status': 'active' | 'reserved' | 'gone', 'price', 'vb', 'date', 'condition',
+    'description'}. A listing taken down redirects away from its own address."""
     if final_url.rstrip("/").split("?")[0] != url.rstrip("/").split("?")[0] or not _AD_TITLE.search(html):
-        return {"status": "gone", "price": None, "vb": False, "date": None, "condition": None}
+        return {"status": "gone", "price": None, "vb": False, "date": None, "condition": None, "description": None}
     title = " ".join(re.sub(r"<[^>]+>", " ", _AD_TITLE.search(html).group(1)).split())
     price_m = _AD_PRICE.search(html)
     price, vb = parse_price(re.sub(r"<[^>]+>", " ", price_m.group(1)) if price_m else "")
     date_m = _AD_DATE.search(html)
     date = _WHEN.search(re.sub(r"<[^>]+>", " ", date_m.group(1))) if date_m else None
     details = dict(_AD_DETAIL.findall(html))
+    text = _AD_DESCRIPTION.search(html)
+    if text:
+        text = html_lib.unescape(re.sub(r"<[^>]+>", "", re.sub(r"<br\s*/?>", "\n", text.group(1)))).strip()
     return {"status": "reserved" if title.startswith("Reserviert") else "active", "price": price, "vb": vb,
             "date": f"{date.group(6)}-{date.group(5)}-{date.group(4)}" if date and date.group(6) else None,
-            "condition": details.get("Zustand")}
+            "condition": details.get("Zustand"), "description": text or None}
 
 
 class KaClient:

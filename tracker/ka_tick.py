@@ -8,10 +8,12 @@ window.
   ('bumped'); a 'TOP' placement carries no date.
 - First collection: a text search for every model of the list (newest first, up to 10 pages, while a
   page has cameras of the list): what is on sale already is 'preexisting' (its listing date is known).
-  Then every model's search once a day (MODEL_SEARCH_PER_CHECK, the longest-waiting first, as many
-  pages as its open cards need): listings of other types ('Weitere', 'Zubehör') come in as 'found'.
-- A sighting on a page of results counts as a check. A tracked listing within the pages read but
-  missing is checked on its page at once; the others when due by age (RECHECK). A listing taken down
+  Then every model's search once a day the same way (MODEL_SEARCH_PER_CHECK, the longest-waiting
+  first): listings of other types ('Weitere', 'Zubehör') come in as 'found'.
+- Results carry the description's first ~250 characters: a new listing's page is read once (the whole
+  description, the condition). A sighting on a page of results counts as a check. A tracked listing
+  within the pages read but missing is checked on its page at once; the others when due by age
+  (RECHECK). A listing taken down
   (its page redirects away) is 'removed' - sold or withdrawn, Kleinanzeigen does not tell.
 No account, public pages only, 2-3 s between requests; no seller names, ids, phones or places are kept.
 Data in kleinanzeigen/ of the private data repo; sheets in the Kleinanzeigen spreadsheet (secret
@@ -36,9 +38,8 @@ BACKFILL_BUDGET_S = 20 * 60
 MAX_PAGES = {"camera": 8, "camera_and_equipment": 4}
 WINDOW_MIN = 40           # read the newest pages down to listings this old: presence of the young ones
 FULL_PAGE = 25
-BACKFILL_PAGES = 10
+MODEL_PAGES = 10
 MODEL_SEARCH_PER_CHECK = 6  # ~50 checks a day: every model about once a day
-MODEL_SEARCH_PAGES = 4
 AD_PAGES_MAX = 15
 # Page checks by the listing's age in minutes: (up to, minutes between checks)
 RECHECK = ((3 * 60, 40), (1440, 240), (7 * 1440, 1440), (30 * 1440, 3 * 1440), (None, 7 * 1440))
@@ -101,11 +102,14 @@ def apply_ad(card, ad, now):
         return "removed"
     card.update(status=ad["status"], last_seen_active=now)
     _set_price(card, ad["price"], now)
-    card["vb"] = ad["vb"]
+    if ad["price"] is not None or ad["vb"]:  # the page showed a price
+        card["vb"] = ad["vb"]
     if ad.get("condition"):
         card["condition"] = ad["condition"]
     if not card.get("listed_at") and ad.get("date"):
         card["listed_at"] = ad["date"]
+    if ad.get("description") and len(ad["description"]) > len(card.get("description") or ""):
+        card["description"] = ad["description"][:DESCRIPTION_KEEP]
     return ad["status"]
 
 
@@ -200,18 +204,16 @@ class Check:
             queue = [n for n in names if n not in last_run]
         else:
             queue = sorted(names, key=lambda n: last_run.get(n) or "")[:MODEL_SEARCH_PER_CHECK]
-        open_by_model = Counter(c["model"] for c in self.cards.values() if not c.get("closed_at"))
         for name in queue:
-            pages = BACKFILL_PAGES if backfill else min(MODEL_SEARCH_PAGES, 1 + open_by_model[name] // FULL_PAGE)
             read, finished = [], False
-            for page in range(1, pages + 1):
+            for page in range(1, MODEL_PAGES + 1):
                 if not self.client.has_time():
                     break
                 recs = self.client.model_search(name, page, self.now)
                 self.stats["model_pages"] += 1
                 read += recs
                 cameras = self.take(recs, lambda rec: ["preexisting"] if backfill else ["found"], name)
-                if page == pages or len(recs) < FULL_PAGE - 5 or (backfill and not cameras):
+                if page == MODEL_PAGES or len(recs) < FULL_PAGE - 5 or not cameras:
                     finished = True
                     break
             if not finished:
@@ -223,10 +225,13 @@ class Check:
             st["backfill"] = "done"
         return st["backfill"] != "done"
 
-    # ---- listing pages: the vanished ones first, then the due ones (youngest first)
+    # ---- listing pages: the vanished ones first, the new ones (read once), then the due ones (youngest first)
 
     def ad_pages(self):
         queue = dict(self.vanished)
+        for card in self.cards.values():
+            if not card.get("closed_at") and not card.get("last_checked_at") and not card.get("flags"):
+                queue.setdefault(card["id"], card)
         for card in sorted((c for c in self.cards.values() if c["id"] not in self.seen and due(c, self.now)),
                            key=lambda c: listed_minutes(c, self.now)):
             queue.setdefault(card["id"], card)
@@ -245,7 +250,12 @@ class Check:
             self.stats[apply_ad(card, ad, self.now)] += 1
 
     def reclassify(self):
-        """The dictionary changed: the cards again (out: no longer a camera of the list)."""
+        """Bundles by the current rules; the dictionary changed: the cards again (out: no longer a camera
+        of the list)."""
+        for card in self.cards.values():
+            bundle = models.bundle_names(card["title"])
+            if bundle != card.get("bundle", []):
+                card["bundle"] = bundle
         if self.state.get("models_version") == models.VERSION:
             return
         for item_id, card in list(self.cards.items()):

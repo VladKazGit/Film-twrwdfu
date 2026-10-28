@@ -218,6 +218,8 @@ FLAG_CASES = [
     ("Adaptador Canon FD a Sony E", ["accessory?"], None),
     ("Canon AE-1 + adattatore", [], None),
     ("Werbeplakat Nikon F2 gerahmt", ["accessory?"], None),
+    ("Yongnuo 50 mm f1.8 Nikon F", ["accessory?"], None),
+    ("Meike 85mm F1.8 AF Canon EF", ["accessory?"], None),
     ("Exaktar 200mm 1:3,5 für Canon Cameras A-1 AE-1 AE-1P AV-1 AT-1", ["accessory?"], None),
     ("Makinon 28mm 1:2,8 für Canon Cameras A-1 AE-1 AE-1P AV-1 AT-1", ["accessory?"], None),
     ("Samyang 14mm f/2.8 attacco Canon EF con Scatola", ["accessory?"], None),
@@ -374,6 +376,8 @@ DESC_CASES = [
     ("Spotmaic SP mit Takumar + Revuenon", "Pentax Spotmatic SP, funktioniert", "Pentax Spotmatic"),
     ("Canon EOS 5000", "Canon EF Objektiv 35-80 dabei", None),
     ("Canon EOS 5000", "Gehäuse wie Canon AE-1", None),
+    ("Leica Leitz Summicron M 5cm f2 Objektiv", "Leica Leitz Summicron-M 5 cm f/2 Objektiv", None),
+    ("YONGNUO YN 50mm F1.8 Objektiv Canon", "Brennweite 50 mm, Canon EF-Anschluss", None),
     ("Canon FD Anschluss", "Passt direkt auf Canon AE-1, A-1, FTb etc. Linsen sauber.", None),
     ("Vivitar Series 1 70-210mm f/3.5 Makro-Zoom", "Objektiv für Canon FD. Getestet an einer Canon AE-1.", None),
     ("Canon Prima Zoom 76", "Kompakt, wie eine Canon AE-1", None),
@@ -481,6 +485,12 @@ def main():
         if got != expected:
             bad += 1
             print(f"FAIL: name {text!r}: expected {expected}, got {got}")
+    from tracker.models import bundle_names
+    for title, expected in (("Yashica FX-3 Super 2000 + Vivitar 70-210", []), ("Hasselblad 500 C/M + 2 Obiettivi", []),
+                            ("PENTAX SPOTMATIC F", []), ("Canon AE-1 und Canon A-1", ["Canon AE-1", "Canon A-1"])):
+        if bundle_names(title) != expected:
+            bad += 1
+            print(f"FAIL: bundle {title!r}: expected {expected}, got {bundle_names(title)}")
     if siblings("Minolta", "X-300") != ["Minolta X-1", "Minolta X-700", "Minolta X-500"] or siblings("Canon", "AE-1"):
         bad += 1
         print("FAIL: siblings", siblings("Minolta", "X-300"), siblings("Canon", "AE-1"))
@@ -491,7 +501,7 @@ def main():
         if camera_kind(name) != kind:
             bad += 1
             print(f"FAIL: kind {name}: expected {kind}, got {camera_kind(name)}")
-    total = len(CASES) + len(FLAG_CASES) + len(DESC_CASES) + len(DESC_FLAG_CASES) + len(JUNK_CASES) + len(NAME_CASES) + 2
+    total = len(CASES) + len(FLAG_CASES) + len(DESC_CASES) + len(DESC_FLAG_CASES) + len(JUNK_CASES) + len(NAME_CASES) + 6
     print(f"{total - bad}/{total} passed")
 
 if __name__ == "__main__":

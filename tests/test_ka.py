@@ -77,9 +77,11 @@ def test_parsers():
     url = "https://www.kleinanzeigen.de/s-anzeige/x/11-245-1"
     ad = ('<h1 id="viewad-title" class="x">Canon AE-1</h1><h2 id="viewad-price">130 € VB</h2>'
           '<div id="viewad-extra-info"><span>20.10.2026</span></div>'
-          '<li class="addetailslist--detail">Zustand<span class="v">Sehr Gut</span></li>')
+          '<li class="addetailslist--detail">Zustand<span class="v">Sehr Gut</span></li>'
+          '<p id="viewad-description-text" class="x">Getestet &amp; sauber.<br/>Mit Objektiv.</p>')
     assert kleinanzeigen.parse_ad(ad, url, url) == {"status": "active", "price": 130.0, "vb": True,
-                                                   "date": "2026-10-20", "condition": "Sehr Gut"}
+                                                   "date": "2026-10-20", "condition": "Sehr Gut",
+                                                   "description": "Getestet & sauber.\nMit Objektiv."}
     reserved = ad.replace(">Canon AE-1<", ">Reserviert • Canon AE-1<")
     assert kleinanzeigen.parse_ad(reserved, url, url)["status"] == "reserved"
     assert kleinanzeigen.parse_ad("<html>Foto</html>", "https://www.kleinanzeigen.de/s-foto/c245", url)["status"] == "gone"
@@ -105,6 +107,7 @@ def test_checks():
         assert cards[200]["in_model_search"]
         assert run["new"] == 3 and run["preexisting"] == 1 and run["backfill"] == "готов" and not result["backfill"]
         assert len({t for t, _ in client.searched}) == len(models.MODEL_INFO), "every model searched once"
+        assert sorted(client.opened) == sorted(r["url"] for r in (ae1, lot, old)), "new listings read once"
         assert store.load_state()["top_ids"]["camera"] == 500
 
         # 20 minutes on: the AE-1 is gone from the newest pages (taken down), the FM2 page is due later
@@ -117,7 +120,7 @@ def test_checks():
         cards = {c["id"]: c for c in result["cards"]}
         assert cards[500]["status"] == "removed" and cards[500]["removed_detected_at"] == later
         assert cards[500]["price_final"] == 120.0 and cards[510]["flags"] == []
-        assert client.opened == [ae1["url"]], client.opened
+        assert client.opened == [ae1["url"], newer["url"]], client.opened
         assert len(client.searched) == ka_tick.MODEL_SEARCH_PER_CHECK, "after the first collection: a few models"
         assert store.load_closed()[500]["status"] == "removed"
 

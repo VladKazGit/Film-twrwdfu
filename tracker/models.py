@@ -380,7 +380,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 48
+VERSION = 49
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -494,6 +494,8 @@ def _compile_alias(brand, model, alias, not_after):
     tail = _END
     if not_after:
         tail += f"(?!{SEP}(?:{not_after}))"
+    if re.search(r"\d$", alias):  # 'Summicron-M 5 cm' is a lens, not the Leica M5
+        tail += r"(?!\s*[cm]m\b)"
     if re.search(r"[a-z]$", alias):
         # 'FG-20', 'F 301', 'FM 10' are other models; '50mm', 'f 1.4' are lenses.
         # 'x' is allowed only after one digit ('2x Objektive'), not after a model number ('F-401x').
@@ -565,7 +567,8 @@ _ACCESSORY_WORDS = re.compile(
     r"|katalog|catalog|cataloghi|catalogue|depliant|prospekt|brochure|broschure|\bguide\b|\bguida\b|ratgeber|leitfaden|\bbuch\b|\bbook\b|\blibro\b|\blivre\b|\bposter\b|zeitschrift|rivista|\bflyer")
 # Lens makers and zoom: 'Zoom Vivitar 70/210 per Nikon F' is a lens.
 _LENS_WORDS = re.compile(r"\bzoom\b|vivitar|tamron|\bsigma\b|tokina|soligor|hanimex"
-                         r"|makinon|exaktar|\bkiron\b|samyang|rokinon|beroflex|danubia|revuenon|panagor|\bosawa\b|cimko")
+                         r"|makinon|exaktar|\bkiron\b|samyang|rokinon|beroflex|danubia|revuenon|panagor|\bosawa\b|cimko"
+                         r"|yongnuo|viltrox|\bmeike\b|7artisans|ttartisan|\blaowa\b|mitakon|\bkamlan\b|pergear")
 # A title without a model or camera words that names a lens maker or a zoom range may be a lens
 # ('Vivitar Series 1 70-210mm Makro-Zoom') or a compact ('Canon Prima Zoom 76'): no list model
 # from its description.
@@ -1042,7 +1045,9 @@ def bundle_names(title):
         got = camera_name(piece)
         if got:
             name = list_model_of(*got) or f"{got[0]} {got[1]}"
-            if name not in names:
+            # a shorter name of a model already found ('Yashica FX-3 Super' of 'FX-3 Super 2000',
+            # 'Hasselblad 500C' of '500C/M') is the same camera
+            if not any(n.startswith(name) for n in names):
                 names.append(name)
     if len(names) >= 2 or (names and _LOT.search(norm)):
         return names
