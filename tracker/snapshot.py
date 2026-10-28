@@ -1,16 +1,22 @@
 """One-off price snapshots of other marketplaces (OLX.pl, leboncoin.fr, eBay.de), looked through by hand in
-a browser: the first page of each model's search. Kept in the data repo as snapshots/<YYYY-MM-DD>.json;
-the Kleinanzeigen check (tracker.ka_tick) writes each new one to the snapshot spreadsheet (secret
-SNAPSHOT_SHEET_ID: 'Срез <date>' per model and site, 'Объявления <date>' every listing) and the latest one
-into 'Сравнение'. Asking prices only, titles only (no descriptions); OLX prices in PLN are converted to EUR
-at the National Bank of Poland's rate of the day.
+a browser: the first page of each model's search. Kept in the data repo as snapshots/<YYYY-MM-DD>.json and
+written to the snapshot spreadsheet (secret SNAPSHOT_SHEET_ID) by the workflow 'snapshot sheets' (started
+after each new snapshot): 'Срез <date>' (per model, the sites side by side) and a sheet of listings per
+site ('OLX.pl <date>'); the Kleinanzeigen check puts the latest one into 'Сравнение'. Asking prices only,
+titles only (no descriptions); OLX prices in PLN are converted to EUR at the National Bank of Poland's rate
+of the day.
+
+    python -m tracker.snapshot [--local DIR]
 """
+import argparse
+import sys
+import tempfile
 import json
 import re
 import statistics
 from pathlib import Path
 
-from . import models, report
+from . import env, models, report
 from .kleinanzeigen import query_slug
 
 SITES = {"olx": "OLX.pl", "lbc": "leboncoin.fr", "ebay": "eBay.de"}
@@ -128,11 +134,13 @@ def summary_rows(snapshot):
     return rows
 
 
-def item_rows(snapshot):
-    rows = [["Площадка", "Модель", "Цена, €", "Цена", "Валюта", "Набор", "Заголовок", "Ссылка"]]
-    for i in sorted(snapshot["items"], key=lambda i: (_order(i["model"]), i["site"], i["price_eur"] or 0)):
-        rows.append([SITES[i["site"]], i["model"], report._num(i["price_eur"]), report._num(i["price"]),
-                     i["currency"] or "", "да" if i["bundle"] else "", i["title"], i["url"]])
+def site_rows(snapshot, site):
+    """The listings of one site, by brand and model, cheapest first."""
+    rows = [["Модель", "Цена, €", "Цена", "Валюта", "Набор", "Заголовок", "Ссылка"]]
+    for i in sorted((i for i in snapshot["items"] if i["site"] == site),
+                    key=lambda i: (_order(i["model"]), i["price_eur"] if i["price_eur"] is not None else 1e9)):
+        rows.append([i["model"], report._num(i["price_eur"]), report._num(i["price"]), i["currency"] or "",
+                     "да" if i["bundle"] else "", i["title"], i["url"]])
     return rows
 
 
@@ -145,18 +153,36 @@ def load_all(root):
 
 
 def sheet_titles(snapshot):
+    """'Срез 28.10.2026' and {site: 'OLX.pl 28.10.2026'}."""
     day = "{2}.{1}.{0}".format(*snapshot["date"].split("-"))
-    return f"Срез {day}", f"Объявления {day}"
+    return f"Срез {day}", {site: f"{SITES[site]} {day}" for site in snapshot["sites"]}
 
 
-def write(writer, snapshots, written):
-    """Sheets of the snapshots not written yet (their dates in `written`). Returns the dates written."""
-    done = []
+def write(writer, snapshots):
+    """Every snapshot's sheets (rewritten as they are in the data)."""
     for snap in snapshots:
-        if snap["date"] in written:
-            continue
-        summary, listings = sheet_titles(snap)
+        summary, per_site = sheet_titles(snap)
         writer.replace(summary, summary_rows(snap), links=True)
-        writer.replace(listings, item_rows(snap), links=True)
-        done.append(snap["date"])
-    return done
+        for site, title in per_site.items():
+            writer.replace(title, site_rows(snap, site), links=True)
+
+
+def main():
+    import gspread
+
+    from . import datarepo, sheets
+
+    parser = argparse.ArgumentParser(description="Write the price snapshots to their spreadsheet.")
+    parser.add_argument("--local", help="a local data folder instead of a clone")
+    args = parser.parse_args()
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        root = Path(args.local) if args.local else datarepo.clone(Path(tmp) / "data")
+        snaps = load_all(root)
+        client = gspread.service_account_from_dict(env.google_sa_info())
+        write(sheets.SheetWriter(client.open_by_key(env.sheet_id("SNAPSHOT_SHEET_ID"))), snaps)
+    print(f"snapshot sheets: {len(snaps)} snapshot(s), {sum(len(s['items']) for s in snaps)} listings")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

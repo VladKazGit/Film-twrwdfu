@@ -49,7 +49,6 @@ jobs:
           GOOGLE_SA_KEY: ${{ secrets.GOOGLE_SA_KEY }}
           KA_SHEET_ID: ${{ secrets.KA_SHEET_ID }}
           COMPARE_SHEET_ID: ${{ secrets.COMPARE_SHEET_ID }}
-          SNAPSHOT_SHEET_ID: ${{ secrets.SNAPSHOT_SHEET_ID }}
           DATA_TOKEN: ${{ secrets.DATA_TOKEN }}
           DATA_REPO: ${{ secrets.DATA_REPO }}
           NEXT_CHECK: ${{ inputs.next_check }}

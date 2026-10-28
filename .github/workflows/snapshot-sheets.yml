@@ -1,0 +1,33 @@
+name: snapshot sheets
+
+# Writes the price snapshots of other marketplaces (snapshots/*.json in the data repo) to their
+# spreadsheet (tracker.snapshot): no requests to any marketplace, nothing pushed. Started by hand after
+# a new snapshot.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sheets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -q -r requirements.txt
+
+      - name: Write the snapshot sheets
+        env:
+          GOOGLE_SA_KEY: ${{ secrets.GOOGLE_SA_KEY }}
+          SNAPSHOT_SHEET_ID: ${{ secrets.SNAPSHOT_SHEET_ID }}
+          DATA_TOKEN: ${{ secrets.DATA_TOKEN }}
+          DATA_REPO: ${{ secrets.DATA_REPO }}
+        run: python -u -m tracker.snapshot

@@ -24,7 +24,11 @@ def main():
     assert stats["lbc"]["n"] == 2 and stats["lbc"]["mean"] == 150 and stats["olx"]["mean"] == 100
     rows = snapshot.summary_rows(snap)
     assert rows[1][0] == "Canon AE-1" and rows[1][7] == 2, rows[1]
-    assert snapshot.sheet_titles(snap) == ("Срез 28.10.2026", "Объявления 28.10.2026")
+    assert snapshot.sheet_titles(snap) == ("Срез 28.10.2026", {"olx": "OLX.pl 28.10.2026",
+                                                               "lbc": "leboncoin.fr 28.10.2026",
+                                                               "ebay": "eBay.de 28.10.2026"})
+    lbc = snapshot.site_rows(snap, "lbc")
+    assert [r[1] for r in lbc[1:]] == [130.0, 170.0] and lbc[1][-1].endswith("/2"), lbc
     compare = ka_report.compare_rows([], [], "2026-10-28 12:00", snap)
     assert compare[0][-1] == "eBay.de (срез 28.10): средняя цена, €"
     assert compare[1][0] == "Canon AE-1" and compare[1][-6:] == [1, 100, 2, 150, "", ""], compare[1]
