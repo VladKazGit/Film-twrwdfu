@@ -224,6 +224,8 @@ FLAG_CASES = [
     ("Mode emploi canon ae 1", ["accessory?"], None),
     ("K&F Concept Nikon-NEX (Nikon F auf Sony E-Mount) Objektivadapter", ["accessory?"], None),
     ("Coppia tappi Canon ef", ["accessory?"], None),
+    ("Adattatori Macro Canon AE-1", ["accessory?"], None),
+    ("Adaptadores Nikon F a Sony E", ["accessory?"], None),
     ("Contax 137 MA leather skin, burgundy, NEW, self adhesive body cover", ["accessory?"], None),
     ("Belederung Leica M3 selbstklebend", ["accessory?"], None),
     ("Canon AE-1 Kamera mit neuer Belederung", [], None),
