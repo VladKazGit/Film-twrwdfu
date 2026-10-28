@@ -223,6 +223,35 @@ PARTS = {
     "sv": ["bottenplatta", "topplock", "baklucka", "bakstycke"],
 }
 
+# Body, lens and rear caps ('Coppia tappi Canon EF', 'Tappi fotocamera Nikon F'): an accessory word
+# before the model (after it they come with the camera).
+CAPS = {
+    "bg": ["капачка", "капачки"],
+    "cs": ["krytka", "krytky", "víčko"],
+    "da": ["dæksel", "objektivdæksel", "husdæksel"],
+    "de": ["Gehäusedeckel", "Objektivdeckel", "Rückdeckel", "Bajonettdeckel", "Frontdeckel"],
+    "el": ["καπάκι", "καπάκια"],
+    "en": ["body cap", "body caps", "lens cap", "lens caps", "rear cap", "rear caps", "front cap"],
+    "es": ["tapa", "tapas", "tapa de objetivo"],
+    "et": ["objektiivikork", "kerekork"],
+    "fi": ["tulppa", "runkotulppa", "takatulppa", "objektiivinsuojus"],
+    "fr": ["bouchon", "bouchons"],
+    "ga": ["caipín"],
+    "hr": ["poklopac", "poklopci"],
+    "hu": ["objektívsapka", "vázsapka"],
+    "it": ["tappo", "tappi", "tappino", "tappini"],
+    "lt": ["dangtelis", "dangteliai"],
+    "lv": ["vāciņš", "vāciņi"],
+    "mt": ["għatu"],
+    "nl": ["lensdop", "bodydop", "achterdop", "doppen"],
+    "pl": ["dekiel", "dekielek", "dekle"],
+    "pt": ["tampa", "tampas"],
+    "ro": ["capac", "capace"],
+    "sk": ["krytka", "viečko"],
+    "sl": ["pokrovček", "pokrovčki"],
+    "sv": ["linsskydd", "huslock", "baklock"],
+}
+
 # Mount adapters and adapter rings ('Anello adattatore URTH Canon EF-FD': EF to FD, not the EF
 # camera): an accessory word.
 ADAPTER = {
@@ -294,5 +323,5 @@ WITH = {
 KINDS = {  # name (Russian, for people) -> words by language
     "инструкция": MANUAL, "журнал / книга / каталог": PRINT, "коробка": BOX,
     "камера не продаётся / пустая коробка": NOT_SOLD, "уровень": LEVEL, "макрокольца / удлинительные трубки": TUBES,
-    "запчасти корпуса": PARTS, "адаптер": ADAPTER, "«для камеры»": FOR_CAMERA,
+    "запчасти корпуса": PARTS, "крышки": CAPS, "адаптер": ADAPTER, "«для камеры»": FOR_CAMERA,
 }
