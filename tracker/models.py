@@ -343,7 +343,7 @@ MODELS = [
     ("Contax", "Contax RTS", ELEC, S35, ["rts"], None),
     ("Contax", "Contax RTS II", ELEC, S35, ["rts ii", "rts 2"], None),
     ("Contax", "Contax RTS III", ELEC, S35, ["rts iii", "rts 3"], None),
-    ("Contax", "Contax 137 MD", ELEC, S35, ["137 md", "^137"], None),
+    ("Contax", "Contax 137 MD", ELEC, S35, ["137 md", "^137"], r"ma(?![a-z0-9])"),  # 137 MA: another camera
     ("Contax", "Contax 139 Quartz", ELEC, S35, ["139 quartz", "^139"], None),
     ("Contax", "Contax 159 MT", ELEC, S35, ["159 mt", "^159"], None),
     ("Mamiya", "Mamiya RZ67", ELEC, MED, ["rz 67!"], None),
@@ -380,7 +380,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 51
+VERSION = 52
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -754,7 +754,7 @@ def _marker_words(kind):
 # The multilingual base of words that mark no camera (tracker/markers.py) joins the rules above.
 _MANUAL = re.compile(f"{_MANUAL.pattern}|{_marker_words(markers.MANUAL)}")
 # Body parts: unlike _PARTS, not after a camera word or in a set ('Nikon F3 Analoge Kamera Set … Rückwand').
-_BODY_PARTS = re.compile(_marker_words(markers.PARTS))
+_BODY_PARTS = re.compile(f"{_marker_words(markers.PARTS)}|{_marker_words(markers.COVERING)}")
 _STRONG_ACCESSORY = re.compile(f"{_STRONG_ACCESSORY.pattern}|{_marker_words(markers.PRINT)}")
 _LEAD_ACCESSORY = re.compile(f"{_LEAD_ACCESSORY.pattern}|{_marker_words(markers.PRINT)}|{_marker_words(markers.BOX)}")
 _BOX = re.compile(f"{_BOX.pattern}|{_marker_words(markers.BOX)}")

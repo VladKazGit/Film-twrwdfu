@@ -4,6 +4,8 @@ from tracker.models import classify, junk_reason
 CASES = [
     # (title, vinted brand, expected model)
     ("Nikon F Photomic analog", None, "Nikon F"),
+    ("Contax 137 MA Quartz", None, None),
+    ("Contax 137 MD Quartz", None, "Contax 137 MD"),
     ("Nikon F55 Spiegelreflexkamera", None, None),
     ("Nikon F60 mit 28-80mm", None, None),
     ("Nikon F-301 Kamera", None, None),
@@ -222,6 +224,9 @@ FLAG_CASES = [
     ("Mode emploi canon ae 1", ["accessory?"], None),
     ("K&F Concept Nikon-NEX (Nikon F auf Sony E-Mount) Objektivadapter", ["accessory?"], None),
     ("Coppia tappi Canon ef", ["accessory?"], None),
+    ("Contax 137 MA leather skin, burgundy, NEW, self adhesive body cover", ["accessory?"], None),
+    ("Belederung Leica M3 selbstklebend", ["accessory?"], None),
+    ("Canon AE-1 Kamera mit neuer Belederung", [], None),
     ("Tappi fotocamera nikon f", ["accessory?"], None),
     ("Bouchon boîtier Nikon F", ["accessory?"], None),
     ("Canon AE-1 Program + bouchon", [], None),

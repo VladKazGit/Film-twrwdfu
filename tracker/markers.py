@@ -223,6 +223,36 @@ PARTS = {
     "sv": ["bottenplatta", "topplock", "baklucka", "bakstycke"],
 }
 
+# Replacement covering / leatherette for a body ('Contax 137 MA leather skin, self adhesive body cover'):
+# a body part, as PARTS (not after a camera word, not in a set).
+COVERING = {
+    "bg": ["облицовка", "самозалепваща облицовка"],
+    "cs": ["potah", "samolepicí potah"],
+    "da": ["betræk", "selvklæbende"],
+    "de": ["Belederung", "Ersatzbelederung", "Lederbezug", "selbstklebend", "selbstklebende"],
+    "el": ["επένδυση", "αυτοκόλλητη επένδυση"],
+    "en": ["leather skin", "leatherette", "body covering", "body cover", "self adhesive", "self-adhesive",
+           "replacement leather", "replacement covering", "covering kit"],
+    "es": ["revestimiento", "piel de repuesto", "autoadhesivo", "autoadhesiva"],
+    "et": ["isekleepuv", "nahkkate"],
+    "fi": ["päällyste", "itseliimautuva"],
+    "fr": ["gainage", "similicuir", "gainage de remplacement"],
+    "ga": ["clúdach leathair"],
+    "hr": ["presvlaka", "samoljepljiva presvlaka"],
+    "hu": ["bőrözés", "öntapadó"],
+    "it": ["rivestimento", "similpelle", "pelle di ricambio", "autoadesivo", "autoadesiva"],
+    "lt": ["apmušalas", "lipnus apmušalas"],
+    "lv": ["pārvalks", "pašlīmējošs"],
+    "mt": ["kisja tal-ġilda"],
+    "nl": ["bekleding", "zelfklevend", "zelfklevende"],
+    "pl": ["okleina", "samoprzylepna okleina"],
+    "pt": ["revestimento", "autoadesivo"],
+    "ro": ["autoadeziv", "piele de schimb"],
+    "sk": ["poťah", "samolepiaci"],
+    "sl": ["prevleka", "samolepilna"],
+    "sv": ["klädsel", "självhäftande"],
+}
+
 # Body, lens and rear caps ('Coppia tappi Canon EF', 'Tappi fotocamera Nikon F'): an accessory word
 # before the model (after it they come with the camera).
 CAPS = {
@@ -323,5 +353,5 @@ WITH = {
 KINDS = {  # name (Russian, for people) -> words by language
     "инструкция": MANUAL, "журнал / книга / каталог": PRINT, "коробка": BOX,
     "камера не продаётся / пустая коробка": NOT_SOLD, "уровень": LEVEL, "макрокольца / удлинительные трубки": TUBES,
-    "запчасти корпуса": PARTS, "крышки": CAPS, "адаптер": ADAPTER, "«для камеры»": FOR_CAMERA,
+    "запчасти корпуса": PARTS, "обтяжка корпуса": COVERING, "крышки": CAPS, "адаптер": ADAPTER, "«для камеры»": FOR_CAMERA,
 }
