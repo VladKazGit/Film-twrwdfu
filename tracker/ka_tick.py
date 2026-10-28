@@ -40,7 +40,8 @@ BACKFILL_BUDGET_S = 20 * 60
 MAX_PAGES = {"camera": 8, "camera_and_equipment": 4}
 WINDOW_MIN = 35           # read the newest pages down to listings this old: presence of the young ones
 FULL_PAGE = 25
-MODEL_PAGES = 10
+MODEL_PAGES = 10          # the first collection
+DAILY_MODEL_PAGES = 4     # then: the newest pages are enough to see what is still on sale
 MODEL_SEARCH_PER_CHECK = 4  # ~34 checks a day: every model about every two days
 AD_PAGES_MAX = 10
 OFFERS_PRICE = 5.0  # 'VB' up to this asks for offers ('1 € VB'): no price, skipped
@@ -219,16 +220,17 @@ class Check:
             queue = [n for n in names if n not in last_run]
         else:
             queue = sorted(names, key=lambda n: last_run.get(n) or "")[:MODEL_SEARCH_PER_CHECK]
+        pages = MODEL_PAGES if backfill else DAILY_MODEL_PAGES
         for name in queue:
             read, finished = [], False
-            for page in range(1, MODEL_PAGES + 1):
+            for page in range(1, pages + 1):
                 if not self.client.has_time():
                     break
                 recs = self.client.model_search(name, page, self.now)
                 self.stats["model_pages"] += 1
                 read += recs
                 cameras = self.take(recs, lambda rec: ["preexisting"] if backfill else ["found"], name)
-                if page == MODEL_PAGES or len(recs) < FULL_PAGE - 5 or not cameras:
+                if page == pages or len(recs) < FULL_PAGE - 5 or not cameras:
                     finished = True
                     break
             if not finished:
