@@ -340,14 +340,23 @@ def main():
         if not args.local:
             push_data(root, f"ka check {result['run']['at']}")
         if not args.no_sheets:
-            try:  # a sheet failure must not lose the data (already pushed)
-                ka_report.write(open_writer("KA_SHEET_ID"), result["cards"], result["run"])
-            except Exception as exc:
-                print(f"ka sheets failed: {type(exc).__name__}: {env.redact(exc)}")
-            try:
-                ka_report.write_compare(open_writer("COMPARE_SHEET_ID"), result["cards"], root, result["run"]["at"])
-            except Exception as exc:
-                print(f"compare sheet failed: {type(exc).__name__}: {env.redact(exc)}")
+            done = {"at": result["run"]["at"]}
+            writes = (("ka", "KA_SHEET_ID", lambda w: ka_report.write(w, result["cards"], result["run"])),
+                      ("compare", "COMPARE_SHEET_ID",
+                       lambda w: ka_report.write_compare(w, result["cards"], root, result["run"]["at"])))
+            for name, secret, write in writes:
+                try:  # a sheet failure must not lose the data (already pushed)
+                    write(open_writer(secret))
+                    done[name] = "ok"
+                except Exception as exc:
+                    done[name] = f"{type(exc).__name__}: {env.redact(exc, 150)}"
+                    print(f"{name} sheets failed: {done[name]}")
+            # the sheets' outcome in the data: seen before the run's log is out (5.5 hours)
+            state = store.load_state()
+            state["sheets"] = done
+            store.save_state(state)
+            if not args.local:
+                push_data(root, f"ka sheets {result['run']['at']}")
     print(f"ka check took {(time.monotonic() - started) / 60:.1f} min")
     if result["blocked"]:
         return 1
