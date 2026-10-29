@@ -2,9 +2,11 @@ name: snapshot sheets
 
 # Writes the price snapshots of other marketplaces (snapshots/*.json in the data repo) to their
 # spreadsheet (tracker.snapshot): no requests to any marketplace, nothing pushed. Started by hand after
-# a new snapshot.
+# a new snapshot, and daily for the Vinted prices next to the snapshot's.
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "37 5 * * *"
 
 permissions:
   contents: read

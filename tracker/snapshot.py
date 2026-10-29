@@ -1,10 +1,11 @@
 """One-off price snapshots of other marketplaces (OLX.pl, leboncoin.fr, eBay.de), looked through by hand in
 a browser: the first page of each model's search. Kept in the data repo as snapshots/<YYYY-MM-DD>.json and
 written to the snapshot spreadsheet (secret SNAPSHOT_SHEET_ID) by the workflow 'snapshot sheets' (started
-after each new snapshot): 'Срез <date>' (per model, the sites side by side) and a sheet of listings per
-site ('OLX.pl <date>'); the Kleinanzeigen check puts the latest one into 'Сравнение'. Asking prices only,
-titles only (no descriptions); OLX prices in PLN are converted to EUR at the National Bank of Poland's rate
-of the day.
+after each new snapshot, and daily for the Vinted prices): 'Срез <date>' (per model, the sites side by
+side) and a sheet of listings per site ('OLX.pl <date>', with the first photo of the listing); both carry
+the model's mean Vinted asking price as in 'Сравнение'; the Kleinanzeigen check puts the latest snapshot
+into 'Сравнение'. Asking prices only, titles only (no descriptions); OLX prices in PLN are converted to EUR
+at the National Bank of Poland's rate of the day.
 
     python -m tracker.snapshot [--local DIR]
 """
@@ -24,6 +25,11 @@ BRANDS = ("Canon", "Nikon", "Leica")
 SIGNAL_FLAGS = {"accessory?", "digital?", "compact?"}
 MIN_PRICE = 5.0  # below: a placeholder, not a price
 NBP_URL = "https://api.nbp.pl/api/exchangerates/rates/a/eur/?format=json"
+VINTED_MEAN = "Vinted: средняя цена объявлений, €"  # the column of 'Сравнение' (ka_report.vinted_model_stats)
+PHOTO_ROW_PX = 110
+# The sites' image hosts: nothing else becomes an =IMAGE formula
+PHOTO_URL = re.compile(r'https://(?:i\.ebayimg\.com|img\.leboncoin\.fr|[a-z0-9-]+\.apollo\.olxcdn\.com(?::443)?)/[^"\s]+')
+OLX_AD_URL = re.compile(r'https://www\.olx\.pl/d/oferta/[^"\s]+')
 _AMOUNT = re.compile(r"(\d[\d.\s]*)(?:,(\d{1,2}))?")
 
 
@@ -57,17 +63,24 @@ def is_bundle(title):
     return len(distinct) >= 2
 
 
-def item_url(site, item_id, searched):
+def item_url(site, item_id, searched, href=None):
     if site == "lbc":
         return f"https://www.leboncoin.fr/ad/photo_audio_video/{item_id}"
     if site == "ebay":
         return f"https://www.ebay.de/itm/{item_id}"
-    return f"https://www.olx.pl/elektronika/fotografia/q-{query_slug(searched)}/"  # the search: no ad link kept
+    if href and OLX_AD_URL.fullmatch(href):
+        return href
+    return f"https://www.olx.pl/elektronika/fotografia/q-{query_slug(searched)}/"  # the search (28.10: no ad link kept)
+
+
+def image_formula(url):
+    """=IMAGE("…") for a photo of the sites' image hosts, or ''."""
+    return f'=IMAGE("{url}")' if url and PHOTO_URL.fullmatch(url) else ""
 
 
 def build(raw, date, pln_per_eur):
-    """The snapshot from raw rows [{site, id, price_text, title, searched}]: cameras of the list (Canon,
-    Nikon, Leica) by the tracker's own classifier, prices in EUR."""
+    """The snapshot from raw rows [{site, id, price_text, title, searched, photo?, href?}]: cameras of the
+    list (Canon, Nikon, Leica) by the tracker's own classifier, prices in EUR."""
     items = []
     for r in raw:
         cls = models.classify(r["title"])
@@ -80,7 +93,8 @@ def build(raw, date, pln_per_eur):
         items.append({"site": r["site"], "id": r["id"], "model": cls["model"], "title": r["title"],
                       "price": price[0] if price else None, "currency": price[1] if price else None,
                       "price_eur": eur, "bundle": is_bundle(r["title"]),
-                      "url": item_url(r["site"], r["id"], r["searched"])})
+                      "url": item_url(r["site"], r["id"], r["searched"], r.get("href")),
+                      "photo": r.get("photo") if r.get("photo") and PHOTO_URL.fullmatch(r["photo"]) else None})
     return {"date": date, "pln_per_eur": pln_per_eur, "sites": list(SITES), "items": items}
 
 
@@ -113,8 +127,13 @@ def _order(model):
     return (BRANDS.index(brand) if brand in BRANDS else len(BRANDS), model)
 
 
-def summary_rows(snapshot):
-    header = ["Модель"]
+def _vinted_mean(vinted, model):
+    return report._num(((vinted or {}).get(model) or {}).get("mean"))
+
+
+def summary_rows(snapshot, vinted=None):
+    """vinted: {model: {mean, ...}} (ka_report.vinted_model_stats)."""
+    header = ["Модель", VINTED_MEAN]
     for site in snapshot["sites"]:
         name = SITES[site]
         header += [f"{name}: объявлений", f"{name}: средняя цена, €", f"{name}: медиана, €", f"{name}: мин, €",
@@ -122,7 +141,7 @@ def summary_rows(snapshot):
     rows = [header]
     stats = model_stats(snapshot)
     for model in sorted(stats, key=_order):
-        row = [model]
+        row = [model, _vinted_mean(vinted, model)]
         for site in snapshot["sites"]:
             s = stats[model].get(site)
             if not s:
@@ -134,12 +153,13 @@ def summary_rows(snapshot):
     return rows
 
 
-def site_rows(snapshot, site):
-    """The listings of one site, by brand and model, cheapest first."""
-    rows = [["Модель", "Цена, €", "Цена", "Валюта", "Набор", "Заголовок", "Ссылка"]]
+def site_rows(snapshot, site, vinted=None):
+    """The listings of one site, by brand and model, cheapest first; the photo (an =IMAGE formula) first."""
+    rows = [["Фото", "Модель", "Цена, €", VINTED_MEAN, "Цена", "Валюта", "Набор", "Заголовок", "Ссылка"]]
     for i in sorted((i for i in snapshot["items"] if i["site"] == site),
                     key=lambda i: (_order(i["model"]), i["price_eur"] if i["price_eur"] is not None else 1e9)):
-        rows.append([i["model"], report._num(i["price_eur"]), report._num(i["price"]), i["currency"] or "",
+        rows.append([image_formula(i.get("photo")), i["model"], report._num(i["price_eur"]),
+                     _vinted_mean(vinted, i["model"]), report._num(i["price"]), i["currency"] or "",
                      "да" if i["bundle"] else "", i["title"], i["url"]])
     return rows
 
@@ -158,19 +178,26 @@ def sheet_titles(snapshot):
     return f"Срез {day}", {site: f"{SITES[site]} {day}" for site in snapshot["sites"]}
 
 
-def write(writer, snapshots):
-    """Every snapshot's sheets (rewritten as they are in the data)."""
+def write(writer, snapshots, vinted=None):
+    """Every snapshot's sheets (rewritten as they are in the data, with today's Vinted prices). The photos
+    go in after the text: replace() keeps every text cell literal."""
     for snap in snapshots:
         summary, per_site = sheet_titles(snap)
-        writer.replace(summary, summary_rows(snap), links=True)
+        writer.replace(summary, summary_rows(snap, vinted), links=True)
         for site, title in per_site.items():
-            writer.replace(title, site_rows(snap, site), links=True)
+            rows = site_rows(snap, site, vinted)
+            writer.replace(title, [rows[0]] + [[""] + r[1:] for r in rows[1:]], links=True)
+            if any(r[0] for r in rows[1:]):
+                writer.spreadsheet.worksheet(title).update(range_name="A2", values=[[r[0]] for r in rows[1:]],
+                                                           value_input_option="USER_ENTERED")
+                writer.set_row_height(title, PHOTO_ROW_PX)
 
 
 def main():
     import gspread
 
-    from . import datarepo, sheets
+    from . import datarepo, ka_report, sheets
+    from .store import DataStore
 
     parser = argparse.ArgumentParser(description="Write the price snapshots to their spreadsheet.")
     parser.add_argument("--local", help="a local data folder instead of a clone")
@@ -178,8 +205,10 @@ def main():
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         root = Path(args.local) if args.local else datarepo.clone(Path(tmp) / "data")
         snaps = load_all(root)
+        store = DataStore(root)
+        vinted = ka_report.vinted_model_stats({**store.load_closed(), **store.load_active()}.values())
         client = gspread.service_account_from_dict(env.google_sa_info())
-        write(sheets.SheetWriter(client.open_by_key(env.sheet_id("SNAPSHOT_SHEET_ID"))), snaps)
+        write(sheets.SheetWriter(client.open_by_key(env.sheet_id("SNAPSHOT_SHEET_ID"))), snaps, vinted)
     print(f"snapshot sheets: {len(snaps)} snapshot(s), {sum(len(s['items']) for s in snaps)} listings")
     return 0
 
