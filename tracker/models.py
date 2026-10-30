@@ -380,7 +380,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 54
+VERSION = 55
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -578,7 +578,8 @@ _COMPATIBLE_BEFORE = re.compile(
     r"\b(?:passt|passend|fits?|compatible|kompatibel|compatibile|adatt[oa]|geeignet)\b[^.!?\n()]*$")
 # Manuals. 'manual' next to camera words means a manual camera ('fully manual SLR').
 _MANUAL = re.compile(
-    r"(?:bedienungs|betriebs)?anleitung|gebrauchsanweisung|handbuch|\bnotice\b|mode d.emploi|istruzioni|\blibretto"
+    # also misspelt ('Minolta X-700 Bedienungsanleitug')
+    r"(?:bedienungs|betriebs)?anleitu?n?g|bedienungsanl\w*|gebrauchsanweisung|handbuch|\bnotice\b|mode d.emploi|istruzioni|\blibretto"
     r"|handleiding|gebruiksaanwijzing|instruction manual|manuale d.uso|(?<!fotocamere )(?<!macchine )\bmanuali\b"
     # 'manuale' alone also means a manual camera: only as a document ('manuale originale in russo')
     r"|^manuale\b|\bmanuale\b(?=\s+(?:originale|di istruzioni|istruzioni|utente|tecnico|in\s|italiano|inglese"
@@ -648,6 +649,12 @@ _STRONG_ACCESSORY = re.compile(
     r"zubehor\b|acc?es+oires?\b|accessori[oe]?\b|accessor(?:y|ies)\b|toebehoren\b"
     r"|katalog|catalog|cataloghi|catalogue|depliant|prospekt|brochure|broschure|\bguide\b|\bguida\b|ratgeber|leitfaden|\bbuch\b|\bbook\b|\blibro\b|\blivre\b|\bposter\b|zeitschrift|rivista|\bflyer"
     r"|camera (?:strap|bag|case|accessor)|kamera(?:tasche|gurt)"
+    # books run together ('Fotobuch Nikon-EM', '2x MINOLTA SR-T 101 Fachbuch') and book titles
+    # ('Ernst Leitz Wetzlar Fotografieren mit Leica III g')
+    r"|\b\w+buch\b|\b\w+bucher\b|\b(?:foto|photo)graf?ieren mit\b|\bphotographing with\b"
+    # ever-ready cases ('PRAKTICA IV FB BEREITSCHAFTS KAMERA TASCHE') and close-up lenses
+    # ('Leitz Leicaflex Elpro VIb 16532 Nahvorsatz')
+    r"|\bbereitschafts\w*|\bnahvorsatz\w*|\bnahlinse\w*|\bvorsatzlinse\w*|\belpro\b|close ?-?up (?:lens|filter)"
     # books in the plural, works, publications: 'Lot 3 ouvrages anciens Leica - M3, Matheson, Causeries'
     r"|\bouvrages?\b|\bpublications?\b|\blivres\b|\bbooks\b|\bbucher\b|\blibri\b|\bboeken\b|\bboek\b"
     r"|^revue (?:photo |appareil )?(?:canon|nikon|pentax|minolta|olympus|leica|contax|yashica|konica|rollei|hasselblad"
@@ -768,6 +775,27 @@ _MOUNT_NAME = re.compile(r"\b[a-z]{1,2}[ -]?mount\b|(?<=\w)&(?=\w)")
 _FOR_CAMERA = re.compile(f"{_FOR_CAMERA.pattern}|{_marker_words(markers.FOR_CAMERA)}")
 _NOT_SOLD_CAMERA = re.compile(f"{_NOT_SOLD_CAMERA.pattern}|{_marker_words(markers.NOT_SOLD)}")
 _WITH_WORDS = re.compile(f"{_WITH_WORDS.pattern}|{_marker_words(markers.WITH)}")
+# A bare 'und / and / et / e / &' joins a manual, a book or a part to the camera only when it
+# follows closely ('Minolta X-700 und Bedienungsanleitung', 'Canon AE-1 et sa notice'): not when it
+# joins two models ('Olympus OM-1 und OM-2 Buch', 'Canon A-1 & AE-1 Program Batteriegriff
+# Ersatzteil') or other such things ('LEICA M6 und anderes Prospektmaterial').
+_WEAK_WITH = re.compile(r"\b(?:und|and|et|e)\b|&")
+_OTHER_THINGS = re.compile(r"\b(?:andere[snmr]?|weitere[snmr]?|sonstige[snmr]?|other|autres?|altr[eio]|overige)\b")
+# Caps at the end of a title: 'Mamiya RZ67, RB67, ProSD Kamera Objektiv Deckel' (after the model too).
+_CAPS_END = re.compile(r"(?:\b(?:deckel|kappen?|caps?|tappi|tappo|bouchons?|dekiel|doppen?)|\w+deckel)\W*$")
+# 'Adapter-Ring f.Kameras': what the thing is for, not a camera on sale.
+_FOR_CAMERAS_SHORT = re.compile(r"\bf\.\s*(?:kameras?|cameras?)\b")
+
+
+def _with_before(head):
+    """A 'with' word in `head` (the text before a marker) keeps the listing a camera."""
+    if any(not _WEAK_WITH.fullmatch(m.group(0).strip()) for m in _WITH_WORDS.finditer(head)):
+        return True
+    weak = list(_WEAK_WITH.finditer(head))
+    if not weak:
+        return False
+    between = head[weak[-1].end():]
+    return len(between.split()) <= 2 and not _MODEL_NUMBER.search(between) and not _OTHER_THINGS.search(between)
 
 
 def _camera_joined(head):
@@ -780,20 +808,24 @@ def _camera_joined(head):
 
 def _is_accessory(norm, model_span):
     adapter = _ADAPTER.search(norm)
-    if adapter and not _CAMERA_WORDS.search(norm) and not _WITH_WORDS.search(_MOUNT_NAME.sub(" ", norm[:adapter.start()])):
+    if (adapter and not _CAMERA_WORDS.search(_FOR_CAMERAS_SHORT.sub(" ", norm))
+            and not _WITH_WORDS.search(_MOUNT_NAME.sub(" ", norm[:adapter.start()]))):
         return True  # 'K&F Concept Nikon-NEX (Nikon F auf Sony E-Mount) Objektivadapter', wherever the word stands
+    caps = _CAPS_END.search(norm)
+    if caps and not _with_before(norm[:caps.start()]) and not _BUNDLE.search(norm):
+        return True  # 'Mamiya RZ67, RB67, ProSD Kamera Objektiv Deckel'
     strong = _STRONG_ACCESSORY.search(norm)
-    if strong and not _WITH_WORDS.search(norm[:strong.start()]):
-        return True  # "Nikon F3 accessoires", "Film Back - Camera Accessory"
+    if strong and not _with_before(norm[:strong.start()]):
+        return True  # "Nikon F3 accessoires", "Film Back - Camera Accessory", "Olympus OM-1 und OM-2 Buch"
     part = _PARTS.search(norm)
-    if part and not _WITH_WORDS.search(norm[:part.start()]) and not _FOR_BEFORE.search(norm[:part.start()]):
+    if part and not _with_before(norm[:part.start()]) and not _FOR_BEFORE.search(norm[:part.start()]):
         return True  # "Calotta superiore Pentax ME Super ricambio originale"
     body = _BODY_PARTS.search(norm)
     if body and not (_WITH_WORDS.search(norm[:body.start()]) or _FOR_BEFORE.search(norm[:body.start()])
                      or _CAMERA_WORDS.search(norm[:body.start()]) or _BUNDLE.search(norm)):
         return True  # "Sportello posteriore Olympus OM10"
     manual = _MANUAL.search(norm)
-    if manual and not _WITH_WORDS.search(norm[:manual.start()]) and not _KIT_WORDS.search(norm):
+    if manual and not _with_before(norm[:manual.start()]) and not _KIT_WORDS.search(norm):
         return True  # "Notice appareil photo Nikon FE2", "Mamiya M645 ... multi language manual"
     if model_span is not None:
         head = norm[:model_span[0]]

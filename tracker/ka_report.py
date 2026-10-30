@@ -10,10 +10,16 @@ By brand: Canon, Nikon, Zenit first, then the others A-Z; within a brand the mos
 """
 import statistics
 
-from . import clock, models, report, sheets, snapshot
+from . import clock, models, notify, report, sheets, snapshot
 from .store import DataStore
 
 LIST_SHEET, REMOVED_SHEET, SUMMARY_SHEET, RUNS_SHEET = "Список", "Снятые", "Сводка", "Запуски"
+INTERESTING_SHEET = "Интересно"
+# 'Интересно': cameras on sale at least this much below their model's mean sale price on Vinted
+# (the letters' rule, notify.MAIL_MARGIN).
+INTERESTING_MARGIN = notify.MAIL_MARGIN
+INTERESTING_HEADER = ["Модель", "Цена, €", "Vinted: средняя цена продажи, €", "Дешевле на, €", "Дешевле на, %",
+                      "Vinted: продано", "Заголовок", "Состояние", "Комплект", "Выставлено", "Флаги", "Ссылка", "id"]
 COMPARE_SHEET = "Сравнение"
 COMPARE_BRANDS = ["Canon", "Nikon", "Zenit"]  # first in 'Сравнение', the other brands after them A-Z
 NEW_HEADER = "Новая (12 ч)"
@@ -179,8 +185,37 @@ def color_new_rows(writer):
                                       sheets.LIGHT_GREEN_3)
 
 
-def write(writer, cards, run):
-    """Every sheet of the Kleinanzeigen spreadsheet and a row in 'Запуски'."""
+def interesting_rows(cards, vinted):
+    """Cameras on sale (active, a real price, no bundle or flag) at least INTERESTING_MARGIN below their
+    model's mean sale price on Vinted (vinted_model_stats); the biggest gap first."""
+    picks = []
+    for c in cards:
+        mean = (vinted.get(c["model"]) or {}).get("sale_mean")
+        if c["status"] != "active" or not counted(c) or mean is None:
+            continue
+        price = report.current_price(c)
+        if price <= mean - INTERESTING_MARGIN:
+            picks.append((mean - price, c))
+    rows = [INTERESTING_HEADER]
+    for gap, c in sorted(picks, key=lambda p: (-p[0], -p[1]["id"])):
+        v = vinted[c["model"]]
+        rows.append([c["model"], report.current_price(c), v["sale_mean"], round(gap), f"{round(100 * gap / v['sale_mean'])} %",
+                     v["sold"], c["title"], c.get("condition") or "", report.KIT_RU.get(c.get("kit"), c.get("kit") or ""),
+                     c.get("listed_at") or "", _flags(c), c["url"], c["id"]])
+    return rows
+
+
+def load_vinted(root):
+    """Vinted's cameras from the same data repo (none without it)."""
+    if root is None:
+        return []
+    vinted = DataStore(root)
+    return list({**vinted.load_closed(), **vinted.load_active()}.values())
+
+
+def write(writer, cards, run, root=None):
+    """Every sheet of the Kleinanzeigen spreadsheet and a row in 'Запуски'; 'Интересно' compares with
+    Vinted's sales from the data repo at `root`."""
     now = run["at"]
     writer.replace(LIST_SHEET, list_rows(cards, now), links=True)
     try:  # cosmetic: a failure must not fail the check
@@ -189,6 +224,7 @@ def write(writer, cards, run):
         print(f"ka sheets: new-row colours not applied: {type(exc).__name__}")
     writer.replace(REMOVED_SHEET, removed_rows(cards, now), links=True)
     writer.replace(SUMMARY_SHEET, summary_rows(cards, now), links=True)
+    writer.replace(INTERESTING_SHEET, interesting_rows(cards, vinted_model_stats(load_vinted(root))), links=True)
     writer._get(RUNS_SHEET, RUNS_HEADER).insert_row(runs_row(run), index=2, value_input_option="RAW")
 
 
@@ -254,7 +290,5 @@ def compare_rows(ka_cards, vinted_items, now, snap=None):
 
 def write_compare(writer, ka_cards, root, now):
     """'Сравнение' in the comparison spreadsheet; Vinted's cameras come from the same data repo."""
-    vinted = DataStore(root)
-    items = list({**vinted.load_closed(), **vinted.load_active()}.values())
     snaps = snapshot.load_all(root)
-    writer.replace(COMPARE_SHEET, compare_rows(ka_cards, items, now, snaps[-1] if snaps else None))
+    writer.replace(COMPARE_SHEET, compare_rows(ka_cards, load_vinted(root), now, snaps[-1] if snaps else None))

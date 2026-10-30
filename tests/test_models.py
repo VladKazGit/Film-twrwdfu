@@ -204,6 +204,27 @@ CASES = [
 
 # (title, expected flags, expected kit)
 FLAG_CASES = [
+    # Kleinanzeigen, 30.10.2026: books, manuals, brochures, caps, cases and parts after the model
+    ("Mamiya RZ67, RB67, ProSD Kamera Objektiv Deckel", ["accessory?"], None),
+    ("LEICA M6 und anderes Prospektmaterial", ["accessory?"], None),
+    ("Pentax K1000 und P30T, Handbuch", ["accessory?"], None),
+    ("2x MINOLTA SR-T 101 Fachbuch", ["accessory?"], None),
+    ("IHAGEE Exa Exakta usw. Adapter-Ring f.Kameras m.Wechselobjektiv", ["accessory?"], None),
+    ("Olympus OM-1 und OM-2 Buch", ["accessory?"], None),
+    ("Fotobuch Nikon-EM und Nikon F301", ["accessory?"], None),
+    ("Ernst Leitz Wetzlar Fotografieren mit Leica III g", ["accessory?"], None),
+    ("Minolta X-700 Bedienungsanleitug", ["accessory?"], None),
+    ("Canon A-1 & AE-1 Program Batteriegriff Ersatzteil", ["accessory?"], None),
+    ("Nikon FM2 und FM3A Prospekte", ["accessory?"], None),
+    ("PRAKTICA IV FB BEREITSCHAFTS KAMERA TASCHE PENTACON MEYER GÖRLITZ", ["accessory?"], None),
+    ("Leitz Leicaflex Elpro VIb 16532 Nahvorsatz", ["accessory?"], None),
+    ("Leitz Arbeitsblatt Leicaflex", ["accessory?"], None),
+    # ... while 'und' / 'mit' right before the thing keeps a camera with it
+    ("Minolta X-700 und Bedienungsanleitung", [], None),
+    ("Canon AE-1 et sa notice", [], None),
+    ("Canon AE-1 Kamera mit Objektiv und Deckel", [], None),
+    ("Praktica IV FB mit Bereitschaftstasche", [], None),
+    ("Leica M6 mit Prospekt und OVP", [], None),
     ("Livella per fotocamera", ["accessory?"], None),
     ("Scatola Nikon FE", ["accessory?"], None),
     # the marker base (tracker/markers.py): the EU's languages

@@ -44,6 +44,14 @@ MODEL_PAGES = 10          # the first collection
 DAILY_MODEL_PAGES = 4     # then: the newest pages are enough to see what is still on sale
 MODEL_SEARCH_PER_CHECK = 4  # ~34 checks a day: every model about every two days
 AD_PAGES_MAX = 10
+# Listings missing from the results that should show them ('recheck' on the card, kept until their page
+# is read): first, beyond AD_PAGES_MAX - a listing taken down must not stay 'активно' for days.
+RECHECK_PAGES_MAX = 40
+# Bump to run every model's search once more to the end (MODEL_PAGES, checks back to back): the open
+# cards a finished search no longer shows get their page read. 1: 30.10.2026, deleted listings still shown
+# as on sale after the first collection.
+SWEEP_VERSION = 1
+SWEEP_RECHECK_MAX = 200
 OFFERS_PRICE = 5.0  # 'VB' up to this asks for offers ('1 € VB'): no price, skipped
 # Page checks by the listing's age in minutes: (up to, minutes between checks)
 RECHECK = ((3 * 60, 60), (1440, 240), (7 * 1440, 1440), (30 * 1440, 3 * 1440), (None, 7 * 1440))
@@ -98,6 +106,7 @@ def _set_price(card, price, now):
 
 
 def mark_seen(card, rec, now):
+    card.pop("recheck", None)
     card["last_seen_active"] = now
     _set_price(card, rec.get("price"), now)
     card["vb"] = rec.get("vb", card.get("vb"))
@@ -107,6 +116,7 @@ def mark_seen(card, rec, now):
 def apply_ad(card, ad, now):
     """Update a card from its page. Returns the status."""
     card["last_checked_at"] = now
+    card.pop("recheck", None)
     if ad["status"] == "gone":
         card.update(status="removed", removed_detected_at=now, closed_at=now)
         card["price_final"] = report.current_price(card)
@@ -139,7 +149,7 @@ class Check:
         self.store, self.client, self.now = store, client, now
         self.state = store.load_state()
         self.cards = {**store.load_closed(), **store.load_active()}
-        self.stats, self.seen, self.vanished = Counter(), set(), {}
+        self.stats, self.seen = Counter(), set()
 
     def take(self, recs, flags_for, model=None):
         """Cards from a page of results: known ones are seen, new cameras of the list get a card
@@ -171,15 +181,18 @@ class Check:
                 card["in_model_search"] = True
         return cameras
 
-    def missing(self, recs, keep):
-        """Open cards (keep(card)) with ids within the page's dated listings but not on the pages read."""
+    def missing(self, recs, keep, complete=False):
+        """Open cards (keep(card)) not on the pages read - with ids within the pages' dated listings, or any
+        when the results were read to their end (complete) - get their page read ('recheck')."""
         ids = [r["id"] for r in recs if r["listed_at"]]
-        if not ids:
+        if not ids and not complete:
             return
-        lowest = min(ids)
+        lowest = 0 if complete else min(ids)
         for card in self.cards.values():
             if not card.get("closed_at") and card["id"] >= lowest and card["id"] not in self.seen and keep(card):
-                self.vanished[card["id"]] = card
+                if not card.get("recheck"):
+                    self.stats["recheck"] += 1
+                card["recheck"] = True
 
     # ---- the newest pages of each type
 
@@ -211,18 +224,34 @@ class Check:
 
     # ---- searches by model: the first collection, then each model once a day
 
+    def sweep(self):
+        """The sweep state ({'version', 'left': models, 'status'}); a new SWEEP_VERSION starts one after the
+        first collection."""
+        st = self.state.setdefault("model_search", {"last_run": {}, "backfill": "running"})
+        sweep = st.get("sweep") or {}
+        if st["backfill"] == "done" and sweep.get("version") != SWEEP_VERSION:
+            sweep = st["sweep"] = {"version": SWEEP_VERSION, "left": list(models.MODEL_INFO), "status": "running"}
+        return sweep
+
+    def sweeping(self):
+        return self.sweep().get("status") == "running"
+
     def model_searches(self):
         st = self.state.setdefault("model_search", {"last_run": {}, "backfill": "running"})
         last_run = st["last_run"]
         names = list(models.MODEL_INFO)
         backfill = st["backfill"] != "done"
+        sweep = self.sweep()
+        sweeping = sweep.get("status") == "running"
         if backfill:
             queue = [n for n in names if n not in last_run]
+        elif sweeping:
+            queue = [n for n in sweep["left"] if n in models.MODEL_INFO]
         else:
             queue = sorted(names, key=lambda n: last_run.get(n) or "")[:MODEL_SEARCH_PER_CHECK]
-        pages = MODEL_PAGES if backfill else DAILY_MODEL_PAGES
+        pages = MODEL_PAGES if backfill or sweeping else DAILY_MODEL_PAGES
         for name in queue:
-            read, finished = [], False
+            read, finished, complete = [], False, False
             for page in range(1, pages + 1):
                 if not self.client.has_time():
                     break
@@ -230,41 +259,53 @@ class Check:
                 self.stats["model_pages"] += 1
                 read += recs
                 cameras = self.take(recs, lambda rec: ["preexisting"] if backfill else ["found"], name)
-                if page == pages or len(recs) < FULL_PAGE - 5 or not cameras:
+                complete = len(recs) < FULL_PAGE - 5  # the last page of the results
+                if page == pages or complete or not cameras:
                     finished = True
                     break
             if not finished:
                 break  # out of time: this model again from its first page next time
             last_run[name] = self.now
-            # seen in its model's results before, missing now: maybe taken down
-            self.missing(read, lambda c, n=name: c["model"] == n and c.get("in_model_search"))
+            if sweeping:
+                sweep["left"].remove(name)
+            # seen in its model's results before (in a sweep: any of the model), missing now: maybe taken down
+            self.missing(read, lambda c, n=name: c["model"] == n and (sweeping or c.get("in_model_search")), complete)
         if backfill and all(n in last_run for n in names):
             st["backfill"] = "done"
+            st["sweep"] = {"version": SWEEP_VERSION, "left": [], "status": "done"}  # nothing to sweep yet
         return st["backfill"] != "done"
 
     # ---- listing pages: the vanished ones first, the new ones (read once), then the due ones (youngest first)
 
     def ad_pages(self):
-        queue = dict(self.vanished)
-        for card in self.cards.values():
-            if not card.get("closed_at") and not card.get("last_checked_at") and not card.get("flags"):
+        open_cards = [c for c in self.cards.values() if not c.get("closed_at")]
+        recheck = sorted((c for c in open_cards if c.get("recheck")), key=lambda c: c["id"], reverse=True)
+        queue = {}
+        for card in open_cards:
+            if not card.get("recheck") and not card.get("last_checked_at") and not card.get("flags"):
                 queue.setdefault(card["id"], card)
-        for card in sorted((c for c in self.cards.values() if c["id"] not in self.seen and due(c, self.now)),
-                           key=lambda c: listed_minutes(c, self.now)):
+        for card in sorted((c for c in open_cards if c["id"] not in self.seen and not c.get("recheck")
+                            and due(c, self.now)), key=lambda c: listed_minutes(c, self.now)):
             queue.setdefault(card["id"], card)
-        for n, card in enumerate(queue.values()):
-            if n >= AD_PAGES_MAX or not self.client.has_time():
-                self.stats["deferred"] = len(queue) - n
-                break
-            try:
-                ad = self.client.ad_page(card["url"])
-            except BlockedError:
-                raise
-            except KaError:
-                self.stats["ad_errors"] += 1
-                continue
-            self.stats["ad_pages"] += 1
-            self.stats[apply_ad(card, ad, self.now)] += 1
+        recheck_max = SWEEP_RECHECK_MAX if self.sweeping() else RECHECK_PAGES_MAX
+        self.stats["deferred"] = 0
+        for cards, limit in ((recheck, recheck_max), (list(queue.values()), AD_PAGES_MAX)):
+            for n, card in enumerate(cards):
+                if n >= limit or not self.client.has_time():
+                    self.stats["deferred"] += len(cards) - n
+                    break
+                try:
+                    ad = self.client.ad_page(card["url"])
+                except BlockedError:
+                    raise
+                except KaError:
+                    self.stats["ad_errors"] += 1
+                    continue
+                self.stats["ad_pages"] += 1
+                self.stats[apply_ad(card, ad, self.now)] += 1
+        sweep = self.sweep()
+        if sweep.get("status") == "running" and not sweep["left"] and not any(c.get("recheck") for c in open_cards):
+            sweep["status"] = "done"
 
     def reclassify(self):
         """Bundles by the current rules; open cards without a price now leave the data; the dictionary
@@ -298,7 +339,7 @@ def run_check(store, client, now=None):
     try:
         check.reclassify()
         check.new_listings()
-        if backfill:  # the first collection before the page checks: these are all seen now
+        if backfill or check.sweeping():  # searches before the page checks: what they miss is checked at once
             backfill = check.model_searches()
             check.ad_pages()
         else:
@@ -308,6 +349,7 @@ def run_check(store, client, now=None):
         errors.append(f"blocked: {exc}")
     except KaError as exc:
         errors.append(str(exc))
+    sweeping = check.sweeping()
 
     stats, cards = check.stats, check.cards
     check.state["last_check_at"] = check.now
@@ -319,18 +361,20 @@ def run_check(store, client, now=None):
            "search_pages": stats["search_pages"], "model_pages": stats["model_pages"], "ad_pages": stats["ad_pages"],
            "deferred": stats["deferred"], "dropped": stats["dropped"],
            "open": sum(not c.get("closed_at") for c in cards.values()), "total": len(cards),
-           "backfill": "идёт" if backfill else "готов", "requests": client.requests_made, "errors": errors}
+           "backfill": "идёт" if backfill else "перепроверка" if sweeping else "готов", "recheck": stats["recheck"],
+           "requests": client.requests_made, "errors": errors}
     store.append_run(run)
     return {"run": run, "cards": list(cards.values()), "blocked": any(e.startswith("blocked") for e in errors),
-            "backfill": backfill}
+            "backfill": backfill or sweeping}
 
 
 def log_line(run):
     return (f"ka check {run['at'][11:]} | new {run['new']}, bumped {run['bumped']}, first collection"
             f" {run['preexisting']}, found {run['found']}, removed {run['removed']}, reserved {run['reserved']}"
             f" | pages: type {run['search_pages']}, model {run['model_pages']}, listings {run['ad_pages']}"
-            f" (deferred {run['deferred']}) | open {run['open']} of {run['total']}"
-            f" | first collection {'running' if run['backfill'] == 'идёт' else 'done'} | requests {run['requests']}"
+            f" (deferred {run['deferred']}, missing from searches {run.get('recheck', 0)}) | open {run['open']} of"
+            f" {run['total']} | first collection {'running' if run['backfill'] == 'идёт' else 'done'}"
+            f"{', sweep running' if run['backfill'] == 'перепроверка' else ''} | requests {run['requests']}"
             f" | errors: {len(run['errors']) or 'none'}")
 
 
@@ -355,8 +399,11 @@ def main():
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         root = Path(args.local) if args.local else datarepo.clone(Path(tmp) / "data")
         store = DataStore(root / "kleinanzeigen")
-        backfill = store.load_state().get("model_search", {}).get("backfill") != "done"
-        client = KaClient(time_budget=BACKFILL_BUDGET_S if backfill else CHECK_BUDGET_S)
+        search_state = store.load_state().get("model_search", {})
+        sweep = search_state.get("sweep") or {}
+        long_check = search_state.get("backfill") != "done" or sweep.get("version") != SWEEP_VERSION \
+            or sweep.get("status") == "running"
+        client = KaClient(time_budget=BACKFILL_BUDGET_S if long_check else CHECK_BUDGET_S)
         result = run_check(store, client)
         print(log_line(result["run"]))
         if not args.local:
@@ -364,7 +411,7 @@ def main():
         if not args.no_sheets:
             done = {"at": result["run"]["at"]}
             state = store.load_state()
-            writes = (("ka", "KA_SHEET_ID", lambda w: ka_report.write(w, result["cards"], result["run"])),
+            writes = (("ka", "KA_SHEET_ID", lambda w: ka_report.write(w, result["cards"], result["run"], root)),
                       ("compare", "COMPARE_SHEET_ID",
                        lambda w: ka_report.write_compare(w, result["cards"], root, result["run"]["at"])))
             for name, secret, write in writes:

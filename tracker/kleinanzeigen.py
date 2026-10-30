@@ -95,7 +95,7 @@ def parse_search(html, now, kind):
         old_p = _OLD_PRICE_P.search(rest)
         price, vb = parse_price(price_p.group(1) if price_p else "")
         out.append({
-            "id": item_id, "url": BASE_URL + href.group(1), "title": (meta.get("title") or "").strip(),
+            "id": item_id, "url": BASE_URL + href.group(1), "title": html_lib.unescape((meta.get("title") or "").strip()),
             "description": meta.get("description") or "", "photo": meta.get("contentUrl"),
             "price": price, "vb": vb, "old_price": parse_price(old_p.group(1))[0] if old_p else None,
             "listed_at": listed_at(text, now), "reserved": "Reserviert" in text[:200], "kind": kind,

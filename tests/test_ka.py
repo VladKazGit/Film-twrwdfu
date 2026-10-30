@@ -156,6 +156,38 @@ def test_checks():
         assert row[11] == 0 and row[12] == "+0 %", row
 
 
+def test_sweep_and_interesting():
+    """A finished model search that no longer shows a listing reads its page; a new SWEEP_VERSION runs every
+    model's search once more; 'Интересно' lists cameras 50 EUR below Vinted's mean sale price."""
+    with tempfile.TemporaryDirectory() as tmp:
+        store = DataStore(tmp)
+        fm2 = rec(200, "Nikon FM2 Gehäuse", "12.10.2026", "350 €", kind=None)
+        cheap = rec(201, "Nikon FM2 analog", "11.10.2026", "150 €", kind=None)
+        ka_tick.run_check(store, FakeClient(searches={("Nikon FM2", 1): [fm2, cheap]}), NOW)
+        state = store.load_state()
+        assert state["model_search"]["sweep"] == {"version": ka_tick.SWEEP_VERSION, "left": [], "status": "done"}
+
+        # a new sweep: every model searched again to the end; the FM2 at 350 EUR is gone from its results
+        state["model_search"]["sweep"]["version"] = ka_tick.SWEEP_VERSION - 1
+        store.save_state(state)
+        client = FakeClient(searches={("Nikon FM2", 1): [cheap]},
+                            ads={fm2["url"]: {"status": "gone", "price": None, "vb": False, "date": None,
+                                              "condition": None}})
+        result = ka_tick.run_check(store, client, "2026-10-28 12:30")
+        cards = {c["id"]: c for c in result["cards"]}
+        assert len({t for t, _ in client.searched}) == len(models.MODEL_INFO), "every model searched again"
+        assert cards[200]["status"] == "removed" and not cards[200].get("recheck"), cards[200]
+        assert cards[201]["status"] == "active" and fm2["url"] in client.opened
+        assert result["run"]["recheck"] == 1 and store.load_state()["model_search"]["sweep"]["status"] == "done"
+        assert not result["backfill"], "the sweep is over: no checks back to back"
+
+        vinted = [{"id": i, "group": "list", "model": "Nikon FM2", "status": "sold", "price_start": p,
+                   "price_history": [], "flags": []} for i, p in ((1, 250.0), (2, 210.0))]
+        rows = ka_report.interesting_rows(list(cards.values()), ka_report.vinted_model_stats(vinted))
+        assert rows[0] == ka_report.INTERESTING_HEADER and len(rows) == 2, rows
+        assert rows[1][:6] == ["Nikon FM2", 150.0, 230, 80, "35 %", 2], rows[1]
+
+
 def test_due():
     card = {"listed_at": "2026-10-28 11:00", "first_seen": "2026-10-28 11:05", "last_seen_active": "2026-10-28 11:05"}
     assert not ka_tick.due(card, "2026-10-28 12:00") and ka_tick.due(card, "2026-10-28 12:05")
@@ -180,6 +212,7 @@ def test_loop():
 def main():
     test_parsers()
     test_checks()
+    test_sweep_and_interesting()
     test_due()
     test_loop()
     print("test_ka: ok")

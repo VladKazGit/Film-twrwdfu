@@ -50,7 +50,11 @@ PRINT = {
     "bg": ["списание", "книга", "брошура", "каталог", "плакат", "реклама", "списания", "брошури", "каталози", "плакати", "реклами"],
     "cs": ["časopis", "kniha", "knihy", "brožura", "katalog", "prospekt", "plakát", "reklama", "časopisy", "brožury", "katalogy", "prospekty", "plakáty", "reklamy"],
     "da": ["tidsskrift", "bog", "bøger", "brochure", "katalog", "plakat", "reklame", "tidsskrifter", "brochurer", "kataloger", "plakater", "reklamer"],
-    "de": ["Zeitschrift", "Buch", "Bücher", "Broschüre", "Prospekt", "Katalog", "Plakat", "Werbeplakat", "Werbung", "Reklame", "gerahmt", "Zeitschriften", "Broschüren", "Prospekte", "Kataloge", "Plakate", "Werbeplakate"],
+    "de": ["Zeitschrift", "Buch", "Bücher", "Broschüre", "Prospekt", "Katalog", "Plakat", "Werbeplakat", "Werbung", "Reklame", "gerahmt", "Zeitschriften", "Broschüren", "Prospekte", "Kataloge", "Plakate", "Werbeplakate",
+           # Kleinanzeigen: 'Leitz Arbeitsblatt Leicaflex', 'LEICA M6 und anderes Prospektmaterial'
+           "Arbeitsblatt", "Datenblatt", "Faltblatt", "Merkblatt", "Werbeblatt", "Infoblatt", "Preisliste",
+           "Prospektmaterial", "Werbeprospekt", "Bildband", "Fotobuch", "Fachbuch", "Arbeitsblätter",
+           "Datenblätter", "Faltblätter", "Preislisten", "Werbeprospekte", "Bildbände", "Fotobücher", "Fachbücher"],
     "el": ["περιοδικό", "βιβλίο", "φυλλάδιο", "κατάλογος", "αφίσα", "διαφήμιση", "περιοδικά", "βιβλία", "φυλλάδια", "κατάλογοι", "αφίσες", "διαφημίσεις"],
     "en": ["book", "books", "brochure", "catalogue", "catalog", "publication", "advertisement", "advert", "framed print", "framed", "brochures", "catalogues", "catalogs", "publications", "advertisements", "adverts", "posters", "magazines"],
     "es": ["revista", "libro", "libros", "folleto", "catálogo", "cartel", "póster", "publicidad", "anuncio publicitario", "enmarcado", "revistas", "folletos", "catálogos", "carteles", "pósters", "anuncios"],
