@@ -315,6 +315,32 @@ ADAPTER = {
     "sv": ["adapter", "adapterring", "adaptrar", "adapterringar"],
 }
 
+# Teleconverters ('Pentax 67 Telekonverter TK 1.4×'): an accessory unless a 'with' word comes before it.
+TELECONVERTER = {
+    "bg": ["телеконвертор", "телеконвертори"],
+    "cs": ["telekonvertor", "telekonvertory"],
+    "da": ["telekonverter", "telekonvertere"],
+    "de": ["Telekonverter", "Konverter", "Telekonverters"],
+    "el": ["τηλεμετατροπέας"],
+    "en": ["teleconverter", "tele converter", "tele-converter", "extender", "teleconverters", "extenders"],
+    "es": ["teleconvertidor", "multiplicador de focal", "teleconvertidores"],
+    "et": ["telekonverter"],
+    "fi": ["telejatke", "telejatkeet"],
+    "fr": ["téléconvertisseur", "convertisseur", "multiplicateur de focale", "doubleur de focale", "téléconvertisseurs"],
+    "hr": ["telekonverter"],
+    "hu": ["telekonverter", "telekonverterek"],
+    "it": ["moltiplicatore di focale", "moltiplicatore", "duplicatore di focale", "teleconverter", "moltiplicatori"],
+    "lt": ["telekonverteris"],
+    "lv": ["telekonvertors"],
+    "nl": ["teleconverter", "teleconverters", "converter"],
+    "pl": ["telekonwerter", "telekonwertery"],
+    "pt": ["teleconversor", "teleconversores"],
+    "ro": ["teleconvertor", "teleconvertoare"],
+    "sk": ["telekonvertor", "telekonvertory"],
+    "sl": ["telekonverter"],
+    "sv": ["telekonverter", "telekonvertrar"],
+}
+
 # Made for a camera ('Livella per fotocamera'): in a title without a model and without a camera
 # word before it, the thing is for a camera, not one.
 FOR_CAMERA = {
@@ -358,5 +384,6 @@ WITH = {
 KINDS = {  # name (Russian, for people) -> words by language
     "инструкция": MANUAL, "журнал / книга / каталог": PRINT, "коробка": BOX,
     "камера не продаётся / пустая коробка": NOT_SOLD, "уровень": LEVEL, "макрокольца / удлинительные трубки": TUBES,
-    "запчасти корпуса": PARTS, "обтяжка корпуса": COVERING, "крышки": CAPS, "адаптер": ADAPTER, "«для камеры»": FOR_CAMERA,
+    "запчасти корпуса": PARTS, "обтяжка корпуса": COVERING, "крышки": CAPS, "адаптер": ADAPTER,
+    "телеконвертер": TELECONVERTER, "«для камеры»": FOR_CAMERA,
 }

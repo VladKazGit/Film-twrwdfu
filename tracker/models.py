@@ -380,7 +380,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 55
+VERSION = 56
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -762,7 +762,8 @@ def _marker_words(kind):
 _MANUAL = re.compile(f"{_MANUAL.pattern}|{_marker_words(markers.MANUAL)}")
 # Body parts: unlike _PARTS, not after a camera word or in a set ('Nikon F3 Analoge Kamera Set … Rückwand').
 _BODY_PARTS = re.compile(f"{_marker_words(markers.PARTS)}|{_marker_words(markers.COVERING)}")
-_STRONG_ACCESSORY = re.compile(f"{_STRONG_ACCESSORY.pattern}|{_marker_words(markers.PRINT)}")
+_STRONG_ACCESSORY = re.compile(f"{_STRONG_ACCESSORY.pattern}|{_marker_words(markers.PRINT)}"
+                               f"|{_marker_words(markers.TELECONVERTER)}|\\w+konverter\\w*")
 _LEAD_ACCESSORY = re.compile(f"{_LEAD_ACCESSORY.pattern}|{_marker_words(markers.PRINT)}|{_marker_words(markers.BOX)}")
 _BOX = re.compile(f"{_BOX.pattern}|{_marker_words(markers.BOX)}")
 _ACCESSORY_WORDS = re.compile(
@@ -781,8 +782,12 @@ _WITH_WORDS = re.compile(f"{_WITH_WORDS.pattern}|{_marker_words(markers.WITH)}")
 # Ersatzteil') or other such things ('LEICA M6 und anderes Prospektmaterial').
 _WEAK_WITH = re.compile(r"\b(?:und|and|et|e)\b|&")
 _OTHER_THINGS = re.compile(r"\b(?:andere[snmr]?|weitere[snmr]?|sonstige[snmr]?|other|autres?|altr[eio]|overige)\b")
-# Caps at the end of a title: 'Mamiya RZ67, RB67, ProSD Kamera Objektiv Deckel' (after the model too).
-_CAPS_END = re.compile(r"(?:\b(?:deckel|kappen?|caps?|tappi|tappo|bouchons?|dekiel|doppen?)|\w+deckel)\W*$")
+# Caps at the end of a title: 'Mamiya RZ67, RB67, ProSD Kamera Objektiv Deckel' (after the model too),
+# maybe with a size and the condition after them ('... Objektivdeckel Frontdeckel 67mm leicht gebr').
+_CAP_WORD = r"(?:\b(?:deckel|kappen?|caps?|tappi|tappo|bouchons?|dekiel|doppen?)|\w+deckel)"
+_CAP_TAIL = r"(?:\d+\s?mm|leicht|gebr\w*|neu\w*|original\w*|top|ovp|selten|rar|schwarz|black|chrom\w*|metall|vintage|alt)"
+_CAPS_END = re.compile(rf"{_CAP_WORD}(?:\W+(?:{_CAP_WORD}|{_CAP_TAIL}))*\W*$")
+_FOCAL = re.compile(r"\d{2,3}\s?mm")
 # 'Adapter-Ring f.Kameras': what the thing is for, not a camera on sale.
 _FOR_CAMERAS_SHORT = re.compile(r"\bf\.\s*(?:kameras?|cameras?)\b")
 
@@ -812,8 +817,14 @@ def _is_accessory(norm, model_span):
             and not _WITH_WORDS.search(_MOUNT_NAME.sub(" ", norm[:adapter.start()]))):
         return True  # 'K&F Concept Nikon-NEX (Nikon F auf Sony E-Mount) Objektivadapter', wherever the word stands
     caps = _CAPS_END.search(norm)
-    if caps and not _with_before(norm[:caps.start()]) and not _BUNDLE.search(norm):
-        return True  # 'Mamiya RZ67, RB67, ProSD Kamera Objektiv Deckel'
+    if caps and not _BUNDLE.search(norm):
+        head = norm[:caps.start()]
+        withs = list(_WITH_WORDS.finditer(head))
+        # 'Canon AE-1 Program + bouchon' is a camera with its cap; 'Pentax 67 6x7+Takumar Objektivdeckel' - the
+        # '+' joins the lens the cap is for - is caps
+        between = head[withs[-1].end():] if withs else ""
+        if not _with_before(head) or (_LENS.search(between) and not _FOCAL.search(between)):
+            return True  # 'Mamiya RZ67, RB67, ProSD Kamera Objektiv Deckel'
     strong = _STRONG_ACCESSORY.search(norm)
     if strong and not _with_before(norm[:strong.start()]):
         return True  # "Nikon F3 accessoires", "Film Back - Camera Accessory", "Olympus OM-1 und OM-2 Buch"

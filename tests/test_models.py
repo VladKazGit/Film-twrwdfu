@@ -219,6 +219,10 @@ FLAG_CASES = [
     ("PRAKTICA IV FB BEREITSCHAFTS KAMERA TASCHE PENTACON MEYER GÖRLITZ", ["accessory?"], None),
     ("Leitz Leicaflex Elpro VIb 16532 Nahvorsatz", ["accessory?"], None),
     ("Leitz Arbeitsblatt Leicaflex", ["accessory?"], None),
+    ("Pentax 67 Telekonverter TK 1.4×", ["accessory?"], None),
+    ("Pentax 67 6x7+Takumar Objektivdeckel Frontdeckel 67mm leicht gebr", ["accessory?"], None),
+    ("Nikon F3 Kamera + Kenko Teleconverter", [], None),
+    ("Nikon FM2 + 50mm 1.8 + Deckel", [], None),
     # ... while 'und' / 'mit' right before the thing keeps a camera with it
     ("Minolta X-700 und Bedienungsanleitung", [], None),
     ("Canon AE-1 et sa notice", [], None),
