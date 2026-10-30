@@ -380,7 +380,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 58
+VERSION = 59
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -418,7 +418,9 @@ DIGITAL_TWINS = {
 # A title naming one of these series is a known non-list camera: do not look
 # for a list model in its description ('Canon EOS 5000 ... Canon EF Objektiv').
 NON_LIST_SERIES = re.compile(
-    r"\beos\b|dynax|maxxum|\briva\b|espio|\bprima\b|sure ?shot|autoboy|\bmju\b|superzoom|zoomate|nikonos")
+    r"\beos\b|dynax|maxxum|\briva\b|espio|\bprima\b|sure ?shot|autoboy|\bmju\b|superzoom|zoomate|nikonos"
+    r"|\bpentax me ?f\b")  # the autofocus ME F, 'eine Abwandlung der ... Pentax ME Super'
+
 
 # ---------------------------------------------------------------- normalization
 
@@ -572,7 +574,10 @@ _LENS_WORDS = re.compile(r"\bzoom\b|vivitar|tamron|\bsigma\b|tokina|soligor|hani
 # A title without a model or camera words that names a lens maker or a zoom range may be a lens
 # ('Vivitar Series 1 70-210mm Makro-Zoom') or a compact ('Canon Prima Zoom 76'): no list model
 # from its description.
-_LENS_TITLE = re.compile(_LENS_WORDS.pattern + r"|\b\d{2,3}\s?-\s?\d{2,3}\s?mm\b")
+_LENS_TITLE = re.compile(_LENS_WORDS.pattern + r"|\b\d{2,3}\s?-\s?\d{2,3}\s?mm\b"
+                         # a prime by its focal length and aperture, or a lens word: 'Canon FD 50mm f/1.4 Objektiv'
+                         # (its description names the cameras it fits: '... für analoge Canon-Kameras wie AE-1')
+                         r"|\b\d{2,3}\s?mm\s?(?:f\s?/?\s?|1\s?:\s?)\d|\bobjektiv\b|\bn ?fd\b|\bnew fd\b")
 # 'passt direkt auf Canon AE-1, A-1, FTb' in a description: compatible cameras, not the item.
 _COMPATIBLE_BEFORE = re.compile(
     r"\b(?:passt|passend|fits?|compatible|kompatibel|compatibile|adatt[oa]|geeignet)\b[^.!?\n()]*$")
@@ -656,6 +661,10 @@ _STRONG_ACCESSORY = re.compile(
     # ('Leitz Leicaflex Elpro VIb 16532 Nahvorsatz')
     r"|bereitschafts|\bnahvorsatz\w*|\bnahlinse\w*|\bvorsatzlinse\w*|\belpro\b|close ?-?up (?:lens|filter)"
     r"|\bdummy\b|attrappe"
+    # finders sold alone ('Nikon DR-3 Winkelsucher', 'Pentax 67 Faltlichtschacht Waist Level Finder',
+    # 'Kühn Flexameter seltener Reflex-Sucher zur Leitz Leica'): their descriptions list the cameras they fit
+    r"|(?:winkel|reflex|prismen|aufsteck|sport|lupen)\W?sucher\w*|\w*lichtschacht\w*|waist ?level ?finder"
+    r"|(?:right )?angle finder|prism finder|flexameter"
     # an empty box ('Leitz Wetzlar LEICA IIf Box Leerkarton Vintage')
     r"|leerkarton|leere (?:original)?(?:schachtel|verpackung|box|karton)|empty box|scatola vuota|boite vide")
 # Things sold alone when the title names no camera (Kleinanzeigen, 'Интересно' 30.10.2026): hoods ('Mamiya RB 67
@@ -698,7 +707,9 @@ _NOT_SOLD_CAMERA = re.compile(
     # only the (empty) box: 'SOLO SCATOLA VUOTA'
     r"|\bsolo (?:la )?scatola|scatola vuota|\bnur (?:die |der |den )?(?:original)?(?:verpackung|schachtel|karton|box)\b"
     r"|\bleere (?:original)?(?:schachtel|verpackung|box|karton)|(?:uniquement|seulement) (?:la )?boite|boite vide"
-    r"|empty box|\bbox only|only the (?:original )?box|lege doos|alleen de doos")
+    r"|empty box|\bbox only|only the (?:original )?box|lege doos|alleen de doos"
+    # a book on offer: 'Wir bieten Ihnen hier ein gebrauchtes Buch: Ernst Leitz II | Ich entscheide hiermit'
+    r"|\b(?:biete|bieten|verkaufe|verkaufen)\s+(?:ihnen\s+)?(?:hier\s+)?(?:ein|das|dieses|mein|unser)\s+(?:\w+\s+)?buch\b")
 _LEADING_FILLER = re.compile(
     r"^(?:\W|(?:vintage|rare|ancien(?:ne)?|alt(?:e|er)?|old|lot|lotto|set|kit|neu|new|nuovo)\b)+")
 _MODEL_NUMBER = re.compile(r"[a-z]*\d+[a-z0-9]*")
@@ -717,7 +728,7 @@ _COMPACT = re.compile(
     # the camera type only: 'kompakt' alone also praises small SLRs ('OM-1 kompakt und leicht')
     r"|kompaktkamera|compact camera|appareil (?:photo )?(?:argentique )?compact|fotocamera compatta")
 _DIGITAL = re.compile(
-    r"digital|numerique|megapixel|\bmpx?\b|\d\s?mp\b|\bdslr|\bdslm|mirrorless|spiegellos"
+    r"digital|numerique|megapixel|\bdji\b|\bosmo\b|gimbal|\bmpx?\b|\d\s?mp\b|\bdslr|\bdslm|mirrorless|spiegellos"
     r"|coolpix|powershot|lumix|cyber ?shot|dimage|finepix|\bsd ?-?karte|\bsd ?card|\d+ ?gb\b|\bz ?fc\b"
     r"|\beos \d{2,4}d\b|\beos \d{1,2}d\b|\bd\d{3,4}\b|\bk-(?:x|m|r|\d{1,2})\b|\*ist"
     # Minox digital miniatures of classic cameras ('Leica M3 Minox Miniaturizzata')
@@ -782,6 +793,8 @@ _STRONG_ACCESSORY = re.compile(f"{_STRONG_ACCESSORY.pattern}|{_marker_words(mark
                                f"|{_marker_words(markers.TELECONVERTER)}|\\w+konverter\\w*")
 _LEAD_ACCESSORY = re.compile(f"{_LEAD_ACCESSORY.pattern}|{_marker_words(markers.PRINT)}|{_marker_words(markers.BOX)}")
 _BOX = re.compile(f"{_BOX.pattern}|{_marker_words(markers.BOX)}")
+# Nothing but a box after the model: 'Kamera Canon A1  Originalkarton' (the box and papers are sold).
+_BOX_ONLY_AFTER = re.compile(rf"[^\w+&]*(?:(?:original|orig|die|der|den)\W+)?(?:{_BOX.pattern})\W*$")
 _ACCESSORY_WORDS = re.compile(
     f"{_ACCESSORY_WORDS.pattern}|{_marker_words(markers.LEVEL)}|{_marker_words(markers.TUBES)}"
     f"|{_marker_words(markers.ADAPTER)}|{_marker_words(markers.CAPS)}")
@@ -920,6 +933,8 @@ def _is_accessory(norm, model_span):
             return True  # "Kit guarnizioni luce Canon AE-1 Program"
         if _BOX.search(head) and not _camera_joined(head):
             return True  # "Scatola Nikon FE": the box is sold
+        if _BOX_ONLY_AFTER.match(norm[model_span[1]:]):
+            return True  # 'Kamera Canon A1  Originalkarton': only the box follows the model
         if _COMPATIBLE_AFTER.match(norm[model_span[1]:]):
             return True  # "Canon FD 50mm 1:1.8 T50 passend": fits the camera
     if model_span is None:

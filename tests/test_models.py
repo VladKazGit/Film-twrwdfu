@@ -240,6 +240,8 @@ FLAG_CASES = [
     ("Leica II Mini, Leica Elmar, mit passenden Etui", ["digital?"], None),
     ("Olympus OM 4/ 200mm  Auto T Zuiko 200mm Objektiv", ["accessory?"], None),
     ("Leitz Wetzlar LEICA IIf  Box Leerkarton Vintage", ["accessory?"], None),
+    ("Kamera Canon A1  Originalkarton", ["accessory?"], None),
+    ("Nikon FE mit Originalkarton", [], None),
     ("4 Asahi Pentax 67 Takumar Objektive für 6x7 und Fuji GFX 90mm", ["accessory?"], None),
     ("Leica & Leicaflex Lenses Buch G Rogliatti Englisch 1978 Objektiv", ["accessory?"], None),
     # ... and cameras with their kit
@@ -445,6 +447,15 @@ JUNK_CASES = [
 
 # (title, description, expected model): description search rules
 DESC_CASES = [
+    # lenses, finders and gimbals: the cameras their descriptions name are not on sale (Kleinanzeigen 30.10.2026)
+    ("Canon FD 50mm f/1.4 Objektiv (FD Mount)", "Der Klassiker eignet sich für analoge Canon-Kameras (wie AE-1", None),
+    ("Canon New FD 50mm f/1.8 Top Zustand linsenklar + Front / Objektiv", "für Canon AE-1, A-1", None),
+    ("Nikon DR-3 Winkelsucher", "Ich biete euch hier einen neuwertigen Nikon DR-3 Winkelsucher. Nikon F3", None),
+    ("Kühn Flexameter seltener Reflex-Sucher zur Leitz Leica", "Flexameter zur Leica IIIf", None),
+    ("Pentax 67,6x7,67 II Faltlichtschacht Waist Level Finder Top Zust.", "für Pentax 67", None),
+    ("Dji osmo 4", "DJI OM 4 – sehr guter Zustand Verkaufe meinen DJI OM 4 Smartphone-Gimbal", None),
+    ("Pentax ME F MEF erste analoge Autofocus Spiegelreflexkamera", "eine Abwandlung der früheren Pentax ME Super", None),
+    ("Kamera  Spiegelreflexkamera", "Pentax ME super Spiegelreflexkamera gebrauchter verkaufen", "Pentax ME Super"),
     ("Spotmaic SP mit Takumar + Revuenon", "Pentax Spotmatic SP, funktioniert", "Pentax Spotmatic"),
     ("Canon EOS 5000", "Canon EF Objektiv 35-80 dabei", None),
     ("Canon EOS 5000", "Gehäuse wie Canon AE-1", None),
@@ -473,6 +484,8 @@ DESC_CASES = [
 
 # (title, description, expected flags): an accessory told by how the description starts
 DESC_FLAG_CASES = [
+    ("Ernst Leitz II | Ich entscheide hiermit: Es wird riskiert - Leica",
+     "Leica Pre-Owned Ankauf ... Wir bieten Ihnen hier ein gebrauchtes Buch: Ernst Leitz II", ["accessory?"]),
     # a magazine (revue), a camera only for show
     ("Revue canon reflex f1 a1 ae-1p al-1", "Je vends une revue appareil canon reflex A1,F1, AE1p", ["accessory?"]),
     ("Revue Canon Al-1", "Je vends une revue appareil photo canon AL-1 Quick focus. Date de 1982.", ["accessory?"]),

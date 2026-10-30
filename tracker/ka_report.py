@@ -27,6 +27,7 @@ NEW_HOURS = 12
 FAST_MINUTES = 30
 DESCRIPTION_LIMIT = 150
 STATUS_RU = {"active": "активно", "reserved": "зарезервировано", "removed": "снято"}
+RECHECK_RU = "проверяется"  # missing from the searches, its page not read yet: most such listings are gone
 FLAG_RU = {"preexisting": "было до запуска", "found": "найдено поиском", "bumped": "поднято / TOP",
            "набор": "набор", "price?": "цена-заглушка?"}
 LIST_HEADER = ["Модель", "Заголовок", "Статус", "Цена, €", "VB", "Цена старт, €", "Тип", "Комплект", "Состояние",
@@ -104,10 +105,16 @@ def _description(card):
     return " ".join((card.get("description") or "").split())[:DESCRIPTION_LIMIT]
 
 
+def status_ru(card):
+    if card.get("recheck") and card["status"] != "removed":
+        return RECHECK_RU
+    return STATUS_RU.get(card["status"], card["status"])
+
+
 def list_rows(cards, now):
     rows = [LIST_HEADER]
     for c in _newest_first(cards):
-        rows.append([c["model"], c["title"], STATUS_RU.get(c["status"], c["status"]), _num(report.current_price(c)),
+        rows.append([c["model"], c["title"], status_ru(c), _num(report.current_price(c)),
                      "да" if c.get("vb") else "", _num(c.get("price_start")), c.get("type") or "",
                      report.KIT_RU.get(c.get("kit"), c.get("kit") or ""), c.get("condition") or "",
                      c.get("listed_at") or "", c["first_seen"], c.get("last_seen_active") or "",
@@ -186,12 +193,12 @@ def color_new_rows(writer):
 
 
 def interesting_rows(cards, vinted):
-    """Cameras on sale (active, a real price, no bundle or flag) at least INTERESTING_MARGIN below their
+    """Cameras on sale (active and not missing from the searches, a real price, no bundle or flag) at least INTERESTING_MARGIN below their
     model's mean sale price on Vinted (vinted_model_stats); the biggest gap first."""
     picks = []
     for c in cards:
         mean = (vinted.get(c["model"]) or {}).get("sale_mean")
-        if c["status"] != "active" or not counted(c) or mean is None:
+        if c["status"] != "active" or c.get("recheck") or not counted(c) or mean is None:
             continue
         price = report.current_price(c)
         if price <= mean - INTERESTING_MARGIN:

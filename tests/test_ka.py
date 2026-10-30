@@ -186,6 +186,11 @@ def test_sweep_and_interesting():
         rows = ka_report.interesting_rows(list(cards.values()), ka_report.vinted_model_stats(vinted))
         assert rows[0] == ka_report.INTERESTING_HEADER and len(rows) == 2, rows
         assert rows[1][:6] == ["Nikon FM2", 150.0, 230, 80, "35 %", 2], rows[1]
+        # missing from the searches: 'проверяется' in the list, not interesting until its page is read
+        picked = next(c for c in cards.values() if c["id"] == rows[1][-1])
+        picked["recheck"] = True
+        assert ka_report.status_ru(picked) == ka_report.RECHECK_RU
+        assert len(ka_report.interesting_rows(list(cards.values()), ka_report.vinted_model_stats(vinted))) == 1
 
 
 def test_due():
