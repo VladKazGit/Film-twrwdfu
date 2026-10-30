@@ -380,7 +380,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 56
+VERSION = 57
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -654,7 +654,21 @@ _STRONG_ACCESSORY = re.compile(
     r"|\b\w+buch\b|\b\w+bucher\b|\b(?:foto|photo)graf?ieren mit\b|\bphotographing with\b"
     # ever-ready cases ('PRAKTICA IV FB BEREITSCHAFTS KAMERA TASCHE') and close-up lenses
     # ('Leitz Leicaflex Elpro VIb 16532 Nahvorsatz')
-    r"|\bbereitschafts\w*|\bnahvorsatz\w*|\bnahlinse\w*|\bvorsatzlinse\w*|\belpro\b|close ?-?up (?:lens|filter)"
+    r"|bereitschafts|\bnahvorsatz\w*|\bnahlinse\w*|\bvorsatzlinse\w*|\belpro\b|close ?-?up (?:lens|filter)"
+    r"|\bdummy\b|attrappe")
+# Things sold alone when the title names no camera (Kleinanzeigen, 'Интересно' 30.10.2026): hoods ('Mamiya RB 67
+# Sonnenblende'), mounts ('UV Filter Bajonettfassung'), grips ('Leica CL Handgriff', 'MAMIYA C330: Original
+# Pistolengriff'), film inserts and backs, power packs, speed boosters, dust covers and holders, extension rings,
+# eyepiece lenses, lens attachments. With a camera word they are its kit ('Canon A1 Body Gehäuse ... Ok.blende').
+_THING_WORDS = re.compile(
+    r"sonnenblende|\bblende\b(?!\s*(?:defekt|klemmt|\d))|\w+fassung\b|\w*griff\b|power ?drive|control pack"
+    r"|battery pack|batteriepack|speed ?booster|dust (?:cover|cap)|staubschutz|\bholder\b|\bhalter(?:ung)?\b"
+    r"|verlangerung\w*|extension rings?|korrekturlinse|dioptri\w*|augenmuschel|\bokular\w*|weitwinkel ?-?linse"
+    r"|tele ?-?linse|zusatzlinse|filmeinsatz|filmmagazin|\w*ruckteil\b")
+# 'Mamiya RB67 Filmrückteil für Mittelformatkamera': the camera it is for
+_FOR_SOME_CAMERA = re.compile(r"\b(?:fur|for|pour|per|zur)\s+(?:die\s+|den\s+|eine?\s+)?\w*(?:kamera|camera)s?\b")
+_STRONG_ACCESSORY = re.compile(
+    _STRONG_ACCESSORY.pattern +
     # books in the plural, works, publications: 'Lot 3 ouvrages anciens Leica - M3, Matheson, Causeries'
     r"|\bouvrages?\b|\bpublications?\b|\blivres\b|\bbooks\b|\bbucher\b|\blibri\b|\bboeken\b|\bboek\b"
     r"|^revue (?:photo |appareil )?(?:canon|nikon|pentax|minolta|olympus|leica|contax|yashica|konica|rollei|hasselblad"
@@ -687,7 +701,7 @@ _LEADING_FILLER = re.compile(
     r"^(?:\W|(?:vintage|rare|ancien(?:ne)?|alt(?:e|er)?|old|lot|lotto|set|kit|neu|new|nuovo)\b)+")
 _MODEL_NUMBER = re.compile(r"[a-z]*\d+[a-z0-9]*")
 _WITH_WORDS = re.compile(r"\b(?:mit|with|avec|con|met|inkl|incl|inklusive|including|plus|und|and|et|e)\b|[+&]")
-_FOR_WORDS = re.compile(r"\b(?:fur|for|pour|per|voor|passend|passt|compatible|kompatibel|compatibile)\b")
+_FOR_WORDS = re.compile(r"\b(?:fur|for|pour|per|voor|zur|passend|passt|compatible|kompatibel|compatibile)\b")
 # 'für Canon Cameras', 'per fotocamera', 'pour appareils Nikon': the camera word after 'for' (with a
 # brand between at most) is what the thing fits.
 _FOR_TARGET = re.compile(
@@ -705,7 +719,7 @@ _DIGITAL = re.compile(
     r"|coolpix|powershot|lumix|cyber ?shot|dimage|finepix|\bsd ?-?karte|\bsd ?card|\d+ ?gb\b|\bz ?fc\b"
     r"|\beos \d{2,4}d\b|\beos \d{1,2}d\b|\bd\d{3,4}\b|\bk-(?:x|m|r|\d{1,2})\b|\*ist"
     # Minox digital miniatures of classic cameras ('Leica M3 Minox Miniaturizzata')
-    r"|\bminox\b|miniatur"
+    r"|\bminox\b|miniatur|\bleica \w+ mini\b"
     # Olympus OM-D / E-M10 / E-PL: Micro Four Thirds
     r"|\bom-?d\b|\be-?m ?(?:1|5|10)\b|\be-?pl? ?\d")
 
@@ -788,19 +802,56 @@ _CAP_WORD = r"(?:\b(?:deckel|kappen?|caps?|tappi|tappo|bouchons?|dekiel|doppen?)
 _CAP_TAIL = r"(?:\d+\s?mm|leicht|gebr\w*|neu\w*|original\w*|top|ovp|selten|rar|schwarz|black|chrom\w*|metall|vintage|alt)"
 _CAPS_END = re.compile(rf"{_CAP_WORD}(?:\W+(?:{_CAP_WORD}|{_CAP_TAIL}))*\W*$")
 _FOCAL = re.compile(r"\d{2,3}\s?mm")
+# A lens spec: a focal length or an aperture ('200mm', '1:3.5', 'f/4', '4,5/105').
+_APERTURE = re.compile(r"\b1\s?:\s?\d(?:[.,]\d)?\b|\bf\s?/?\s?\d(?:[.,]\d)?\b|\b\d[.,]\d\s?/\s?\d{2,3}\b")
+_LENS_SPEC = re.compile(rf"\d{{2,3}}\s?mm\b|{_APERTURE.pattern}")
+# Models that also name a lens system: their lenses are sold under the camera's name ('Pentax 67 SMC 200mm f/4
+# Teleobjektiv', 'Kiev88 MC Volna 3B 80mm f2.8 Objektiv', 'Mamiya 645 - Mamiya-Sekor Zoom ULD C 4,5/105-210mm').
+# A body word right after the model is the camera with its lens ('Mamiya RZ67 Pro Sekor Z 110mm f2.8 Lens').
+_SYSTEM_MODELS = ("Pentax 67", "Mamiya RB67", "Mamiya RZ67", "Mamiya 645", "Mamiya C33", "Kiev 88", "Kiev 60",
+                  "Kiev 6C", "Kiev 90")
+_BODY_AFTER = re.compile(r"\W*(?:pro|professional|ii|iii|mlu|ttl|body|set|kit|mittelformat\w*)\b")
+# Light seals as the item, at the end of a title ('Mamiya RB67 Pro-S Lichtdichtungen'); fresh seals praise the camera
+# ('Canon AE-1 neue Lichtdichtungen').
+_SEALS_END = re.compile(r"(?:light ?seals?|guarnizion\w*|lichtdichtung\w*|lichtafdichting\w*)\W*$")
+_FRESH = re.compile(r"\b(?:neu\w*|frisch\w*|new|fresh|ersetzt|getauscht|erneuert\w*|nuov\w*|nouve\w*|mit|with)\W*$")
+_COPY = re.compile(r"nachbau|replik|replica|\bfake\b|\bkopie\b")
 # 'Adapter-Ring f.Kameras': what the thing is for, not a camera on sale.
 _FOR_CAMERAS_SHORT = re.compile(r"\bf\.\s*(?:kameras?|cameras?)\b")
 
 
-def _with_before(head):
-    """A 'with' word in `head` (the text before a marker) keeps the listing a camera."""
+def _with_before(head, model_span=None):
+    """A 'with' word in `head` (the text before a marker) keeps the listing a camera. A bare 'und' does
+    only right after the model (or a camera word after it): 'Asahi Pentax 67 Rot und UV Filter
+    Bajonettfassung' joins two filters."""
     if any(not _WEAK_WITH.fullmatch(m.group(0).strip()) for m in _WITH_WORDS.finditer(head)):
         return True
     weak = list(_WEAK_WITH.finditer(head))
     if not weak:
         return False
     between = head[weak[-1].end():]
-    return len(between.split()) <= 2 and not _MODEL_NUMBER.search(between) and not _OTHER_THINGS.search(between)
+    if len(between.split()) > 2 or _MODEL_NUMBER.search(between) or _OTHER_THINGS.search(between):
+        return False
+    if model_span is None or model_span[1] > weak[-1].start():
+        return True
+    # 'Canon FT QL Spiegelreflexkamera m. Canon FL 50mm 1:1.8 Objekt.&Anleitung', 'Canon AE-1 Program et 50mm et
+    # accessoires': a camera, a body or a lens before it - the kit goes on
+    rest = head[model_span[1]:weak[-1].start()]
+    return not re.search(r"\w", rest) or bool(_CAMERA_WORDS.search(rest) or _KIT_WORDS.search(rest) or _FOCAL.search(rest))
+
+
+def _system_lens(norm, model_span):
+    """A lens of a system named like its camera ('Pentax 67 SMC 200mm f/4 Teleobjektiv'): a lens spec after the
+    model, no body word right after it, no camera word and no 'with' word before the spec."""
+    name = next((n for s, _, n in find_models(norm) if s == model_span[0]), None)
+    if not name or not name.startswith(_SYSTEM_MODELS):
+        return False
+    tail = norm[model_span[1]:]
+    spec = _LENS_SPEC.search(tail)
+    if not spec or _BODY_AFTER.match(tail) or _CAMERA_WORDS.search(norm):
+        return False
+    # 'technisch+kosmetisch', '6x7+Takumar': a '+' inside a word joins no camera
+    return not _WITH_WORDS.search(re.sub(r"(?<=\w)\+(?=\w)", " ", norm[:model_span[1]] + tail[:spec.start()]))
 
 
 def _camera_joined(head):
@@ -823,23 +874,38 @@ def _is_accessory(norm, model_span):
         # 'Canon AE-1 Program + bouchon' is a camera with its cap; 'Pentax 67 6x7+Takumar Objektivdeckel' - the
         # '+' joins the lens the cap is for - is caps
         between = head[withs[-1].end():] if withs else ""
-        if not _with_before(head) or (_LENS.search(between) and not _FOCAL.search(between)):
+        if not _with_before(head, model_span) or (_LENS.search(between) and not _FOCAL.search(between)):
             return True  # 'Mamiya RZ67, RB67, ProSD Kamera Objektiv Deckel'
+    seals = _SEALS_END.search(norm)
+    if seals and not _FRESH.search(norm[:seals.start()]) and not _BUNDLE.search(norm):
+        return True  # 'Mamiya RB67 Pro-S Lichtdichtungen'
     strong = _STRONG_ACCESSORY.search(norm)
-    if strong and not _with_before(norm[:strong.start()]):
+    # 'Lot canon Av-1 vintage avaec objects,flash et accessoires': 'and accessories' anywhere is the kit
+    generic = strong and re.fullmatch(r"zubehor|acc?es+oires?|accessori[oe]?|accessor(?:y|ies)|toebehoren", strong.group(0))
+    if strong and not _with_before(norm[:strong.start()], None if generic else model_span):
         return True  # "Nikon F3 accessoires", "Film Back - Camera Accessory", "Olympus OM-1 und OM-2 Buch"
+    thing = _THING_WORDS.search(norm)
+    if (thing and not _with_before(norm[:thing.start()], model_span)
+            and not _CAMERA_WORDS.search(_FOR_SOME_CAMERA.sub(" ", norm))):
+        return True  # 'Leica CL Handgriff', 'Mamiya RB67 Filmrückteil für Mittelformatkamera'
     part = _PARTS.search(norm)
-    if part and not _with_before(norm[:part.start()]) and not _FOR_BEFORE.search(norm[:part.start()]):
+    if part and not _with_before(norm[:part.start()], model_span) and not _FOR_BEFORE.search(norm[:part.start()]):
         return True  # "Calotta superiore Pentax ME Super ricambio originale"
     body = _BODY_PARTS.search(norm)
     if body and not (_WITH_WORDS.search(norm[:body.start()]) or _FOR_BEFORE.search(norm[:body.start()])
                      or _CAMERA_WORDS.search(norm[:body.start()]) or _BUNDLE.search(norm)):
         return True  # "Sportello posteriore Olympus OM10"
     manual = _MANUAL.search(norm)
-    if manual and not _with_before(norm[:manual.start()]) and not _KIT_WORDS.search(norm):
+    if manual and not _with_before(norm[:manual.start()], model_span) and not _KIT_WORDS.search(norm):
         return True  # "Notice appareil photo Nikon FE2", "Mamiya M645 ... multi language manual"
     if model_span is not None:
         head = norm[:model_span[0]]
+        if _system_lens(norm, model_span):
+            return True  # 'Pentax 67 SMC 200mm f/4 Teleobjektiv': the lens system, not the camera
+        if _APERTURE.search(head) and not _CAMERA_WORDS.search(norm) and not _WITH_WORDS.search(head):
+            return True  # 'Walimex Pro 14mm f/2.8 ED AS IF UMC Nikon F': a lens named before its mount
+        if _COPY.search(norm) and any(n.startswith("Leica") for s, _, n in find_models(norm) if s == model_span[0]):
+            return True  # 'Leica II Nachbau Messing Schlangenleder': a copy, not the Leica
         # 'für Canon Cameras' is what the thing is for, not a camera on sale
         if (_LENS_WORDS.search(head) or _FOR_WORDS.search(head)) and not _CAMERA_WORDS.search(_FOR_TARGET.sub(" ", head)):
             return True  # "Zoom Vivitar 70/210 per Nikon F", "Exaktar 200mm 1:3,5 für Canon Cameras A-1"
@@ -881,8 +947,9 @@ def _is_accessory(norm, model_span):
     # "Mamiya RZ67 Pro Sekor Z 110mm f2.8 Lens, Extension Tubes & ...": its kit lens comes first.
     if acc and _KIT_LENS.search(tail[:acc.start()]):
         return False
-    # "Nikon F Waist Level Finder ... Case": accessory words, no camera, no "with".
-    return bool(acc) and not _WITH_WORDS.search(tail[:acc.start()]) and not _CAMERA_WORDS.search(norm)
+    # "Nikon F Waist Level Finder ... Case": accessory words, no camera, no "with" ('Canon F-1 und F-1N
+    # Ledertasche': the 'und' joins two models).
+    return bool(acc) and not _with_before(norm[:end + acc.start()], model_span) and not _CAMERA_WORDS.search(norm)
 
 
 # 'Open to offers' (de/fr/it/en/nl): with a price of a few EUR it is a placeholder, not the price.
