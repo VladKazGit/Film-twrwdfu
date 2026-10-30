@@ -1,7 +1,7 @@
 """Kleinanzeigen (kleinanzeigen.de) pages for the camera collector (tracker.ka_tick).
 
 Public pages only, no account: the newest listings of the category Foto (c245) of type 'Kamera' and
-'Kamera & Zubehör', and a listing's own page. Single-threaded, 2-3 s between requests. Kleinanzeigen
+'Kamera & Zubehör', and a listing's own page. Single-threaded, 12-18 s between requests. Kleinanzeigen
 has no 'sold': a listing taken down redirects to the category - sold or withdrawn, nobody can tell.
 
 Search result items carry the title, the description's first ~250 characters and the photo in a
@@ -27,6 +27,8 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like
       "Chrome/130.0 Safari/537.36")
 RETRY_BACKOFF = (10, 30)
 FAILURES_IN_ROW_BLOCK = 3
+# Seconds between requests: five times the first 2-3 s since 30.10.2026 (the user: draw less attention).
+DELAY_S = (12.0, 18.0)
 
 
 class KaError(RuntimeError):
@@ -130,9 +132,9 @@ def parse_ad(html, final_url, url):
 
 
 class KaClient:
-    """Single-threaded polite session (2-3 s between requests). Counts requests for the logs."""
+    """Single-threaded polite session (DELAY_S between requests). Counts requests for the logs."""
 
-    def __init__(self, delay=(2.0, 3.0), timeout=30, time_budget=None):
+    def __init__(self, delay=DELAY_S, timeout=30, time_budget=None):
         self.delay, self.timeout, self.time_budget = delay, timeout, time_budget
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": UA, "Accept-Language": "de-DE,de;q=0.9"})

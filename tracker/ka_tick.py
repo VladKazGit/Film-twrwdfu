@@ -17,7 +17,8 @@ window.
   within the pages read but missing is checked on its page at once; the others when due by age
   (RECHECK). A listing taken down
   (its page redirects away) is 'removed' - sold or withdrawn, Kleinanzeigen does not tell.
-No account, public pages only, 2-3 s between requests; no seller names, ids, phones or places are kept.
+No account, public pages only, 12-18 s between requests (kleinanzeigen.DELAY_S); no seller names, ids, phones
+or places are kept.
 Data in kleinanzeigen/ of the private data repo; sheets in the Kleinanzeigen spreadsheet (secret
 KA_SHEET_ID) and the comparison with Vinted (secret COMPARE_SHEET_ID). Logs show counts only.
 
