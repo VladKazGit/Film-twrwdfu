@@ -380,7 +380,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 57
+VERSION = 58
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -655,7 +655,9 @@ _STRONG_ACCESSORY = re.compile(
     # ever-ready cases ('PRAKTICA IV FB BEREITSCHAFTS KAMERA TASCHE') and close-up lenses
     # ('Leitz Leicaflex Elpro VIb 16532 Nahvorsatz')
     r"|bereitschafts|\bnahvorsatz\w*|\bnahlinse\w*|\bvorsatzlinse\w*|\belpro\b|close ?-?up (?:lens|filter)"
-    r"|\bdummy\b|attrappe")
+    r"|\bdummy\b|attrappe"
+    # an empty box ('Leitz Wetzlar LEICA IIf Box Leerkarton Vintage')
+    r"|leerkarton|leere (?:original)?(?:schachtel|verpackung|box|karton)|empty box|scatola vuota|boite vide")
 # Things sold alone when the title names no camera (Kleinanzeigen, 'Интересно' 30.10.2026): hoods ('Mamiya RB 67
 # Sonnenblende'), mounts ('UV Filter Bajonettfassung'), grips ('Leica CL Handgriff', 'MAMIYA C330: Original
 # Pistolengriff'), film inserts and backs, power packs, speed boosters, dust covers and holders, extension rings,
@@ -719,7 +721,7 @@ _DIGITAL = re.compile(
     r"|coolpix|powershot|lumix|cyber ?shot|dimage|finepix|\bsd ?-?karte|\bsd ?card|\d+ ?gb\b|\bz ?fc\b"
     r"|\beos \d{2,4}d\b|\beos \d{1,2}d\b|\bd\d{3,4}\b|\bk-(?:x|m|r|\d{1,2})\b|\*ist"
     # Minox digital miniatures of classic cameras ('Leica M3 Minox Miniaturizzata')
-    r"|\bminox\b|miniatur|\bleica \w+ mini\b"
+    r"|\bminox\b|miniatur|\bleica \w+ mini\b|digicam"
     # Olympus OM-D / E-M10 / E-PL: Micro Four Thirds
     r"|\bom-?d\b|\be-?m ?(?:1|5|10)\b|\be-?pl? ?\d")
 
@@ -832,8 +834,10 @@ def _with_before(head, model_span=None):
     between = head[weak[-1].end():]
     if len(between.split()) > 2 or _MODEL_NUMBER.search(between) or _OTHER_THINGS.search(between):
         return False
-    if model_span is None or model_span[1] > weak[-1].start():
+    if model_span is None:
         return True
+    if model_span[1] > weak[-1].start():
+        return False  # 'Leica & Leicaflex Lenses Buch': the 'und' comes before the model, it joins no camera to the thing
     # 'Canon FT QL Spiegelreflexkamera m. Canon FL 50mm 1:1.8 Objekt.&Anleitung', 'Canon AE-1 Program et 50mm et
     # accessoires': a camera, a body or a lens before it - the kit goes on
     rest = head[model_span[1]:weak[-1].start()]
@@ -847,7 +851,8 @@ def _system_lens(norm, model_span):
     if not name or not name.startswith(_SYSTEM_MODELS):
         return False
     tail = norm[model_span[1]:]
-    spec = _LENS_SPEC.search(tail)
+    # a focal length, an aperture or the word lens ('4 Asahi Pentax 67 Takumar Objektive für 6x7 und Fuji GFX')
+    spec = re.search(rf"{_LENS_SPEC.pattern}|objektiv\w*|\blens(?:es)?\b|obiettiv\w*|objectifs?", tail)
     if not spec or _BODY_AFTER.match(tail) or _CAMERA_WORDS.search(norm):
         return False
     # 'technisch+kosmetisch', '6x7+Takumar': a '+' inside a word joins no camera
@@ -902,6 +907,8 @@ def _is_accessory(norm, model_span):
         head = norm[:model_span[0]]
         if _system_lens(norm, model_span):
             return True  # 'Pentax 67 SMC 200mm f/4 Teleobjektiv': the lens system, not the camera
+        if re.match(r"\d/\s?\d{2,3}\s?mm", norm[model_span[1] - 1:]):
+            return True  # 'Olympus OM 4/ 200mm Auto T Zuiko 200mm Objektiv': 4/200 is the lens, not the OM-4
         if _APERTURE.search(head) and not _CAMERA_WORDS.search(norm) and not _WITH_WORDS.search(head):
             return True  # 'Walimex Pro 14mm f/2.8 ED AS IF UMC Nikon F': a lens named before its mount
         if _COPY.search(norm) and any(n.startswith("Leica") for s, _, n in find_models(norm) if s == model_span[0]):

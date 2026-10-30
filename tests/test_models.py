@@ -238,7 +238,13 @@ FLAG_CASES = [
     ("LEICA R3 Dummy", ["accessory?"], None),
     ("Leica II Nachbau Messing Schlangenleder", ["accessory?"], None),
     ("Leica II Mini, Leica Elmar, mit passenden Etui", ["digital?"], None),
+    ("Olympus OM 4/ 200mm  Auto T Zuiko 200mm Objektiv", ["accessory?"], None),
+    ("Leitz Wetzlar LEICA IIf  Box Leerkarton Vintage", ["accessory?"], None),
+    ("4 Asahi Pentax 67 Takumar Objektive für 6x7 und Fuji GFX 90mm", ["accessory?"], None),
+    ("Leica & Leicaflex Lenses Buch G Rogliatti Englisch 1978 Objektiv", ["accessory?"], None),
     # ... and cameras with their kit
+    ("Nikon FM / 55mm macro f2.8 / 135 f3.5 ais", [], None),
+    ("Pentax 67 mit Objektiv 105mm", [], None),
     ("Asahi Pentax 6x7 MLU Kamera Vintage", [], None),
     ("Mamiya RB67 Pro SD Body mit Mattscheibe/ Focusing Screen", [], None),
     ("Canon A1 Body Gehäuse SLR 35mm FD Originalanl. guter Zustand, Riemen, Ok.blende", [], None),
