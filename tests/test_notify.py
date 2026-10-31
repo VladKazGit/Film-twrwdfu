@@ -51,6 +51,27 @@ def main():
         assert "Продаются в среднем за: 3 дня" in body and "Продаются в среднем за: 3 дня" in html, body
         assert body.index("Zenit E — 8 €") < body.index("Продажи Zenit E") < body.index("items/3"), "paragraphs in order"
         assert notify.run(items, state, "2026-10-18 10:52", sent.append) == 0 and len(sent) == 2, "each camera once"
+
+        # 'Zenit 1980': the Moscow 1980 Olympic editions at 30 EUR or less, each once
+        def zenit(item_id, title, price, description="", status="active", flags=()):
+            return {"id": item_id, "title": title, "description": description, "model": "Zenit EM", "brand": "Zenit",
+                    "group": "list", "status": status, "price_start": price, "price_history": [], "flags": list(flags),
+                    "url": f"https://www.vinted.de/items/{item_id}"}
+        watch = [zenit(101, "Zenit EM (Moskva ‘80 Olympic edition)", 25.0),
+                 zenit(102, 'Zenit TTL "Edizione Olimpica"', 30.0),
+                 zenit(103, "Appareil photo Zenit EM", 20.0, "édition jeux olympiques de Moscou 1980"),
+                 zenit(104, "Zenit-E Olimpiadi 1980 funzionante", 45.0),                      # dearer than 30
+                 zenit(105, "Fotocamera Zenit EM", 15.0, "va con Canon, Olympus, Nikon"),     # Olympus, not Olympia
+                 zenit(106, "Zenit EM Moskva 80", 20.0, status="sold"),
+                 zenit(107, "Zenit-E", 10.0, "Baujahr 1980"),                                  # the year it was made
+                 zenit(108, "Mode d'emploi Zenit EM JO 1980", 5.0, flags=["accessory?"])]
+        assert [i["id"] for i in notify.watch_now(watch)] == [101, 102, 103], notify.watch_now(watch)
+        state2 = {}
+        assert notify.run_watch(watch, state2, "2026-10-31 10:00", sent.append) == 3 and len(sent) == 3
+        assert sent[2]["Subject"].startswith("🏅 Vinted «Zenit 1980»: Zenit EM — 20 € и ещё 2"), sent[2]["Subject"]
+        assert notify.run_watch(watch, state2, "2026-10-31 10:15", sent.append) == 0 and len(sent) == 3, "each once"
+        watch[3]["price_history"] = [{"at": "2026-10-31 10:20", "price": 29.0}]
+        assert notify.run_watch(watch, state2, "2026-10-31 10:30", sent.append) == 1, "cheaper later: mailed then"
     finally:
         for name in ("MAIL_USER", "MAIL_APP_PASSWORD"):
             os.environ.pop(name, None)

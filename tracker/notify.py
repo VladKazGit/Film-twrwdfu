@@ -6,11 +6,16 @@ One letter per tick at most lists the cameras that entered it; each camera is ma
 once. The first letter only says alerts are on (and how many cameras the sheet holds),
 so switching on does not mail the whole sheet.
 
+A letter of its own, 'Zenit 1980': a Zenit of the Moscow 1980 Olympic editions (title: '1980' or an
+Olympic word; description: an Olympic word - Olympia, Olimpiadi, JO, Moskva 80, Misha...) on sale at
+WATCH_MAX_PRICE or less, each camera once; no welcome letter, what matches now is mailed at once.
+
 Secrets: MAIL_USER (the Gmail address that sends), MAIL_APP_PASSWORD (its 16-letter app
 password), MAIL_TO (optional; recipients separated by commas, default MAIL_USER).
 Without them nothing is sent. Logs show counts only, never titles, links or addresses.
 """
 import os
+import re
 import smtplib
 from email.message import EmailMessage
 from html import escape
@@ -24,6 +29,15 @@ MAIL_SKIP_BRANDS = {"Praktica", "Pentax", "Zeiss Ikon"}  # the user does not wan
 MAIL_SKIP_MODELS = {"Canon T50", "Canon T60", "Canon T70"}  # the same for these models
 MAIL_MARGIN = 50  # EUR: a letter only for a camera this much below its model's mean sale price, or with none known
 DESCRIPTION_CHARS = 300
+WATCH_MAX_PRICE = 30.0  # EUR: 'Zenit 1980' letters
+# The Moscow 1980 Olympics on a Zenit (normalized text): Olympia / Olimpiadi / olympische (not Olympus),
+# Jeux olympiques, JO, Misha, 'Moskva 80' and its spellings, "'80".
+_OLYMPIC = (r"olymp(?!us\b)\w*|olimp\w*|jeux olympiques|\bjo\b|\bmisha\b|\bmishka\b"
+            r"|\bmos(?:k|c|h)?(?:v|w|k)?a\W{0,3}(?:19)?80\b|\bmos[ck]ow\W{0,3}(?:19)?80\b"
+            r"|\bmoskau\W{0,3}(?:19)?80\b|\bmoscou\W{0,3}(?:19)?80\b|\b'80\b")
+_WATCH_TITLE = re.compile(rf"1980|{_OLYMPIC}")
+_WATCH_DESCRIPTION = re.compile(_OLYMPIC)  # a bare '1980' in a description is the year it was made
+WATCH_KEEP = 2000
 
 
 def configured():
@@ -77,9 +91,9 @@ def _sales_lines(model, stats):
     return [f"Продажи {model} в базе: в среднем {mean} € ({spread}продаж: {n})", f"Продаются в среднем за: {when}"]
 
 
-def message(cameras, now, welcome_count=None, stats=None):
+def message(cameras, now, welcome_count=None, stats=None, letter="До 20 €", mark="⚡"):
     """The letter: subject, plain text and HTML. Each camera in paragraphs: model and price, its
-    model's sales, the listing, the description."""
+    model's sales, the listing, the description. letter / mark: which mailing ('Zenit 1980')."""
     stats = stats or {}
     msg = EmailMessage()
     if welcome_count is not None:
@@ -91,7 +105,7 @@ def message(cameras, now, welcome_count=None, stats=None):
         first = cameras[0]
         price = report._price_text(report.current_price(first))
         more = f" и ещё {len(cameras) - 1}" if len(cameras) > 1 else ""
-        msg["Subject"] = f"⚡ Vinted «До 20 €»: {first.get('model', '')} — {price} €{more}"
+        msg["Subject"] = f"{mark} Vinted «{letter}»: {first.get('model') or first.get('title', '')[:40]} — {price} €{more}"
         text, rows = [], []
     p = 'style="margin:0 0 10px 0"'
     for item in cameras:
@@ -161,4 +175,36 @@ def run(items, state, now, send_fn=send):
         return 0
     send_fn(message(new, now, stats=stats))
     state["notified"] = ((state.get("notified") or []) + [i["id"] for i in new])[-NOTIFIED_KEEP:]
+    return len(new)
+
+
+def zenit_1980(item):
+    """A Zenit of the Moscow 1980 Olympic editions: '1980' or an Olympic word in the title, an Olympic
+    word in the description ('Zenit EM (Moskva ‘80 Olympic edition)', 'Zenit TTL "Edizione Olimpica"')."""
+    title = models.normalize(item.get("title") or "")
+    brand = (models.MODEL_INFO.get(item.get("model")) or {}).get("brand") or item.get("brand")
+    if "zenit" not in title and not (item.get("group") == "list" and brand == "Zenit"):
+        return False
+    return bool(_WATCH_TITLE.search(title) or _WATCH_DESCRIPTION.search(models.normalize(item.get("description") or "")))
+
+
+def watch_now(items):
+    """'Zenit 1980' cameras on sale now at WATCH_MAX_PRICE or less (a real price, not an accessory)."""
+    return [i for i in items
+            if i.get("status") == "active" and not report.stat_flags(i) & report.EXCLUDED_FLAGS
+            and report.current_price(i) is not None and report.current_price(i) <= WATCH_MAX_PRICE
+            and zenit_1980(i)]
+
+
+def run_watch(items, state, now, send_fn=send):
+    """Mail the 'Zenit 1980' cameras at WATCH_MAX_PRICE or less not mailed yet (each once; one that gets
+    cheaper later is mailed then). Updates state; returns the number mailed, or None without mail."""
+    if not configured():
+        return None
+    done = set(state.get("watch_notified") or [])
+    new = sorted((i for i in watch_now(items) if i["id"] not in done), key=lambda i: report.current_price(i) or 0)
+    if not new:
+        return 0
+    send_fn(message(new, now, stats=sale_stats(items), letter="Zenit 1980", mark="🏅"))
+    state["watch_notified"] = ((state.get("watch_notified") or []) + [i["id"] for i in new])[-WATCH_KEEP:]
     return len(new)

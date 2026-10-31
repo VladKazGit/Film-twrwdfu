@@ -1488,12 +1488,15 @@ def _main(args):
         if not result["fatal"]:
             try:  # e-mail alerts: a failure must not fail the tick
                 state = store.load_state()
-                before = (state.get("mail_welcome"), len(state.get("notified") or []))
+                before = (state.get("mail_welcome"), len(state.get("notified") or []), len(state.get("watch_notified") or []))
                 mailed = notify.run(result["items"], state, result["run"]["at"])
-                if (state.get("mail_welcome"), len(state.get("notified") or [])) != before:
+                watched = notify.run_watch(result["items"], state, result["run"]["at"])  # 'Zenit 1980'
+                if (state.get("mail_welcome"), len(state.get("notified") or []), len(state.get("watch_notified") or [])) != before:
                     store.save_state(state)  # sent: remember what, before the data commit
                 if mailed:
                     print(f"notify: mailed {mailed} camera(s)")
+                if watched:
+                    print(f"notify: Zenit 1980 mailed {watched} camera(s)")
             except Exception as exc:
                 print(f"notify failed: {type(exc).__name__}: {env.redact(exc)}")
         if not args.local:
