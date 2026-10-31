@@ -69,6 +69,7 @@ def main():
     assert w.written["leboncoin.fr 28.10.2026"][1][0] == "" and w.tall == ["OLX.pl 28.10.2026", "leboncoin.fr 28.10.2026"]
     assert w.sheets["leboncoin.fr 28.10.2026"].cells["A2"] == ([[lbc[1][0]], [""]], "USER_ENTERED")
     assert "eBay.de 28.10.2026" not in w.sheets
+    assert snapshot.build(raw[1:4], "2026-10-31", 4.25)["sites"] == ["lbc"]
     compare = ka_report.compare_rows([], [], "2026-10-28 12:00", snap)
     assert compare[0][-1] == "eBay.de (срез 28.10): средняя цена, €"
     assert compare[1][0] == "Canon AE-1" and compare[1][-6:] == [1, 100, 2, 150, "", ""], compare[1]

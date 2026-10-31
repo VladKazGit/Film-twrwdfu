@@ -95,7 +95,9 @@ def build(raw, date, pln_per_eur):
                       "price_eur": eur, "bundle": is_bundle(r["title"]),
                       "url": item_url(r["site"], r["id"], r["searched"], r.get("href")),
                       "photo": r.get("photo") if r.get("photo") and PHOTO_URL.fullmatch(r["photo"]) else None})
-    return {"date": date, "pln_per_eur": pln_per_eur, "sites": list(SITES), "items": items}
+    # only the sites looked through: one stopped at its errors gets no empty sheet
+    return {"date": date, "pln_per_eur": pln_per_eur, "items": items,
+            "sites": [s for s in SITES if any(r["site"] == s for r in raw)]}
 
 
 def counted(item):
