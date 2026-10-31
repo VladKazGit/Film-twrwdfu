@@ -388,6 +388,23 @@ def open_writer(secret):
     return sheets.SheetWriter(client.open_by_key(env.sheet_id(secret)))
 
 
+def mail_watch(store, cards, root, now):
+    """The 'Zenit 1980' letter for Kleinanzeigen (tracker.notify.run_watch; its own list of mailed cards in
+    the state, Vinted's sales of the model in the letter). A mail failure must not lose the check."""
+    from . import ka_report, notify
+    if not notify.configured():
+        return
+    try:
+        state = store.load_state()
+        mailed = notify.run_watch(cards, state, now, source="Kleinanzeigen",
+                                  stats=notify.sale_stats(ka_report.load_vinted(root)))
+        if mailed:
+            store.save_state(state)
+            print(f"notify: Zenit 1980 mailed {mailed} camera(s)")
+    except Exception as exc:
+        print(f"notify failed: {type(exc).__name__}")
+
+
 def main():
     from . import datarepo, ka_report
     from .lens_tick import push_data
@@ -407,6 +424,7 @@ def main():
         client = KaClient(time_budget=BACKFILL_BUDGET_S if long_check else CHECK_BUDGET_S)
         result = run_check(store, client)
         print(log_line(result["run"]))
+        mail_watch(store, result["cards"], root, result["run"]["at"])
         if not args.local:
             push_data(root, f"ka check {result['run']['at']}")
         if not args.no_sheets:

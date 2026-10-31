@@ -51,6 +51,9 @@ jobs:
           COMPARE_SHEET_ID: ${{ secrets.COMPARE_SHEET_ID }}
           DATA_TOKEN: ${{ secrets.DATA_TOKEN }}
           DATA_REPO: ${{ secrets.DATA_REPO }}
+          MAIL_USER: ${{ secrets.MAIL_USER }}
+          MAIL_APP_PASSWORD: ${{ secrets.MAIL_APP_PASSWORD }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
           NEXT_CHECK: ${{ inputs.next_check }}
         run: >-
           python -u -m tracker.ka_loop ${{ inputs.force && '--force' || '' }} ${{ inputs.chained && '--chained' || '' }}

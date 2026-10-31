@@ -8,7 +8,8 @@ so switching on does not mail the whole sheet.
 
 A letter of its own, 'Zenit 1980': a Zenit of the Moscow 1980 Olympic editions (title: '1980' or an
 Olympic word; description: an Olympic word - Olympia, Olimpiadi, JO, Moskva 80, Misha...) on sale at
-WATCH_MAX_PRICE or less, each camera once; no welcome letter, what matches now is mailed at once.
+WATCH_MAX_PRICE or less, each camera once; no welcome letter, what matches now is mailed at once. The
+same letter for Kleinanzeigen (tracker.ka_tick: its own state, Vinted's sales of the model in it).
 
 Secrets: MAIL_USER (the Gmail address that sends), MAIL_APP_PASSWORD (its 16-letter app
 password), MAIL_TO (optional; recipients separated by commas, default MAIL_USER).
@@ -80,20 +81,22 @@ def sale_stats(items):
     return stats
 
 
-def _sales_lines(model, stats):
+def _sales_lines(model, stats, where="в базе"):
     """['Продажи Zenit E в базе: в среднем 32 € (от 15 € до 60 €, продаж: 3)',
         'Продаются в среднем за: 4 дня']."""
     if model not in stats:
-        return [f"Продажи {model} в базе: пока нет"]
+        return [f"Продажи {model} {where}: пока нет"]
     n, mean, low, high, days = stats[model]
     spread = f"от {report._price_text(low)} € до {report._price_text(high)} €, " if n > 1 else ""
     when = report.format_on_sale(days) if days is not None else "пока неизвестно"
-    return [f"Продажи {model} в базе: в среднем {mean} € ({spread}продаж: {n})", f"Продаются в среднем за: {when}"]
+    return [f"Продажи {model} {where}: в среднем {mean} € ({spread}продаж: {n})", f"Продаются в среднем за: {when}"]
 
 
-def message(cameras, now, welcome_count=None, stats=None, letter="До 20 €", mark="⚡"):
+def message(cameras, now, welcome_count=None, stats=None, letter="До 20 €", mark="⚡", source="Vinted",
+            sales_where="в базе"):
     """The letter: subject, plain text and HTML. Each camera in paragraphs: model and price, its
-    model's sales, the listing, the description. letter / mark: which mailing ('Zenit 1980')."""
+    model's sales, the listing, the description. letter / mark: which mailing ('Zenit 1980'); source:
+    the marketplace ('Kleinanzeigen'); sales_where: whose sales the stats are ('на Vinted')."""
     stats = stats or {}
     msg = EmailMessage()
     if welcome_count is not None:
@@ -105,14 +108,14 @@ def message(cameras, now, welcome_count=None, stats=None, letter="До 20 €", 
         first = cameras[0]
         price = report._price_text(report.current_price(first))
         more = f" и ещё {len(cameras) - 1}" if len(cameras) > 1 else ""
-        msg["Subject"] = f"{mark} Vinted «{letter}»: {first.get('model') or first.get('title', '')[:40]} — {price} €{more}"
+        msg["Subject"] = f"{mark} {source} «{letter}»: {first.get('model') or first.get('title', '')[:40]} — {price} €{more}"
         text, rows = [], []
     p = 'style="margin:0 0 10px 0"'
     for item in cameras:
         price = report._price_text(report.current_price(item))
         model, title, url, origin = item.get("model") or "", item.get("title") or "", item.get("url") or "", _origin(item)
         description = report._one_line(item.get("description"), DESCRIPTION_CHARS)
-        sales = _sales_lines(model, stats)
+        sales = _sales_lines(model, stats, sales_where)
         text += [f"{model} — {price} €", origin, "", *sales, "", title, url, ""]
         if description:
             text += [description, ""]
@@ -189,22 +192,25 @@ def zenit_1980(item):
 
 
 def watch_now(items):
-    """'Zenit 1980' cameras on sale now at WATCH_MAX_PRICE or less (a real price, not an accessory)."""
+    """'Zenit 1980' cameras on sale now at WATCH_MAX_PRICE or less (a real price, not an accessory; on
+    Kleinanzeigen not one gone from the searches whose page is not checked yet - 'recheck')."""
     return [i for i in items
-            if i.get("status") == "active" and not report.stat_flags(i) & report.EXCLUDED_FLAGS
+            if i.get("status") == "active" and not i.get("recheck") and not report.stat_flags(i) & report.EXCLUDED_FLAGS
             and report.current_price(i) is not None and report.current_price(i) <= WATCH_MAX_PRICE
             and zenit_1980(i)]
 
 
-def run_watch(items, state, now, send_fn=send):
+def run_watch(items, state, now, send_fn=send, source="Vinted", stats=None):
     """Mail the 'Zenit 1980' cameras at WATCH_MAX_PRICE or less not mailed yet (each once; one that gets
-    cheaper later is mailed then). Updates state; returns the number mailed, or None without mail."""
+    cheaper later is mailed then). stats: the model's sales for the letter (default: those of `items`).
+    Updates state; returns the number mailed, or None without mail."""
     if not configured():
         return None
     done = set(state.get("watch_notified") or [])
     new = sorted((i for i in watch_now(items) if i["id"] not in done), key=lambda i: report.current_price(i) or 0)
     if not new:
         return 0
-    send_fn(message(new, now, stats=sale_stats(items), letter="Zenit 1980", mark="🏅"))
+    send_fn(message(new, now, stats=sale_stats(items) if stats is None else stats, letter="Zenit 1980", mark="🏅",
+                    source=source, sales_where="в базе" if stats is None else "на Vinted"))
     state["watch_notified"] = ((state.get("watch_notified") or []) + [i["id"] for i in new])[-WATCH_KEEP:]
     return len(new)

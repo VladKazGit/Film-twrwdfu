@@ -72,6 +72,15 @@ def main():
         assert notify.run_watch(watch, state2, "2026-10-31 10:15", sent.append) == 0 and len(sent) == 3, "each once"
         watch[3]["price_history"] = [{"at": "2026-10-31 10:20", "price": 29.0}]
         assert notify.run_watch(watch, state2, "2026-10-31 10:30", sent.append) == 1, "cheaper later: mailed then"
+        # Kleinanzeigen: its own state, Vinted's sales in the letter, not one waiting for its page check
+        ka = [dict(zenit(201, "Zenit EM Sonderedition Olympia Moskau 1980", 20.0),
+                   url="https://www.kleinanzeigen.de/s-anzeige/x/201-245-1"),
+              dict(zenit(202, "Zenit TTL Olympia 1980", 25.0), recheck="2026-10-31 09:00")]
+        vinted_sales = notify.sale_stats([dict(zenit(301, "Zenit EM", 60.0, status="sold"), price_final=60.0)])
+        assert notify.run_watch(ka, {}, "2026-10-31 11:00", sent.append, source="Kleinanzeigen", stats=vinted_sales) == 1
+        body = sent[-1].get_body(("plain",)).get_content()
+        assert sent[-1]["Subject"].startswith("🏅 Kleinanzeigen «Zenit 1980»: Zenit EM — 20 €"), sent[-1]["Subject"]
+        assert "Продажи Zenit EM на Vinted: в среднем 60 €" in body and "201-245-1" in body and "TTL" not in body, body
     finally:
         for name in ("MAIL_USER", "MAIL_APP_PASSWORD"):
             os.environ.pop(name, None)
