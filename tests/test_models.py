@@ -486,6 +486,10 @@ DESC_CASES = [
 DESC_FLAG_CASES = [
     ("Ernst Leitz II | Ich entscheide hiermit: Es wird riskiert - Leica",
      "Leica Pre-Owned Ankauf ... Wir bieten Ihnen hier ein gebrauchtes Buch: Ernst Leitz II", ["accessory?"]),
+    # a book about the model: author, publisher (no model in the title); a camera's description may name its book
+    ("NIKOJ F3", "In vendita volume cartaceo d'epoca \"Fotoguida 1: Nikon F3\", scritto da Rex Hayman e pubblicato "
+                 "in Italia nel 1981 dalla storica casa editrice romana", ["accessory?"]),
+    ("Canon AE-1 + objectif Canon FD 50mm", "Appareil testé. Offert : le livre « Canon AE-1 » écrit par Ronan Loaec", []),
     # a magazine (revue), a camera only for show
     ("Revue canon reflex f1 a1 ae-1p al-1", "Je vends une revue appareil canon reflex A1,F1, AE1p", ["accessory?"]),
     ("Revue Canon Al-1", "Je vends une revue appareil photo canon AL-1 Quick focus. Date de 1982.", ["accessory?"]),

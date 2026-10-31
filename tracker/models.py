@@ -380,7 +380,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 59
+VERSION = 60
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -804,6 +804,15 @@ _ADAPTER = re.compile(f"{_marker_words(markers.ADAPTER)}|[a-z]+adapter\\b")
 _MOUNT_NAME = re.compile(r"\b[a-z]{1,2}[ -]?mount\b|(?<=\w)&(?=\w)")
 _FOR_CAMERA = re.compile(f"{_FOR_CAMERA.pattern}|{_marker_words(markers.FOR_CAMERA)}")
 _NOT_SOLD_CAMERA = re.compile(f"{_NOT_SOLD_CAMERA.pattern}|{_marker_words(markers.NOT_SOLD)}")
+# A description about a book: its author, publisher or ISBN, or a book on offer ('In vendita volume cartaceo
+# d'epoca "Fotoguida 1: Nikon F3", scritto da Rex Hayman ... dalla storica casa editrice'). Only for a title
+# naming no model: a camera's description may name a book that comes with it ('livre ... editions VM').
+_BOOK_DESCRIPTION = re.compile(
+    r"\bisbn\b|\bcasa editrice\b|\bscritto da\b|\bpubblicat[oa] (?:da|nel|in)\b|\bvolume cartaceo\b"
+    r"|\b(?:in vendita|vendo|vendesi)\s+(?:il |un |questo |mio )?(?:\w+\s+)?(?:libro|volume)\b"
+    r"|\bverlag\b|\bherausgegeben von\b|\bgeschrieben von\b|\bwritten by\b|\bpublished by\b|\bpublisher\b"
+    r"|\becrit par\b|\bmaison d.edition\b|\bpublie par\b|\buitgeverij\b|\bgeschreven door\b|\bescrito por\b"
+    r"|\bwydawnictw[oa]\b|\bnapisan[aey] przez\b")
 _WITH_WORDS = re.compile(f"{_WITH_WORDS.pattern}|{_marker_words(markers.WITH)}")
 # A bare 'und / and / et / e / &' joins a manual, a book or a part to the camera only when it
 # follows closely ('Minolta X-700 und Bedienungsanleitung', 'Canon AE-1 et sa notice'): not when it
@@ -1302,6 +1311,9 @@ def classify(title, description=None, vinted_brand=None):
         title_flags = title_flags + ["accessory?"]
     if description and "accessory?" not in title_flags and _NOT_SOLD_CAMERA.search(normalize(description)):
         title_flags = title_flags + ["accessory?"]  # 'Fotocamera solo a scopo dimostrativo': not for sale
+    if (description and model is None and "accessory?" not in title_flags
+            and _BOOK_DESCRIPTION.search(normalize(description))):
+        title_flags = title_flags + ["accessory?"]  # 'NIKOJ F3': 'volume cartaceo ... scritto da ... casa editrice'
     # An accessory/digital title does not get a camera model from its description
     # ('Lotto depliant e cataloghi Leica' -> description mentions an M3).
     norm_title = normalize(title)
