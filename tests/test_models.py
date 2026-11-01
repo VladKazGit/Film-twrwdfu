@@ -11,6 +11,8 @@ CASES = [
     ("Nikon F Photomic T", None, "Nikon F Photomic T"),
     ("Nikon F Photomic Tn Gehäuse", None, "Nikon F Photomic Tn"),
     ("Nikon F mit Photomic Sucher", None, "Nikon F"),
+    ("Fotocamera Nikon F + photomic FTN + obiettivo 50 mm 1:1.8", None, "Nikon F Photomic FTn"),  # one camera
+    ("Nikon F mit Photomic Tn Sucher", None, "Nikon F Photomic Tn"),
     ("Nikon Nikkormat FTN", None, "Nikkormat FTn"),
     ("Contax 137 MA Quartz", None, None),
     ("Contax 137 MD Quartz", None, "Contax 137 MD"),

@@ -71,6 +71,9 @@ BRANDS = {
 
 # Lens/aperture-looking tails that must not count as "another model number".
 _NOT_OTHER_MODEL = r"(?![\d.,:x]|\s*mm)"
+# Between the Nikon F and its finder: '+ / & / mit / with / con / avec / und / e' ('Nikon F + photomic FTN').
+_PHOTOMIC_SEP = r"[\s\-.,_/]*"
+_PHOTOMIC_WITH = rf"{_PHOTOMIC_SEP}(?:\+|&|mit|with|con|avec|und|and|et|e){_PHOTOMIC_SEP}"
 
 # (brand, model, mech_type, format, aliases, not_after regex or None)
 MODELS = [
@@ -78,9 +81,13 @@ MODELS = [
     ("Nikon", "Nikon F", MECH, S35, ["^f"], None),
     # the Nikon F with its metering finders (1962-1968): Photomic, Photomic T, Tn, FTn ('Nikon Photomic FTn')
     ("Nikon", "Nikon F Photomic", MECH, S35, ["^f photomic", "^photomic"], None),
-    ("Nikon", "Nikon F Photomic T", MECH, S35, ["^f photomic t", "^photomic t"], None),
-    ("Nikon", "Nikon F Photomic Tn", MECH, S35, ["^f photomic tn", "^photomic tn"], None),
-    ("Nikon", "Nikon F Photomic FTn", MECH, S35, ["^f photomic ftn", "^f photomic ft n", "photomic ftn!", "photomic ft n!", "^f ftn"], None),
+    # a named finder after '+ / mit / con' is the same camera ('Fotocamera Nikon F + photomic FTN'), not a set
+    ("Nikon", "Nikon F Photomic T", MECH, S35, ["^f photomic t", "^photomic t", rf"^~f{_PHOTOMIC_WITH}photomic{_PHOTOMIC_SEP}t"],
+     None),
+    ("Nikon", "Nikon F Photomic Tn", MECH, S35,
+     ["^f photomic tn", "^photomic tn", rf"^~f{_PHOTOMIC_WITH}photomic{_PHOTOMIC_SEP}t{_PHOTOMIC_SEP}n"], None),
+    ("Nikon", "Nikon F Photomic FTn", MECH, S35, ["^f photomic ftn", "^f photomic ft n", "photomic ftn!", "photomic ft n!", "^f ftn",
+                                                  rf"^~f{_PHOTOMIC_WITH}photomic{_PHOTOMIC_SEP}ft{_PHOTOMIC_SEP}n"], None),
     ("Nikon", "Nikon F2", MECH, S35, ["^f2", "^f2 a", "^f2 as", "^f2 s", "^f2 sb"], None),
     ("Nikon", "Nikon FM", MECH, S35, ["fm"], None),
     ("Nikon", "Nikon FM2", MECH, S35, ["fm2!"], None),
@@ -385,11 +392,12 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 61
+VERSION = 62
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
-PRIORITY_SEARCH = ("Canon FX", "Canon FP", "Canon TL", "Canon TLb", "Canon TX", "Canon AT-1", "Nikon FG-20",
+PRIORITY_SEARCH = ("Nikon F Photomic", "Nikon F Photomic T", "Nikon F Photomic Tn", "Nikon F Photomic FTn",
+                   "Canon FX", "Canon FP", "Canon TL", "Canon TLb", "Canon TX", "Canon AT-1", "Nikon FG-20",
                    "Canon AE-1", "Canon AE-1 Program", "Canon AV-1", "Canon F-1", "Canon A-1", "Leica R-E", "Leica R4s",
                    "Minolta SR-1", "Minolta SR-T 102", "Leica R9", "Canon T50", "Canon T60", "Canon T70", "Canon T80",
                    "Praktiflex", "Praktica FX", "Praktica FX2", "Praktica FX3", "Praktica IV", "Praktica IVB", "Praktica IVM", "Praktica IVBM", "Praktica IVF", "Praktica IVFB", "Praktica V", "Praktica VF", "Praktica Nova", "Praktica Nova B", "Praktica Nova I", "Praktica Nova IB", "Praktica Super TL2", "Praktica Super TL3", "Praktica L2", "Praktica LTL2", "Praktica LTL3", "Praktica LLC", "Praktica Mat", "Praktica MTL 50", "Praktica PLC2", "Praktica PLC3", "Praktica VLC", "Praktica VLC2", "Praktica VLC3", "Kiev 2", "Kiev 2A", "Kiev 3", "Kiev 3A", "Kiev 5", "Kiev 17", "Kiev 19", "Kiev 19M", "Kiev 20", "Kiev 88CM", "Kiev Salut", "Kiev Salut-S", "Kiev 90",
