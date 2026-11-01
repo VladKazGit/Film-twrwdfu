@@ -1,0 +1,40 @@
+name: catfirst threads
+
+# catFirst, not the camera tracker: public Threads posts about cats by keyword, read logged out in
+# headless Chromium, into the catFirst sheet (catfirst/threads.py). Twice a day and by hand;
+# nothing is pushed, the logs hold counts only.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 6 * * *"
+    - cron: "47 15 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: catfirst-threads
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -q -r requirements.txt playwright==1.52.0
+          python -m playwright install --with-deps chromium
+
+      - name: Collect posts
+        env:
+          GOOGLE_SA_KEY: ${{ secrets.GOOGLE_SA_KEY }}
+          CATFIRST_SHEET_ID: ${{ secrets.CATFIRST_SHEET_ID }}
+        run: python -u -m catfirst.threads
