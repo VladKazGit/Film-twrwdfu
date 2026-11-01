@@ -3,10 +3,12 @@
 Logged out, in headless Chromium: the search page's HTML holds no posts, its own scripts load
 them. For each keyword of the sheet's «Ключевые слова» tab, threads.com/search?q=<keyword>.
 Without a login the search shows only its top ~25 posts (no "Recent" tab, nothing more on
-scroll), so the run repeats twice a day and keeps what is new. A post is kept when it is at most
-MAX_AGE_DAYS old and its text talks about cats. New posts go on top of the «Threads» tab; the
-user's columns there (Ответил, Комментарий) are never rewritten, and a post the user deleted does
-not come back (the hidden «threads_seen» tab remembers every post added).
+scroll), so the run repeats once a day and keeps what is new. A post is kept when it is at most
+MAX_AGE_DAYS old and its text talks about cats. New posts go on top of the tab of their keyword's
+language (POSTS_TABS; any other language - the English one), with a light green row between them
+and the posts of an earlier day. The user's columns (Ответил, Комментарий) are never rewritten,
+and a post the user deleted does not come back (the hidden «threads_seen» tab remembers every
+post added).
 
 A login wall or a challenge page stops the run: nothing is worked around.
 Logs hold counts only - no authors, texts or links (the repository is public).
@@ -21,6 +23,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import quote, urlparse
 
 import gspread
+from gspread.utils import ValueRenderOption
 
 from tracker import env
 
@@ -29,13 +32,17 @@ from tracker import env
 # CATFIRST_SHEET_ID, when set, is used instead.
 SHEET_KEY_SHA256 = "98dafd11118df5b9cad590b7ce8806293a2937496970d3d849633a076131e1d1"
 
-POSTS_TAB = "Threads"
+POSTS_TABS = {"EN": "Threads — английский", "DE": "Threads — немецкий"}
+OLD_POSTS_TAB = "Threads"  # all languages in one tab, first run of 2026-11-01: split once
 KEYWORDS_TAB = "Ключевые слова"
 SEEN_TAB = "threads_seen"
-POSTS_HEADER = ["Найден", "Дата поста", "Язык", "Ключевые слова", "Автор", "Текст",
+POSTS_HEADER = ["Найден", "Дата поста", "Ключевые слова", "Автор", "Текст",
                 "Лайки", "Ответы", "Ссылка", "Ответил", "Комментарий"]
-POSTS_WIDTHS = [120, 120, 50, 150, 140, 460, 60, 60, 300, 70, 220]
-ANSWERED_COL = 9  # 0-based index of «Ответил»: a checkbox
+POSTS_WIDTHS = [120, 120, 150, 140, 460, 60, 60, 300, 70, 220]
+ANSWERED_COL = 8  # 0-based index of «Ответил»: a checkbox
+DAY_COLOR = {"red": 0.851, "green": 0.918, "blue": 0.827}  # light green 3
+WHITE = {"red": 1, "green": 1, "blue": 1}
+DAY = re.compile(r"^\d\d\.\d\d\.\d{4}")
 KEYWORDS_HEADER = ["Слово", "Язык", "Постов в выдаче", "Свежих о кошках", "Новых", "Проверено"]
 
 # Checked logged out on 2026-11-01: each gives a page of posts, mostly from the last two weeks.
@@ -150,8 +157,13 @@ def keyword_rows(ws, created):
     return keywords
 
 
-def posts_tab(sh):
-    ws, created = _tab(sh, POSTS_TAB, POSTS_HEADER)
+def tab_lang(lang):
+    lang = (lang or "").strip().upper()
+    return lang if lang in POSTS_TABS else "EN"
+
+
+def posts_tab(sh, lang):
+    ws, created = _tab(sh, POSTS_TABS[tab_lang(lang)], POSTS_HEADER)
     if created:
         sh.batch_update({"requests": [
             {"updateDimensionProperties": {
@@ -159,6 +171,58 @@ def posts_tab(sh):
                 "properties": {"pixelSize": w}, "fields": "pixelSize"}}
             for i, w in enumerate(POSTS_WIDTHS)]})
     return ws
+
+
+def insert_block(sh, ws, rows, day=None):
+    """`rows` on top of `ws`, and under them a light green row when the posts below were found on
+    an earlier day than `day` (a second run of the same day adds to its block)."""
+    top = ws.get_values("A2:A2")
+    below = DAY.match(top[0][0]) if top and top[0] else None
+    split = bool(day and below and below.group(0) != day)
+    values = [list(r) for r in rows]
+    if split:
+        values.append([f"Выше — {day}, ниже — {below.group(0)}"] + [""] * (len(POSTS_HEADER) - 1))
+    ws.insert_rows(values, row=2, value_input_option="RAW")
+
+    def cells(r0, r1, c0=0, c1=len(POSTS_HEADER)):
+        return {"sheetId": ws.id, "startRowIndex": r0, "endRowIndex": r1,
+                "startColumnIndex": c0, "endColumnIndex": c1}
+
+    n = len(rows)
+    # inserted rows take the format of the row under them: set it explicitly
+    requests = [
+        {"repeatCell": {"range": cells(1, 1 + n),
+                        "cell": {"userEnteredFormat": {"backgroundColor": WHITE, "textFormat": {"bold": False}}},
+                        "fields": "userEnteredFormat(backgroundColor,textFormat.bold)"}},
+        {"setDataValidation": {"range": cells(1, 1 + n, ANSWERED_COL, ANSWERED_COL + 1),
+                               "rule": {"condition": {"type": "BOOLEAN"}}}},
+    ]
+    if split:
+        requests += [
+            {"repeatCell": {"range": cells(1 + n, 2 + n),
+                            "cell": {"userEnteredFormat": {"backgroundColor": DAY_COLOR, "textFormat": {"bold": True}}},
+                            "fields": "userEnteredFormat(backgroundColor,textFormat.bold)"}},
+            {"setDataValidation": {"range": cells(1 + n, 2 + n)}},  # no rule: no checkbox
+        ]
+    sh.batch_update({"requests": requests})
+
+
+def split_old_tab(sh):
+    """Rows of the one «Threads» tab of the first run, moved to the tabs of their language (its
+    column C) with the user's ticks and comments; the tab is deleted. Returns the rows moved."""
+    try:
+        old = sh.worksheet(OLD_POSTS_TAB)
+    except gspread.WorksheetNotFound:
+        return 0
+    by_lang = {}
+    for r in old.get_values("A2:K", value_render_option=ValueRenderOption.unformatted):
+        r = list(r) + [""] * (11 - len(r))
+        if str(r[0]).strip():
+            by_lang.setdefault(tab_lang(str(r[2])), []).append(r[:2] + r[3:])
+    for lang, rows in by_lang.items():
+        insert_block(sh, posts_tab(sh, lang), rows)
+    sh.del_worksheet(old)
+    return sum(len(rows) for rows in by_lang.values())
 
 
 def seen_tab(sh):
@@ -240,7 +304,6 @@ def post_row(post, found):
     return [
         found,
         post["at"].astimezone(env.BERLIN).strftime("%d.%m.%Y %H:%M"),
-        post["lang"],
         ", ".join(post["keywords"]),
         post["author"],
         post["text"][:TEXT_MAX],
@@ -252,14 +315,13 @@ def post_row(post, found):
     ]
 
 
-def write(sh, ws_posts, ws_seen, seen_count, ws_keywords, keywords, new, stats, found):
+def write(sh, ws_seen, seen_count, ws_keywords, keywords, new, stats, found):
     if new:
-        posts = sorted(new.values(), key=lambda p: p["at"], reverse=True)
-        ws_posts.insert_rows([post_row(p, found) for p in posts], row=2, value_input_option="RAW")
-        sh.batch_update({"requests": [{"setDataValidation": {
-            "range": {"sheetId": ws_posts.id, "startRowIndex": 1, "endRowIndex": 1 + len(posts),
-                      "startColumnIndex": ANSWERED_COL, "endColumnIndex": ANSWERED_COL + 1},
-            "rule": {"condition": {"type": "BOOLEAN"}}}}]})
+        by_lang = {}
+        for p in sorted(new.values(), key=lambda p: p["at"], reverse=True):
+            by_lang.setdefault(tab_lang(p["lang"]), []).append(post_row(p, found))
+        for lang, rows in by_lang.items():
+            insert_block(sh, posts_tab(sh, lang), rows, day=found[:10])
         ws_seen.append_rows([[code, found] for code in new], value_input_option="RAW")
         total = seen_count + len(new)
         if total > SEEN_MAX + 1000:  # oldest first
@@ -275,7 +337,9 @@ def main():
     sh = open_sheet(client)
     ws_keywords, created = _tab(sh, KEYWORDS_TAB, KEYWORDS_HEADER)
     keywords = keyword_rows(ws_keywords, created)
-    ws_posts = posts_tab(sh)
+    moved = split_old_tab(sh)
+    if moved:
+        print(f"threads: {moved} posts of the old tab moved to the language tabs")
     ws_seen = seen_tab(sh)
     seen = {r[0] for r in ws_seen.get_values("A2:A") if r and r[0]}
     if not keywords:
@@ -284,7 +348,7 @@ def main():
     now = datetime.now(timezone.utc)
     new, stats = collect(keywords, seen, now)
     found = env.now_berlin().strftime("%d.%m.%Y %H:%M")
-    write(sh, ws_posts, ws_seen, len(seen), ws_keywords, keywords, new, stats, found)
+    write(sh, ws_seen, len(seen), ws_keywords, keywords, new, stats, found)
     on_page = sum(s[0] for s in stats.values())
     fresh = sum(s[1] for s in stats.values())
     empty = sum(1 for s in stats.values() if not s[0])

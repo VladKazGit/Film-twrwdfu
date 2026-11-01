@@ -1,13 +1,12 @@
 name: catfirst threads
 
 # catFirst, not the camera tracker: public Threads posts about cats by keyword, read logged out in
-# headless Chromium, into the catFirst sheet (catfirst/threads.py). Twice a day and by hand;
+# headless Chromium, into the catFirst sheet (catfirst/threads.py). Once a day and by hand;
 # nothing is pushed, the logs hold counts only.
 on:
   workflow_dispatch:
   schedule:
     - cron: "23 6 * * *"
-    - cron: "47 15 * * *"
 
 permissions:
   contents: read
