@@ -3,7 +3,15 @@ from tracker.models import classify, junk_reason
 
 CASES = [
     # (title, vinted brand, expected model)
-    ("Nikon F Photomic analog", None, "Nikon F"),
+    ("Nikon F Photomic analog", None, "Nikon F Photomic"),
+    # the Photomic line (1.11.2026): its own models; the Nikkormat FTn and the F2 Photomic stay theirs
+    ("Nikon F Photomic FTn", None, "Nikon F Photomic FTn"),
+    ("Nikon Photomic FTN schwarz mit Nikkor 50mm", None, "Nikon F Photomic FTn"),
+    ("Nikon F FTn", None, "Nikon F Photomic FTn"),
+    ("Nikon F Photomic T", None, "Nikon F Photomic T"),
+    ("Nikon F Photomic Tn Gehäuse", None, "Nikon F Photomic Tn"),
+    ("Nikon F mit Photomic Sucher", None, "Nikon F"),
+    ("Nikon Nikkormat FTN", None, "Nikkormat FTn"),
     ("Contax 137 MA Quartz", None, None),
     ("Contax 137 MD Quartz", None, "Contax 137 MD"),
     ("Nikon F55 Spiegelreflexkamera", None, None),

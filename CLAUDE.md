@@ -126,7 +126,7 @@ Cron (каждые 2 ч) — только запасной перезапуск 
 ## Список камер
 
 ### Механические
-- Nikon: F, F2, FM, FM2, FM2n, FM2n/T, FM3A, Nikkormat FT, Nikkormat FTn
+- Nikon: F, F Photomic / Photomic T / Photomic Tn / Photomic FTn (с 01.11.2026 — отдельные модели; «Nikon F mit Photomic Sucher» — Nikon F), F2, FM, FM2, FM2n, FM2n/T, FM3A, Nikkormat FT, Nikkormat FTn
 - Canon: F-1, F-1n, FTb, FT QL, Pellix, FX, FP, TL, TLb, TX; дальномерные Canon P, Canon 7
 - Pentax: Spotmatic / SP, Spotmatic F, SV, K1000, KM, MX, KX
 - Olympus: OM-1, OM-1 MD, OM-1n, M-1 (первое имя OM-1), OM-3, OM-3Ti, OM-2000, FTL (M42); полукадровые зеркальные Pen F, Pen FT, Pen FV

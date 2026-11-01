@@ -76,6 +76,11 @@ _NOT_OTHER_MODEL = r"(?![\d.,:x]|\s*mm)"
 MODELS = [
     # --- mechanical
     ("Nikon", "Nikon F", MECH, S35, ["^f"], None),
+    # the Nikon F with its metering finders (1962-1968): Photomic, Photomic T, Tn, FTn ('Nikon Photomic FTn')
+    ("Nikon", "Nikon F Photomic", MECH, S35, ["^f photomic", "^photomic"], None),
+    ("Nikon", "Nikon F Photomic T", MECH, S35, ["^f photomic t", "^photomic t"], None),
+    ("Nikon", "Nikon F Photomic Tn", MECH, S35, ["^f photomic tn", "^photomic tn"], None),
+    ("Nikon", "Nikon F Photomic FTn", MECH, S35, ["^f photomic ftn", "^f photomic ft n", "photomic ftn!", "photomic ft n!", "^f ftn"], None),
     ("Nikon", "Nikon F2", MECH, S35, ["^f2", "^f2 a", "^f2 as", "^f2 s", "^f2 sb"], None),
     ("Nikon", "Nikon FM", MECH, S35, ["fm"], None),
     ("Nikon", "Nikon FM2", MECH, S35, ["fm2!"], None),
@@ -380,7 +385,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 60
+VERSION = 61
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
