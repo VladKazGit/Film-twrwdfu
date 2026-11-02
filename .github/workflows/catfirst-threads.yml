@@ -1,15 +1,24 @@
 name: catfirst threads
 
 # catFirst, not the camera tracker: public Threads posts about cats by keyword, read logged out in
-# headless Chromium, into the catFirst sheet (catfirst/threads.py). Once a day and by hand;
-# nothing is pushed, the logs hold counts only.
+# headless Chromium, into the catFirst sheet (catfirst/threads.py). Once a day at 07:20 Berlin.
+# GitHub's cron came 5-6 hours late or not at all, so the workflow keeps itself going: a run
+# waits for the day's collection up to ~5.5 hours, then starts the next run. A manual start
+# collects right away. The cron below only restarts a broken chain. Nothing is pushed; the logs
+# hold counts only.
 on:
   workflow_dispatch:
+    inputs:
+      chained:
+        description: "Started by the previous run (internal)"
+        type: boolean
+        default: false
   schedule:
-    - cron: "23 6 * * *"
+    - cron: "41 */3 * * *"
 
 permissions:
   contents: read
+  actions: write  # start the next run
 
 concurrency:
   group: catfirst-threads
@@ -18,7 +27,7 @@ concurrency:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 355
     steps:
       - uses: actions/checkout@v5
 
@@ -32,8 +41,14 @@ jobs:
           pip install -q -r requirements.txt playwright==1.52.0
           python -m playwright install --with-deps chromium
 
-      - name: Collect posts
+      - name: Collect once a day
         env:
           GOOGLE_SA_KEY: ${{ secrets.GOOGLE_SA_KEY }}
           CATFIRST_SHEET_ID: ${{ secrets.CATFIRST_SHEET_ID }}
-        run: python -u -m catfirst.threads
+        run: python -u -m catfirst.threads --chain ${{ (github.event_name == 'workflow_dispatch' && !inputs.chained) && '--now' || '' }}
+
+      - name: Start the next run
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run catfirst-threads.yml --repo "${{ github.repository }}" --ref "${{ github.ref_name }}" -f chained=true

@@ -3,16 +3,17 @@
 Logged out, in headless Chromium: the search page's HTML holds no posts, its own scripts load
 them. For each keyword of the sheet's «Ключевые слова» tab, threads.com/search?q=<keyword>.
 Without a login the search shows only its top ~25 posts (no "Recent" tab, nothing more on
-scroll), so the run repeats once a day and keeps what is new. A post is kept when it is at most
-MAX_AGE_DAYS old and its text talks about cats. New posts go on top of the tab of their keyword's
-language (POSTS_TABS; any other language - the English one), with a light green row between them
-and the posts of an earlier day. The user's columns (Ответил, Комментарий) are never rewritten,
-and a post the user deleted does not come back (the hidden «threads_seen» tab remembers every
-post added).
+scroll), so the collection repeats once a day (07:20 Berlin, a chain of runs - see chain()) and
+keeps what is new. A post is kept when it is at most MAX_AGE_DAYS old and its text talks about
+cats. New posts go on top of the tab of their keyword's language (POSTS_TABS; any other language -
+the English one), with a light green row between them and the posts of an earlier day. The
+user's columns (Ответил, Комментарий) are never rewritten, and a post the user deleted does not
+come back (the hidden «threads_seen» tab remembers every post added).
 
 A login wall or a challenge page stops the run: nothing is worked around.
 Logs hold counts only - no authors, texts or links (the repository is public).
 """
+import argparse
 import hashlib
 import os
 import random
@@ -64,6 +65,9 @@ PAUSE_S = (20, 40)
 WAIT_S = 20
 NO_ANSWER_STOP = 3  # keywords in a row with neither posts nor "no results": stop
 SEEN_MAX = 20000
+DAILY_AT = (7, 20)  # Berlin
+CHAIN_BUDGET_MIN = 330  # a 6-hour job limit minus a collection and setup
+RETRY_MIN = 60
 
 # "vet", "Tierarzt", "Tierheim" are about dogs just as often: the text must name a cat.
 CAT_WORDS = re.compile(
@@ -332,7 +336,8 @@ def write(sh, ws_seen, seen_count, ws_keywords, keywords, new, stats, found):
         ws_keywords.update(values=rows, range_name=f"C2:F{1 + len(rows)}", value_input_option="RAW")
 
 
-def main():
+def run_once():
+    """One collection into the sheet. Returns the number of posts the search pages gave."""
     client = gspread.service_account_from_dict(env.google_sa_info())
     sh = open_sheet(client)
     ws_keywords, created = _tab(sh, KEYWORDS_TAB, KEYWORDS_HEADER)
@@ -354,8 +359,75 @@ def main():
     empty = sum(1 for s in stats.values() if not s[0])
     print(f"threads: keywords {len(keywords)}, searched {len(stats)}, empty {empty}, "
           f"posts {on_page}, fresh cat posts {fresh}, new {len(new)}")
-    # nothing at all: the search does not answer this machine
-    return 0 if on_page else 1
+    return on_page
+
+
+def collected_today():
+    """Any keyword checked today (Berlin): the day's collection is done (a blocked one too)."""
+    sh = open_sheet(gspread.service_account_from_dict(env.google_sa_info()))
+    try:
+        ws = sh.worksheet(KEYWORDS_TAB)
+    except gspread.WorksheetNotFound:
+        return False
+    today = env.now_berlin().strftime("%d.%m.%Y")
+    return any(r and r[0].startswith(today) for r in ws.get_values("F2:F"))
+
+
+def next_daily(now):
+    """The next DAILY_AT (Berlin) after `now`."""
+    at = now.replace(hour=DAILY_AT[0], minute=DAILY_AT[1], second=0, microsecond=0)
+    return at if at > now else at + timedelta(days=1)
+
+
+def _sleep_until(moment):
+    while True:
+        left = (moment - datetime.now(timezone.utc)).total_seconds()
+        if left <= 0:
+            return
+        time.sleep(min(left, 300))
+
+
+def chain(now_first):
+    """One run of the chain (GitHub's cron came 5-6 hours late or not at all): collect when the day's
+    collection is due (from DAILY_AT, once a day; `now_first` - right away), sleep until the next
+    one, and end by CHAIN_BUDGET_MIN; the workflow then starts the next run. Returns failed tries."""
+    deadline = datetime.now(timezone.utc) + timedelta(minutes=CHAIN_BUDGET_MIN)
+    print(f"threads: chain run, hands over by {deadline.astimezone(env.BERLIN):%Y-%m-%d %H:%M} (Berlin)")
+    failures, retry_at = 0, None
+    while True:
+        now = env.now_berlin()
+        try:
+            due = now_first or (
+                (now.hour, now.minute) >= DAILY_AT
+                and (retry_at is None or now >= retry_at)
+                and not collected_today())
+            if due:
+                now_first = False
+                if not run_once():
+                    failures += 1  # nothing at all: the search does not answer this machine
+                retry_at = None
+        except Exception as e:  # a failed try waits RETRY_MIN; the chain goes on
+            print(f"threads: collection failed: {type(e).__name__}")
+            failures += 1
+            retry_at = now + timedelta(minutes=RETRY_MIN)
+        wake = next_daily(env.now_berlin()).astimezone(timezone.utc)
+        if retry_at and now < retry_at and retry_at.date() == now.date():
+            wake = min(wake, retry_at.astimezone(timezone.utc))
+        if wake > deadline:
+            _sleep_until(deadline)
+            print("threads: handing over to the next run")
+            return failures
+        _sleep_until(wake)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="catFirst: public Threads posts about cats into the sheet.")
+    parser.add_argument("--chain", action="store_true", help="one run of the daily chain")
+    parser.add_argument("--now", action="store_true", help="with --chain: collect right away (manual start)")
+    args = parser.parse_args()
+    if args.chain:
+        return 1 if chain(args.now) else 0
+    return 0 if run_once() else 1
 
 
 if __name__ == "__main__":
