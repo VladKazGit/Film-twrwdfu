@@ -243,6 +243,9 @@ def main():
         cheap_rows = ss.sheets["До 20 €"].rows
         assert cheap_rows[0][-2:] == [report.NEW_HEADER, report.FRESH_HEADER] and len(cheap_rows[0]) == n + 3, "flags stay at n+1, n+2"
         assert {r[0] for r in cheap_rows[1:] if r[-2] == "да"} == {1021} and {r[0] for r in cheap_rows[1:] if r[-1] == "да"} == {1021}
+        assert ss.sheets["Список"].rows[0][7:9] == [sheets.MODELS_SALE_PRICE_HEADER, "Ссылка"], "the link in column I"
+        statuses = [r[3] for r in ss.sheets["Список"].rows[1:]]
+        assert statuses == sorted(statuses, key=lambda s: s not in ("активен", "зарезервирован")), "on sale first"
         assert 400 in {r[0] for r in ss.sheets["Список"].rows[1:]} and "https://www.vinted.de/items/400" in {r[-1] for r in ss.sheets["Продажи"].rows[1:]}
         list_rows = ss.sheets["Список"].rows
         assert list_rows[0][-2:] == [report.NEW_HEADER, report.FRESH_HEADER] and len(list_rows[0]) == n + 3

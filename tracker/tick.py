@@ -1198,10 +1198,12 @@ def write_sheets(writer, result, state_flags):
     sale = report.model_sale_prices(items)
     # 'Список': the model's mean sale price right after 'Сохранений' (the flag columns move one right)
     list_items = [i for i in items if i.get("group") == "list"]
-    list_rows = report.item_rows(list_items, new_since=new_since, fresh_since=fresh_since)
+    list_rows = report.item_rows(list_items, new_since=new_since, fresh_since=fresh_since, on_sale_first=True)
     price_of = {i["id"]: sale.get(i["model"], sheets.MODELS_NO_PRICE) for i in list_items}
     list_rows = report.insert_column(list_rows, "Сохранений", sheets.MODELS_SALE_PRICE_HEADER,
                                      [price_of[r[0]] for r in list_rows[1:]])
+    # the link right after column H (the model's mean sale price), as in 'До 20 €' (05.11.2026)
+    list_rows = report.move_column(list_rows, "Ссылка", list_rows[0].index(sheets.MODELS_SALE_PRICE_HEADER) + 1)
     writer.replace(sheets.LIST_SHEET, list_rows, links=True)
     candidates = report.cheap_cameras(items, sheets.CHEAP_MAX_PRICE)
     cheap = [i for i in candidates if i.get("model") and sheets.model_key(i["model"]) in allowed and tracked(i)]
