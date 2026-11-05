@@ -1259,7 +1259,7 @@ def write_sheets(writer, result, state_flags):
             writer.color_cheap_web_rows(sheets.NO_SALES_SHEET, report.NO_SALES_HEADER.index("Цена объявлений в интернете, €") + 1)
             updates["no_sales_sheet_v1"] = True
     except Exception as exc:
-        print(f"sheets: model prices not written: {type(exc).__name__}")
+        print(f"sheets: model prices not written: {type(exc).__name__}: {env.redact(exc, 200)}")
     writer.replace(sheets.TOP_SHEET, report.top_rows(items, result["run"]["at"]), links=True)
     writer.replace(sheets.ANALYTICS_SHEET, report.analytics_rows(items, result["run"]["at"]))
     if any(i.get("photo_label") for i in items):
