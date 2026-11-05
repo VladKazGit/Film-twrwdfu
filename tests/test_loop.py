@@ -50,8 +50,7 @@ def main():
         assert 18 <= len(c.ticks) <= 26 and all(13 <= g <= 18.01 for g in gaps), gaps
         assert len({round(g, 1) for g in gaps}) > 5 and len({t.second for t in c.ticks}) > 5, "not on the clock"
         assert len(c.quick) == 2 * len(c.ticks), (len(c.quick), len(c.ticks))
-        # cheap checks every ~2-3 minutes; the one right after a 4-minute tick is late and skipped
-        assert 2 * len(c.ticks) <= len(c.cheap) <= 3 * len(c.ticks), (len(c.cheap), len(c.ticks))
+        assert c.cheap == [], "no cheap checks since 05.11.2026"
         events = sorted(c.ticks + c.quick + c.cheap)
         assert all(minutes(a, b) >= 1.2 for a, b in zip(events, events[1:])), "no bunching"
         assert minutes(c.ticks[0], c.now()) < 330 and f == 0

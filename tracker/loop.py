@@ -43,8 +43,9 @@ def next_tick(after, rng):
     return tick
 
 
-# Between two ticks: quick checks at ~1/3 and ~2/3, cheap checks (listings at 20 EUR or less) in between.
-CHECKS = ((1 / 6, "cheap"), (1 / 3, "quick"), (1 / 2, "cheap"), (2 / 3, "quick"), (5 / 6, "cheap"))
+# Between two ticks: quick checks at ~1/3 and ~2/3. The cheap checks (listings at 20 EUR or less) in
+# between are off since 05.11.2026: the cheap models they caught are no longer tracked (tick.TRACK_MIN_SALE_PRICE).
+CHECKS = ((1 / 3, "quick"), (2 / 3, "quick"))
 
 
 def quick_times(last, tick, rng):
