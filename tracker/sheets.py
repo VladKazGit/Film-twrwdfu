@@ -41,6 +41,11 @@ MANUAL_HEADER = ["id (или ссылка)", "Модель", "Комментар
 MODELS_HEADER = ["Модель", "Бренд", "Тип", "Формат", "Регион"]
 MODELS_PRICE_HEADER = "Средняя цена, €"  # from the statistics, as in 'Сводка'; the tracker writes it
 MODELS_SALE_PRICE_HEADER = "Средняя цена продажи, €"  # sold cameras only
+# Models without a Vinted sale: the median asking price on the other marketplaces collected (05.11.2026)
+MODELS_WEB_PRICE_HEADER = "Цена объявлений в интернете, €"
+MODELS_WEB_SOURCE_HEADER = "Источник цены"
+MODELS_HAS_SALES = "есть продажи Vinted"
+WEB_CHEAP_PRICE = 65  # light blue 3 below this
 MODELS_NO_PRICE = "нет данных"
 LIGHT_GREEN_3 = {"red": 217 / 255, "green": 234 / 255, "blue": 211 / 255}  # #d9ead3
 LIGHT_BLUE_3 = {"red": 207 / 255, "green": 226 / 255, "blue": 243 / 255}  # #cfe2f3
@@ -309,6 +314,20 @@ class SheetWriter:
             if col > ws.col_count:
                 ws.add_cols(col - ws.col_count)
             ws.update(range_name=gspread.utils.rowcol_to_a1(1, col), values=cells, value_input_option="RAW")
+
+    def color_model_rows(self):
+        """'Модели': light yellow 3 for a model without a Vinted sale, light blue 3 (above it) when its
+        web price is below WEB_CHEAP_PRICE. Whole rows, by the columns the tracker writes."""
+        ws = self._sheets[MODELS_SHEET]
+        header = ws.row_values(1)
+        sale = column_letter(header.index(MODELS_SALE_PRICE_HEADER) + 1)
+        web = column_letter(header.index(MODELS_WEB_PRICE_HEADER) + 1)
+        rng = [{"sheetId": ws.id, "startRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": len(header)}]
+        rules = [(f'=AND(ISNUMBER(${web}2),${web}2<{WEB_CHEAP_PRICE})', LIGHT_BLUE_3),
+                 (f'=${sale}2="{MODELS_NO_PRICE}"', LIGHT_YELLOW_3)]
+        self.spreadsheet.batch_update({"requests": [{"addConditionalFormatRule": {"index": n, "rule": {
+            "ranges": rng, "booleanRule": {"condition": {"type": "CUSTOM_FORMULA", "values": [{"userEnteredValue": f}]},
+                                           "format": {"backgroundColor": color}}}}} for n, (f, color) in enumerate(rules)]})
 
     def manual_labels(self):
         """{item id: model text} from 'Ручная разметка' (created empty if missing)."""

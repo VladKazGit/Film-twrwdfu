@@ -1176,6 +1176,18 @@ def runs_comment(run, limit=40, cheap=()):
 
 # ---------------------------------------------------------------- sheets and entry point
 
+def web_prices_of(root, items):
+    """report.web_model_prices from the Kleinanzeigen cards and price snapshots in the data repo."""
+    from . import snapshot
+    try:
+        ka = DataStore(Path(root) / "kleinanzeigen")
+        cards = list({**ka.load_closed(), **ka.load_active()}.values())
+        return report.web_model_prices(report.model_sale_prices(items), cards, snapshot.load_all(root))
+    except Exception as exc:  # a nicety: the sheets go on without it
+        print(f"sheets: web prices not worked out: {type(exc).__name__}")
+        return {}
+
+
 def write_sheets(writer, result, state_flags):
     """Write all sheets. Returns state keys to remember (runs header, offered models)."""
     from . import sheets
@@ -1229,8 +1241,17 @@ def write_sheets(writer, result, state_flags):
     writer.replace(sheets.CHECK_SHEET, report.check_rows(items), links=True)
     writer.replace(sheets.SUMMARY_SHEET, report.summary_rows(result["summary"]))
     try:  # 'Модели' belongs to the user: only the price column is written
+        sale_prices = report.model_sale_prices(items)
+        web = result.get("web_prices") or {}
+        has_sales = {m: sheets.MODELS_HAS_SALES for m in sale_prices}
         writer.write_model_prices({sheets.MODELS_PRICE_HEADER: report.model_prices(result["summary"]),
-                                   sheets.MODELS_SALE_PRICE_HEADER: report.model_sale_prices(items)})
+                                   sheets.MODELS_SALE_PRICE_HEADER: sale_prices,
+                                   sheets.MODELS_WEB_PRICE_HEADER: {**has_sales, **{m: p for m, (p, _) in web.items()}},
+                                   sheets.MODELS_WEB_SOURCE_HEADER: {**{m: "" for m in sale_prices},
+                                                                     **{m: src for m, (_, src) in web.items()}}})
+        if not state_flags.get("models_web_v1"):
+            writer.color_model_rows()
+            updates["models_web_v1"] = True
     except Exception as exc:
         print(f"sheets: model prices not written: {type(exc).__name__}")
     writer.replace(sheets.TOP_SHEET, report.top_rows(items, result["run"]["at"]), links=True)
@@ -1557,6 +1578,7 @@ def _main(args):
         if writer:
             try:
                 try:
+                    result["web_prices"] = web_prices_of(root, result["items"])
                     updates = write_sheets(writer, result, state_flags)
                 except (requests.RequestException, gspread.exceptions.APIError) as exc:
                     # Google dropped the connection now and then: one more try.

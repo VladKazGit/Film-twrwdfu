@@ -224,21 +224,24 @@ def main():
         assert updates["runs_header_v5"] and "Zenit E" in updates["models_offered"]
         assert set(updates["status_colors"]) == {"Список", "Остальные", "До 20 €", "Быстрые продажи"}
         rules = [f["addConditionalFormatRule"] for f in ss.formats]
-        assert len(rules) == 8, len(rules)  # 4 green + blue and yellow on 2 sheets
+        assert len(rules) == 10, len(rules)  # 4 green + blue and yellow on 2 sheets + 2 on «Модели»
         n = len(report.ITEM_HEADER)
 
         def added(color):
             return [(r["index"], r["rule"]["booleanRule"]["condition"]["values"][0]["userEnteredValue"])
                     for r in rules if r["rule"]["booleanRule"]["format"]["backgroundColor"] == color]
         L = sheets.column_letter
-        assert added(sheets.LIGHT_BLUE_3) == [(1, f'=${L(n + 1)}2="да"'), (1, f'=${L(n + 1)}2="да"')]
+        assert [f for f in added(sheets.LIGHT_BLUE_3) if f[1].endswith('="да"')] == [
+            (1, f'=${L(n + 1)}2="да"'), (1, f'=${L(n + 1)}2="да"')]
+        assert any("<65)" in f[1] for f in added(sheets.LIGHT_BLUE_3)), "«Модели»: web price under 65 EUR"
+        assert updates["models_web_v1"]
         assert [f for f in added(sheets.LIGHT_GREEN_3) if f[1].startswith("=")] == [
             (1, f'=${L(n + 2)}2="да"'), (1, f'=${L(n + 2)}2="да"')], "3-hour rows: light green 3"
         assert updates["list_sale_price_v1"]
         list_rules = ss.rules[ss.sheets["Список"].id]
         assert [r["booleanRule"]["format"]["backgroundColor"] for r in list_rules] == [
             sheets.LIGHT_GREEN_3, sheets.LIGHT_GREEN_3, sheets.LIGHT_BLUE_3], "status, 3 h above 12 h"
-        assert updates["fresh_rows_green"] and not added(sheets.LIGHT_YELLOW_3)
+        assert updates["fresh_rows_green"] and all("нет данных" in f[1] for f in added(sheets.LIGHT_YELLOW_3)), "yellow: «Модели» only"
         assert updates["new_rows_colors"] == updates["fresh_rows_colors"] == ["До 20 €", "Список"]
         cheap_rows = ss.sheets["До 20 €"].rows
         assert cheap_rows[0][-2:] == [report.NEW_HEADER, report.FRESH_HEADER] and len(cheap_rows[0]) == n + 3, "flags stay at n+1, n+2"
@@ -268,7 +271,8 @@ def main():
         marked = {r[0] for r in list_rows[1:] if r[-2] == "да"}
         assert marked == {1020, 1021}, marked  # new listings first seen 17.10 07:07; bumped 400 and older ones are not
         assert {r[0] for r in list_rows[1:] if r[-1] == "да"} == {1020, 1021}, "07:07 is within 3 h of the 07:07 tick"
-        rule = ss.formats[0]["addConditionalFormatRule"]["rule"]
+        rule = next(f["addConditionalFormatRule"]["rule"] for f in ss.formats
+                    if f["addConditionalFormatRule"]["rule"]["booleanRule"]["condition"]["type"] != "CUSTOM_FORMULA")
         assert rule["booleanRule"]["condition"]["values"][0]["userEnteredValue"] == "активен"
         assert rule["ranges"][0]["startColumnIndex"] == report.ITEM_HEADER.index("Статус")
         runs = ss.sheets["Запуски"].rows
@@ -285,7 +289,8 @@ def main():
         assert fast_ws.rows[1][0] == 1011 and fast_ws.sent[1][link_col] == fast_ws.rows[1][link_col]
         assert ss.sheets["Сводка"].mode == "RAW" and ss.sheets["Проверка"].rows[0] == report.CHECK_HEADER
         assert ss.sheets["Список"].rows[0][0] == "id" and len(ss.sheets["Список"].rows) >= 4
-        assert ss.sheets["Модели"].rows[0] == sheets.MODELS_HEADER + [sheets.MODELS_PRICE_HEADER, sheets.MODELS_SALE_PRICE_HEADER]
+        assert ss.sheets["Модели"].rows[0] == sheets.MODELS_HEADER + [sheets.MODELS_PRICE_HEADER, sheets.MODELS_SALE_PRICE_HEADER,
+                                                                     sheets.MODELS_WEB_PRICE_HEADER, sheets.MODELS_WEB_SOURCE_HEADER]
         assert len(ss.sheets["Модели"].rows) > 150
         prices = {r[0]: r[5:7] for r in ss.sheets["Модели"].rows[1:]}
         sold_zenit = [report.current_price(i) for i in r5["items"] if i.get("model") == "Zenit E" and i["status"] == "sold"]
@@ -461,7 +466,7 @@ def main():
                        "cheap_ids": updates["cheap_ids"], "models_offered": updates["models_offered"],
                        "status_colors": updates["status_colors"], "new_rows_colors": updates["new_rows_colors"],
                        "fresh_rows_colors": updates["fresh_rows_colors"], "fresh_rows_green": True}
-        assert {k: v for k, v in tick.write_sheets(writer, r5, state_flags).items() if k != "models_sheet"} == {"cheap_ids": []}, "Zenit E left 'До 20 €'"
+        assert {k: v for k, v in tick.write_sheets(writer, r5, state_flags).items() if k not in ("models_sheet", "models_web_v1")} == {"cheap_ids": []}, "Zenit E left 'До 20 €'"
         assert ss.sheets["Запуски"].rows[1][1] == 0
         assert [r[0] for r in ss.sheets["До 20 €"].rows[1:] if r[0] != ""] == [] and ["Zenit E"] not in [r[:1] for r in models_ws.rows]
         assert len(ss.sheets["До 20 €"].rows) == 2 and not any(ss.sheets["До 20 €"].rows[1]), "old data row blanked"
@@ -497,7 +502,7 @@ def main():
             "condition": {"type": "CUSTOM_FORMULA", "values": [{"userEnteredValue": "=$AE2=\"да\""}]},
             "format": {"backgroundColor": {"red": 1, "green": 0.9490196, "blue": 0.8}}}})
         upd = tick.write_sheets(writer, r5, {**state_flags, "fresh_rows_green": None})
-        assert {k: v for k, v in upd.items() if k != "models_sheet"} == {"fresh_rows_green": True}, upd
+        assert {k: v for k, v in upd.items() if k not in ("models_sheet", "models_web_v1")} == {"fresh_rows_green": True}, upd
         assert ss.rules[sid][1]["booleanRule"]["format"]["backgroundColor"] == sheets.LIGHT_GREEN_3
         print("log:", tick.log_line(r4["run"]))
     # Search for older cheap list cameras: a month limit (half a year before 05.11.2026), list models only.

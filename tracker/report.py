@@ -943,3 +943,33 @@ def readme(summary):
         lines += ["| " + " | ".join(r[:width]) + " |" for r in block[1:]]
         lines.append("")
     return "\n".join(lines)
+
+
+WEB_MIN_LISTINGS = 3  # a web price needs this many listings
+
+
+def web_model_prices(sale_prices, ka_cards, snapshots):
+    """For the models without a Vinted sale: the median asking price on the other marketplaces the
+    tracker has collected (Kleinanzeigen cards, the OLX / leboncoin snapshots), real prices only (no
+    placeholders, flags or sets). {model: (median EUR, 'Kleinanzeigen 12, OLX/leboncoin 3')}."""
+    ka, snap = {}, {}
+    for card in ka_cards:
+        price = current_price(card)
+        if card.get("group") == "list" and price is not None and price > OFFERS_PRICE \
+                and not stat_flags(card) & SALES_EXCLUDED:
+            ka.setdefault(card.get("model"), []).append(price)
+    for snapshot in snapshots:
+        for item in snapshot.get("items") or []:
+            if item.get("model") and item.get("price_eur") and item["price_eur"] > OFFERS_PRICE and not item.get("bundle"):
+                snap.setdefault(item["model"], []).append(item["price_eur"])
+    out = {}
+    for model in set(ka) | set(snap):
+        if model in sale_prices or not model:
+            continue
+        prices = ka.get(model, []) + snap.get(model, [])
+        if len(prices) < WEB_MIN_LISTINGS:
+            continue
+        source = ", ".join(f"{name} {len(p)}" for name, p in (("Kleinanzeigen", ka.get(model, [])),
+                                                                ("OLX/leboncoin", snap.get(model, []))) if p)
+        out[model] = (round(statistics.median(prices)), source)
+    return out
