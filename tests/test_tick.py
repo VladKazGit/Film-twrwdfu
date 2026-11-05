@@ -567,12 +567,12 @@ def main():
     assert tick.check_priority(active[AE1], "2026-10-19 10:37", vanished=False) == tick.P_FOUND
     tick.apply_page(active[AE1], {"status": "sold", "price": 130.0, "description": None, "favourites": 4}, "2026-10-19 10:37")
     assert active[AE1]["status"] == "sold" and "needs_check" not in active[AE1]
-    # Over a month on Vinted ('6 Wochen'): checked every 5 days; a younger one daily.
+    # Over a week on Vinted ('6 Wochen'): checked weekly; one within its first week daily.
     old = {**active[AE1], "status": "active", "closed_at": None, "last_checked_at": "2026-10-19 10:37"}
     assert active[AE1]["vinted_listed_est"] == "2026-09-06" and active[AE1]["uploaded_ago"] == "6 Wochen"
-    assert tick.check_priority(old, "2026-10-23 10:38", vanished=False) is None
-    assert tick.check_priority(old, "2026-10-24 10:38", vanished=False) == tick.P_FOUND
-    young = {**old, "vinted_listed_est": "2026-10-10"}
+    assert tick.check_priority(old, "2026-10-25 10:38", vanished=False) is None
+    assert tick.check_priority(old, "2026-10-26 10:38", vanished=False) == tick.P_FOUND
+    young = {**old, "vinted_listed_est": "2026-10-16"}
     assert tick.check_priority(young, "2026-10-20 10:38", vanished=False) == tick.P_FOUND
 
     # Old cheap camera: a search sighting does not postpone its check; the daily
@@ -882,11 +882,11 @@ def main():
         tick.fresh_search(state, client, active, {}, "2026-10-17 11:52", st, set(), quick=True)
         assert state["fresh_search"]["last_run"]["Canon AE-1"] == "2026-10-17 11:52" and st["fresh_pages"] == 2
         assert cam["needs_check"] and st["fresh_missing"] == 1
-        # A sighting counts as a check, but the page is opened every 5 days.
+        # A sighting counts as a check, but the page is opened every week.
         seen = {"group": "list", "flags": ["found"], "last_checked_at": "2026-10-15 10:00",
                 "fresh_seen_at": "2026-10-17 11:00", "first_seen": "2026-10-10 10:00"}
         assert tick.check_priority(seen, "2026-10-17 12:00", vanished=False) is None
-        assert tick.check_priority({**seen, "last_checked_at": "2026-10-12 09:00"}, "2026-10-17 12:00", False) == tick.P_FOUND
+        assert tick.check_priority({**seen, "last_checked_at": "2026-10-10 09:00"}, "2026-10-17 12:00", False) == tick.P_FOUND
 
         # A listing newer than the catalog pages is new, not an old one found by search.
         sweep = tick.Sweep("model_search", (("q0", None),), None, 10, 1, 4, False, False)
@@ -895,6 +895,28 @@ def main():
         tick.search_sweep(sweep, state, client, {}, {}, "2026-10-17 10:52", "2026-10-17", Counter(), set())
         assert not state["model_search"]["pending"], "left for the catalog"
 
+    # Models selling under TRACK_MIN_SALE_PRICE on average are not tracked; 20 EUR or less and
+    # 'Zenit 1980' still are; models without sales stay.
+    def card(model, price, status="active", title=None):
+        return {"model": model, "title": title or model, "group": "list", "status": status, "flags": [],
+                "price_start": price, "price_history": [{"at": "2026-11-01 10:00", "price": price}],
+                "first_seen": "2026-11-01 10:00", "last_checked_at": "2026-11-01 10:00"}
+    sold = {1: card("Zenit E", 40.0, "sold"), 2: card("Nikon FM2", 300.0, "sold")}
+    state = {}
+    tick.refresh_untracked(state, {}, sold)
+    assert state["untracked_models"] == ["Zenit E"]
+    assert not tick.worth_tracking(card("Zenit E", 45.0)) and tick.worth_tracking(card("Zenit E", 15.0))
+    assert tick.worth_tracking(card("Zenit E", 25.0, title="Zenit E Olympia Moskau 1980"))
+    assert tick.worth_tracking(card("Nikon FM2", 250.0)) and tick.worth_tracking(card("Leica M3", 900.0))
+    assert tick.check_priority(card("Zenit E", 45.0), "2026-11-03 10:00", vanished=True) is None, "no page checks"
+    # Item pages: every 30 minutes in the first hour, then daily.
+    new = card("Nikon FM2", 250.0)
+    assert tick.check_priority(new, "2026-11-01 10:20", vanished=False) is None
+    assert tick.check_priority(new, "2026-11-01 10:31", vanished=False) == tick.P_LIST_DUE
+    assert tick.check_priority({**new, "last_checked_at": "2026-11-01 10:45"}, "2026-11-01 12:00", vanished=False) is None
+    assert tick.check_priority({**new, "last_checked_at": "2026-11-01 10:45"}, "2026-11-02 10:50", vanished=False) \
+        == tick.P_LIST_DAILY
+    tick._UNTRACKED.clear()
     print("tick tests passed")
 
 

@@ -40,6 +40,10 @@ MAX_REQUESTS = 115
 TICK_TIME_BUDGET_S = 9 * 60  # Vinted traffic per tick; the rest goes to the next tick
 QUICK_PAGES, QUICK_TIME_BUDGET_S = 1, 150  # quick checks between ticks (cheap ones end long before)
 CHEAP_PRICE = 20.0  # the cheap check and 'До 20 €' (sheets.CHEAP_MAX_PRICE)
+# Models whose sales average less than this are not tracked (05.11.2026): no new cards, no searches, no
+# page checks - except a camera at CHEAP_PRICE or less and a 'Zenit 1980'. Models without sales stay.
+TRACK_MIN_SALE_PRICE = 65.0
+_UNTRACKED = set()  # worked out from the data at the start of each run (refresh_untracked)
 # Extra categories: page 1 per check; on full scans (the morning after the night, then every 4 h) 3 pages
 EXTRA_FULL_PAGES = 3
 # Fresh search: every model of 'Модели' once an hour, newest first in all categories; one more
@@ -51,7 +55,11 @@ FRESH_PER_CHEAP = 5  # a cheap check takes a few models too, so the round stays 
 FRESH_PAGE_ITEMS, FRESH_MAX_PAGES = 35, 8
 FRESH_PRIORITY_PAGE_ITEMS, FRESH_PRIORITY_MAX_PAGES = 25, 10
 FRESH_PRIORITY = ("Canon AE-1", "Yashica FX-3 Super 2000", "Olympus OM-10")
-PAGE_RECHECK_MIN = 5 * 1440  # a camera the fresh search keeps seeing: its page every 5 days
+PAGE_RECHECK_MIN = 7 * 1440  # a camera the fresh search keeps seeing: its page every week
+# Item pages of tracked listings (05.11.2026): every 30 minutes in the first hour, then daily up to
+# a week on Vinted, then weekly. A listing gone from the pages read is still opened at once.
+FIRST_HOUR_MIN = 60
+FIRST_HOUR_RECHECK_MIN = 30
 DAILY_CHECKS_PER_TICK = 25
 DESCRIPTION_CHECKS_PER_TICK = 15
 BOUNDARY_TAIL = 10
@@ -84,8 +92,8 @@ MODEL_SWEEP = Sweep("model_search", tuple((m.lower(), m) for m in models.MODEL_I
 SWEEPS = (CHEAP_SWEEP, MODEL_SWEEP)
 FOUND_MAX_AGE_DAYS = 183  # half a year on Vinted
 FOUND_MIN_ID = 8_300_000_000  # older ids are well over half a year old: skipped without opening
-OLD_ON_VINTED_DAYS = 30  # cameras listed on Vinted longer ago than this ...
-OLD_RECHECK_MIN = 5 * 1440  # ... are checked every 5 days instead of daily
+OLD_ON_VINTED_DAYS = 7  # cameras listed on Vinted longer ago than this ...
+OLD_RECHECK_MIN = 7 * 1440  # ... are checked weekly instead of daily
 NEW_ROWS_HOURS = 12  # light blue 3: cameras first seen within this many hours
 FRESH_ROWS_HOURS = 3  # light green 3, like 'активен' (above the blue): within this many hours
 FOUND_CHECKS_PER_TICK = 15
@@ -199,8 +207,26 @@ def is_junk(item):
 
 
 def worth_tracking(item):
-    """List cameras; other cameras from REST_MIN_PRICE up that are not junk."""
-    return item["group"] == "list" or ((item.get("price_start") or 0) >= REST_MIN_PRICE and not is_junk(item))
+    """List cameras of tracked models; other cameras from REST_MIN_PRICE up that are not junk."""
+    if item["group"] == "list":
+        return tracked(item)
+    return (item.get("price_start") or 0) >= REST_MIN_PRICE and not is_junk(item)
+
+
+def refresh_untracked(state, active, closed):
+    """The models whose mean sale price in the data is below TRACK_MIN_SALE_PRICE."""
+    sales = notify.sale_stats(list(active.values()) + list(closed.values()))
+    _UNTRACKED.clear()
+    _UNTRACKED.update(m for m, s in sales.items() if m and s[1] < TRACK_MIN_SALE_PRICE)
+    state["untracked_models"] = sorted(_UNTRACKED)
+
+
+def tracked(item):
+    """Not a model of _UNTRACKED - unless at CHEAP_PRICE or less ('До 20 €') or a 'Zenit 1980'."""
+    if item.get("model") not in _UNTRACKED or item.get("model_source") == "manual":
+        return True
+    price = report.current_price(item)
+    return (price is not None and price <= CHEAP_PRICE) or notify.zenit_1980(item)
 
 
 def _refresh_signal_flags(item):
@@ -288,9 +314,10 @@ def needs_enrich(item):
 
 
 def recheck_minutes(item, now):
-    """Daily check, or every 5 days for cameras over a month old on Vinted."""
+    """Daily check in a camera's first week on Vinted (or since first seen), weekly after."""
     listed = item.get("vinted_listed_est")
-    if listed and clock.minutes_between(f"{listed} 00:00", now) > OLD_ON_VINTED_DAYS * 1440:
+    start = f"{listed} 00:00" if listed else item["first_seen"]
+    if clock.minutes_between(start, now) > OLD_ON_VINTED_DAYS * 1440:
         return OLD_RECHECK_MIN
     return 1440
 
@@ -356,6 +383,8 @@ def check_priority(item, now, vanished):
     """Priority for opening the item page this tick, or None if not due.
 
     A sighting in the fresh search counts as a check, but the page is opened at least every 5 days."""
+    if item["group"] == "list" and not tracked(item):
+        return None
     since = clock.minutes_between(max(item["last_checked_at"], item.get("fresh_seen_at") or ""), now)
     if clock.minutes_between(item["last_checked_at"], now) >= PAGE_RECHECK_MIN and item["group"] == "list":
         since = max(since, PAGE_RECHECK_MIN)
@@ -368,14 +397,12 @@ def check_priority(item, now, vanished):
     if item["group"] == "rest":
         if vanished:
             return P_REST_VANISHED
-        return P_REST_DUE if age < REST_TRACK_MIN and not preexisting else None
+        return P_REST_DUE if age < FIRST_HOUR_MIN and since >= FIRST_HOUR_RECHECK_MIN and not preexisting else None
     if vanished:
         return P_LIST_VANISHED
-    if preexisting or age >= 1440:
+    if preexisting or age >= FIRST_HOUR_MIN:
         return P_LIST_DAILY if since >= recheck_minutes(item, now) else None
-    if age < 180:
-        return P_LIST_DUE
-    return P_LIST_DUE if since >= 240 else None
+    return P_LIST_DUE if since >= FIRST_HOUR_RECHECK_MIN else None
 
 
 def _can_request(client):
@@ -396,7 +423,7 @@ def fresh_search(state, client, active, closed, now, stats, changed, quick=False
       now, although its id is within the pages read, may be sold: its page is opened next tick.
     """
     st = state.setdefault("fresh_search", {"last_run": {}})
-    names = state.get("models_sheet") or [m for _, m in MODEL_SWEEP.queries]
+    names = [n for n in state.get("models_sheet") or [m for _, m in MODEL_SWEEP.queries] if n not in _UNTRACKED]
     last_run = st["last_run"]
     due = sorted((n for n in names if not last_run.get(n) or clock.minutes_between(last_run[n], now) >= FRESH_EVERY_MIN - 5),
                  key=lambda n: last_run.get(n) or "")[:limit]
@@ -442,7 +469,7 @@ def fresh_search(state, client, active, closed, now, stats, changed, quick=False
                 # then; older ones were missed (e.g. under the day floor): listing time unknown.
                 after_previous = previous and rec_id > _top_at(history, previous)
                 item = new_item(rec, now, previous if after_previous else None, [] if after_previous else ["found"])
-                if item["group"] == "list":
+                if item["group"] == "list" and tracked(item):
                     item["fresh_seen_at"] = now
                     if item.get("model") == model:
                         item["fresh_query"] = model
@@ -508,7 +535,8 @@ def search_sweep(sweep, state, client, active, closed, now, today, stats, change
         stats["checks"] += 1
         age = age_days(page["uploaded_ago"])
         item = new_item(rec, now, None, ["found"])
-        if page["status"] != "active" or item["group"] != "list" or (age is not None and age > FOUND_MAX_AGE_DAYS):
+        if page["status"] != "active" or item["group"] != "list" or not tracked(item) or (
+                age is not None and age > FOUND_MAX_AGE_DAYS):
             st["skipped"].append(rec["id"])
             stats["search_skipped"] += 1
             continue
@@ -529,6 +557,10 @@ def search_sweep(sweep, state, client, active, closed, now, today, stats, change
             query, model = priority[0]
             cur = st.setdefault("prio_cursor", {"page": 1, "seen": [], "query_started": now})
         else:
+            for _ in range(len(sweep.queries)):  # untracked models are not searched
+                if st["page"] != 1 or sweep.queries[st["query"] % len(sweep.queries)][1] not in _UNTRACKED:
+                    break
+                st["query"] += 1
             query, model = sweep.queries[st["query"] % len(sweep.queries)]
             cur = st
         if cur["page"] == 1:
@@ -565,6 +597,8 @@ def search_sweep(sweep, state, client, active, closed, now, today, stats, change
                     stats["search_skipped"] += 1
                     continue
                 item = new_item(rec, now, None, ["found"])
+                if not tracked(item):
+                    continue
                 item.update(age_source="id", vinted_listed_est=listed.isoformat(), age_days_at_discovery=age)
                 active[rec_id] = item
                 changed.add(rec_id)
@@ -624,6 +658,7 @@ def run_tick(store, client, labels=None, now=None, quick=False):
 
     active = store.load_active()
     closed = store.load_closed()
+    refresh_untracked(state, active, closed)
     changed = set()
 
     # Manual labels win over everything and are never overwritten.
@@ -750,7 +785,7 @@ def run_tick(store, client, labels=None, now=None, quick=False):
                 stats["junk_skipped"] += 1
         elif rec_id in misplaced and rec_id not in closed:
             # An older list camera under 'Sofortbildkameras', never seen: listing time unknown.
-            if not first_run:
+            if not first_run and tracked(new_item(rec, now, None, ["found"])):
                 active[rec_id] = new_item(rec, now, None, ["found"])
                 changed.add(rec_id)
                 stats["found"] += 1
@@ -761,7 +796,7 @@ def run_tick(store, client, labels=None, now=None, quick=False):
             if is_junk(item):
                 continue  # kept out of the data, seen again on the next pages
             stats["bumped"] += 1
-            if item["group"] == "list" and not first_run:
+            if item["group"] == "list" and not first_run and tracked(item):
                 active[rec_id] = item
                 changed.add(rec_id)
                 stats["bumped_list"] += 1
@@ -778,7 +813,9 @@ def run_tick(store, client, labels=None, now=None, quick=False):
             if wants_description(item):
                 queue.append((P_DESCRIPTION, item["first_seen"], item["id"]))
             continue
-        priority = check_priority(item, now, vanished=item["id"] >= boundary and item["id"] not in seen)
+        # gone from the pages read: by id, or a bumped one in its first hour (its old id is below the boundary)
+        bumped_fresh = "bumped" in item["flags"] and clock.minutes_between(item["first_seen"], now) < FIRST_HOUR_MIN
+        priority = check_priority(item, now, vanished=(item["id"] >= boundary or bumped_fresh) and item["id"] not in seen)
         if priority is not None:
             queue.append((priority, item["last_checked_at"], item["id"]))
         elif needs_enrich(item):
@@ -920,7 +957,7 @@ def run_tick(store, client, labels=None, now=None, quick=False):
         age = clock.minutes_between(item["first_seen"], now)
         if item["group"] == "rest" and age >= REST_TRACK_MIN:
             close(item, "unsold_3h", now)
-        elif item["group"] == "list" and age >= LIST_TRACK_MIN:
+        elif item["group"] == "list" and age >= LIST_TRACK_MIN and tracked(item):
             close(item, "unsold_30d", now)
         else:
             continue
@@ -949,6 +986,7 @@ def run_cheap(store, client, labels=None, now=None):
         return run_tick(store, client, labels, now, quick=True)
     today = now[:10]
     active, closed = store.load_active(), store.load_closed()
+    refresh_untracked(state, active, closed)
     changed, stats, errors, promoted = set(), Counter(), [], []
     try:
         recs = client.cheap_page(CHEAP_PRICE)
@@ -976,7 +1014,7 @@ def run_cheap(store, client, labels=None, now=None):
         else:
             # Older and never seen (in another category, or cheaper now): listing time unknown.
             item = new_item(rec, now, None, ["found"])
-            if item["group"] == "list":
+            if item["group"] == "list" and tracked(item):
                 active[rec_id] = item
                 changed.add(rec_id)
                 stats["found"] += 1
