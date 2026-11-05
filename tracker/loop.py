@@ -13,9 +13,11 @@ effect within one tick, not one run.
 Run: python -m tracker.loop [--tick-now] [--force]
 """
 import argparse
+import os
 import random
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import timedelta, timezone
 
@@ -144,6 +146,9 @@ def main():
     parser.add_argument("--force", action="store_true", help="first tick ignores the time window")
     args = parser.parse_args()
 
+    # One Vinted session for the whole run: the ticks' cookies in the runner's temp folder (not the data).
+    os.environ.setdefault("VINTED_COOKIE_FILE", os.path.join(os.environ.get("RUNNER_TEMP") or tempfile.gettempdir(),
+                                                           "vinted_session.json"))
     first = {"force": args.force}
 
     def tick(mode):

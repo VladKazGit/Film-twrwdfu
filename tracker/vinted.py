@@ -8,6 +8,7 @@ Smoke test (aggregates only): python -m tracker.vinted --pages 1 --items 3
 """
 import argparse
 import json
+import os
 import random
 import re
 import time
@@ -37,6 +38,9 @@ HEADERS = {
 
 RETRY_BACKOFF = (15, 45)  # seconds before 2nd and 3rd attempt on 429/5xx/network
 MAX_RETRY_AFTER = 90
+# One session for a whole run of ticks (tracker.loop sets the file on the runner, never in the data):
+# the home page is opened once, not before every tick and quick check. A stale session renews itself.
+COOKIE_FILE_ENV, COOKIE_MAX_AGE_S = "VINTED_COOKIE_FILE", 3 * 3600
 FAILURES_IN_ROW_BLOCK = 3  # network errors / 429 / 5xx in a row: treat Vinted as blocking us
 
 STATUSES = ("active", "reserved", "hidden", "sold", "deleted", "unknown")
@@ -331,6 +335,7 @@ class VintedClient:
         self._last_request = 0.0
         self._started = time.monotonic()
         self._failures_in_row = 0
+        self._from_cache = False  # the session came from the cookie file
 
     def has_time(self):
         return self.time_budget is None or time.monotonic() - self._started < self.time_budget
@@ -367,6 +372,40 @@ class VintedClient:
             raise BlockedError(f"home page http {resp.status_code}")
         if "access_token_web" not in self.session.cookies:
             raise BlockedError("no session cookie")
+        self._save_cookies()
+
+    def _cookie_file(self):
+        return os.environ.get(COOKIE_FILE_ENV) or None
+
+    def _load_cookies(self):
+        """The session of an earlier tick of this run, if fresh: True when loaded."""
+        path = self._cookie_file()
+        try:
+            if not path or time.time() - os.path.getmtime(path) > COOKIE_MAX_AGE_S:
+                return False
+            with open(path, encoding="utf-8") as f:
+                saved = json.load(f)
+        except (OSError, ValueError):
+            return False
+        if not any(c.get("name") == "access_token_web" for c in saved):
+            return False
+        self.session = requests.Session()
+        self.session.headers.update(HEADERS)
+        for c in saved:
+            self.session.cookies.set(c["name"], c["value"], domain=c.get("domain") or "", path=c.get("path") or "/")
+        self._from_cache = True
+        return True
+
+    def _save_cookies(self):
+        path = self._cookie_file()
+        if not path or self.session is None:
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump([{"name": c.name, "value": c.value, "domain": c.domain, "path": c.path}
+                           for c in self.session.cookies], f)
+        except OSError:
+            pass
 
     def _start_with_retries(self):
         """Open the session; a slow or failing home page is retried like any request
@@ -389,7 +428,7 @@ class VintedClient:
 
     def fetch(self, url, params=None):
         """GET with retries: 429/5xx/network back off, 401/403 renew the session once."""
-        if self.session is None:
+        if self.session is None and not self._load_cookies():
             self._start_with_retries()
         renewed = False
         for attempt in range(len(RETRY_BACKOFF) + 1):
@@ -421,6 +460,8 @@ class VintedClient:
             if code in (401, 403):
                 raise BlockedError(f"http {code}")
             self._failures_in_row = 0
+            if renewed or getattr(resp, "cookies", None):
+                self._save_cookies()  # a renewed or refreshed session for the next tick
             return resp
         if resp.status_code == 429:
             raise BlockedError("http 429")
@@ -433,6 +474,10 @@ class VintedClient:
         if resp.status_code != 200:
             raise VintedError(f"catalog http {resp.status_code}")
         items, pagination = parse_catalog(resp.text)
+        if not items and self._from_cache:  # a saved session Vinted no longer honours: a fresh one, once
+            self._from_cache = False
+            self._start_with_retries()
+            return self.catalog_page(page, category)
         if not items:
             if pagination and page > pagination.get("total_pages", MAX_PAGES):
                 return []
