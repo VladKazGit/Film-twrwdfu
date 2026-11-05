@@ -224,7 +224,7 @@ def main():
         assert updates["runs_header_v5"] and "Zenit E" in updates["models_offered"]
         assert set(updates["status_colors"]) == {"Список", "Остальные", "До 20 €", "Быстрые продажи"}
         rules = [f["addConditionalFormatRule"] for f in ss.formats]
-        assert len(rules) == 10, len(rules)  # 4 green + blue and yellow on 2 sheets + 2 on «Модели»
+        assert len(rules) == 11, len(rules)  # 4 green + blue and yellow on 2 sheets + 2 on «Модели» + 1 on «Модели без продаж»
         n = len(report.ITEM_HEADER)
 
         def added(color):
@@ -235,6 +235,8 @@ def main():
             (1, f'=${L(n + 1)}2="да"'), (1, f'=${L(n + 1)}2="да"')]
         assert any("<65)" in f[1] for f in added(sheets.LIGHT_BLUE_3)), "«Модели»: web price under 65 EUR"
         assert updates["models_web_v1"]
+        no_sales = ss.sheets["Модели без продаж"].rows
+        assert no_sales[0] == report.NO_SALES_HEADER and len(no_sales) > 1 and "Canon AE-1" not in {r[0] for r in no_sales}
         assert [f for f in added(sheets.LIGHT_GREEN_3) if f[1].startswith("=")] == [
             (1, f'=${L(n + 2)}2="да"'), (1, f'=${L(n + 2)}2="да"')], "3-hour rows: light green 3"
         assert updates["list_sale_price_v1"]
@@ -466,7 +468,7 @@ def main():
                        "cheap_ids": updates["cheap_ids"], "models_offered": updates["models_offered"],
                        "status_colors": updates["status_colors"], "new_rows_colors": updates["new_rows_colors"],
                        "fresh_rows_colors": updates["fresh_rows_colors"], "fresh_rows_green": True}
-        assert {k: v for k, v in tick.write_sheets(writer, r5, state_flags).items() if k not in ("models_sheet", "models_web_v1")} == {"cheap_ids": []}, "Zenit E left 'До 20 €'"
+        assert {k: v for k, v in tick.write_sheets(writer, r5, state_flags).items() if k not in ("models_sheet", "models_web_v1", "no_sales_sheet_v1")} == {"cheap_ids": []}, "Zenit E left 'До 20 €'"
         assert ss.sheets["Запуски"].rows[1][1] == 0
         assert [r[0] for r in ss.sheets["До 20 €"].rows[1:] if r[0] != ""] == [] and ["Zenit E"] not in [r[:1] for r in models_ws.rows]
         assert len(ss.sheets["До 20 €"].rows) == 2 and not any(ss.sheets["До 20 €"].rows[1]), "old data row blanked"
@@ -502,7 +504,7 @@ def main():
             "condition": {"type": "CUSTOM_FORMULA", "values": [{"userEnteredValue": "=$AE2=\"да\""}]},
             "format": {"backgroundColor": {"red": 1, "green": 0.9490196, "blue": 0.8}}}})
         upd = tick.write_sheets(writer, r5, {**state_flags, "fresh_rows_green": None})
-        assert {k: v for k, v in upd.items() if k not in ("models_sheet", "models_web_v1")} == {"fresh_rows_green": True}, upd
+        assert {k: v for k, v in upd.items() if k not in ("models_sheet", "models_web_v1", "no_sales_sheet_v1")} == {"fresh_rows_green": True}, upd
         assert ss.rules[sid][1]["booleanRule"]["format"]["backgroundColor"] == sheets.LIGHT_GREEN_3
         print("log:", tick.log_line(r4["run"]))
     # Search for older cheap list cameras: a month limit (half a year before 05.11.2026), list models only.

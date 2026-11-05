@@ -24,6 +24,7 @@ SIBLINGS_SHEET = "Братья моделей списка"
 BUNDLES_SHEET = "Наборы"  # listings of several cameras or lots: their price is not one camera's  # cameras outside the list next to list models, for the user      # the one sheet before the split: removed once
 ANALYTICS_SHEET = "Аналитика"
 MODELS_SHEET = "Модели"
+NO_SALES_SHEET = "Модели без продаж"  # models of 'Модели' without a Vinted sale yet (05.11.2026)
 MANUAL_SHEET = "Ручная разметка"
 
 # The order before v5; rows written then are moved into the current order once.
@@ -328,6 +329,16 @@ class SheetWriter:
         self.spreadsheet.batch_update({"requests": [{"addConditionalFormatRule": {"index": n, "rule": {
             "ranges": rng, "booleanRule": {"condition": {"type": "CUSTOM_FORMULA", "values": [{"userEnteredValue": f}]},
                                            "format": {"backgroundColor": color}}}}} for n, (f, color) in enumerate(rules)]})
+
+    def color_cheap_web_rows(self, title, web_column):
+        """Light blue 3 rows whose web price (1-based column) is below WEB_CHEAP_PRICE."""
+        ws = self._sheets[title]
+        web = column_letter(web_column)
+        self.spreadsheet.batch_update({"requests": [{"addConditionalFormatRule": {"index": 0, "rule": {
+            "ranges": [{"sheetId": ws.id, "startRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": ws.col_count}],
+            "booleanRule": {"condition": {"type": "CUSTOM_FORMULA",
+                                          "values": [{"userEnteredValue": f'=AND(ISNUMBER(${web}2),${web}2<{WEB_CHEAP_PRICE})'}]},
+                            "format": {"backgroundColor": LIGHT_BLUE_3}}}}}]})
 
     def manual_labels(self):
         """{item id: model text} from 'Ручная разметка' (created empty if missing)."""

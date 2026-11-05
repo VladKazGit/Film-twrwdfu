@@ -973,3 +973,29 @@ def web_model_prices(sale_prices, ka_cards, snapshots):
                                                                 ("OLX/leboncoin", snap.get(model, []))) if p)
         out[model] = (round(statistics.median(prices)), source)
     return out
+
+
+NO_SALES_HEADER = ["Модель", "Марка", "Тип", "Формат", "Камер в базе Vinted", "Сейчас в продаже на Vinted",
+                   "Средняя цена объявлений Vinted, €", "Цена объявлений в интернете, €", "Источник цены",
+                   "Отслеживается"]
+
+
+def no_sales_rows(sheet_models, items, mean_prices, sale_prices, web, untracked):
+    """'Модели без продаж': the models of 'Модели' without a Vinted sale yet, by brand and model: how
+    many cameras the data holds, how many are on sale, their mean asking price, the web price
+    (report.web_model_prices) and whether the tracker follows the model."""
+    total, on_sale = {}, {}
+    for i in items:
+        if i.get("group") == "list" and not stat_flags(i) & SALES_EXCLUDED:
+            total[i.get("model")] = total.get(i.get("model"), 0) + 1
+            if i.get("status") in ("active", "reserved"):
+                on_sale[i.get("model")] = on_sale.get(i.get("model"), 0) + 1
+    rows = [NO_SALES_HEADER]
+    missing = [m for m in sheet_models if m not in sale_prices]
+    for model in sorted(missing, key=lambda m: (models.MODEL_INFO[m]["brand"], m)):
+        info = models.MODEL_INFO[model]
+        price, source = web.get(model, ("нет данных", ""))
+        rows.append([model, info["brand"], "механика" if info["mech_type"] == models.MECH else "электроника",
+                     info["format"], total.get(model, 0), on_sale.get(model, 0),
+                     mean_prices.get(model, "нет данных"), price, source, "нет" if model in untracked else "да"])
+    return rows

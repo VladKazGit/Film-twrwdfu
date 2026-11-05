@@ -1252,6 +1252,12 @@ def write_sheets(writer, result, state_flags):
         if not state_flags.get("models_web_v1"):
             writer.color_model_rows()
             updates["models_web_v1"] = True
+        sheet_models = [m for m in models.MODEL_INFO if sheets.model_key(m) in allowed]
+        writer.replace(sheets.NO_SALES_SHEET, report.no_sales_rows(
+            sheet_models, items, report.model_prices(result["summary"]), sale_prices, web, _UNTRACKED))
+        if not state_flags.get("no_sales_sheet_v1"):
+            writer.color_cheap_web_rows(sheets.NO_SALES_SHEET, report.NO_SALES_HEADER.index("Цена объявлений в интернете, €") + 1)
+            updates["no_sales_sheet_v1"] = True
     except Exception as exc:
         print(f"sheets: model prices not written: {type(exc).__name__}")
     writer.replace(sheets.TOP_SHEET, report.top_rows(items, result["run"]["at"]), links=True)
