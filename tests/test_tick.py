@@ -497,7 +497,7 @@ def main():
         assert {k: v for k, v in upd.items() if k != "models_sheet"} == {"fresh_rows_green": True}, upd
         assert ss.rules[sid][1]["booleanRule"]["format"]["backgroundColor"] == sheets.LIGHT_GREEN_3
         print("log:", tick.log_line(r4["run"]))
-    # Search for older cheap list cameras: half a year limit, list models only.
+    # Search for older cheap list cameras: a month limit (half a year before 05.11.2026), list models only.
     Z12, ZE, PRIMA, ANCIENT = 9_000_000_300, 9_000_000_301, 9_000_000_302, 8_000_000_303
     with tempfile.TemporaryDirectory() as tmp:
         store = DataStore(tmp)
@@ -505,7 +505,7 @@ def main():
         tick.run_tick(store, FakeClient(base), now="2026-10-18 08:07")
         search = {("zenit", 1): [rec(Z12, "Zenit 12 XP", 20.0), rec(ZE, "Zenit E", 5.0), rec(PRIMA, "Canon Prima", 10.0),
                                  rec(ANCIENT, "Zenit TTL", 8.0)]}
-        pages_age = {Z12: {"uploaded_ago": "5 Monaten"}, ZE: {"uploaded_ago": "7 Monaten"}}
+        pages_age = {Z12: {"uploaded_ago": "3 Wochen"}, ZE: {"uploaded_ago": "2 Monaten"}}
         r = tick.run_tick(store, FakeClient(base, pages_age, search), now="2026-10-18 08:22")
         assert r["run"]["search_candidates"] == 2 and r["run"]["found"] == 0, r["run"]
         assert r["run"]["search_skipped"] == 1, "an id far below the half-year mark is skipped without opening"
@@ -513,7 +513,7 @@ def main():
         r = tick.run_tick(store, client, now="2026-10-18 08:37")
         a = store.load_active()
         assert r["run"]["found"] == 1 and r["run"]["search_skipped"] == 1 and ANCIENT not in client.opened, r["run"]
-        assert a[Z12]["flags"] == ["found"] and a[Z12]["uploaded_ago"] == "5 Monaten" and ZE not in a and PRIMA not in a
+        assert a[Z12]["flags"] == ["found"] and a[Z12]["uploaded_ago"] == "3 Wochen" and ZE not in a and PRIMA not in a
         assert [i["id"] for i in report.cheap_cameras(r["items"], 20.0)] == [Z12]
         assert report.fast_confidence({**a[Z12], "status": "sold", "time_to_sell_min": 0}) is None
         quick = {**a[Z12], "flags": [], "status": "sold", "time_to_sell_min": 0, "time_to_sell_max": 10}
@@ -554,7 +554,7 @@ def main():
     sweep = tick.Sweep("t", (("canon ae-1", "Canon AE-1"), ("nikon f2", "Nikon F2")), None, 10, 1, 16, False, True)
     AE1 = 9_875_831_290
     state, active, closed, stats, changed = {}, {}, {}, Counter(), set()
-    client = FakeClient({}, {AE1: {"uploaded_ago": "6 Wochen", "price": 140.0}},
+    client = FakeClient({}, {AE1: {"uploaded_ago": "3 Wochen", "price": 140.0}},
                         {("canon ae-1", 1): [rec(AE1, "Canon AE-1 Set", 140.0)]})
     tick.search_sweep(sweep, state, client, active, closed, "2026-10-18 10:07", "2026-10-18", stats, changed)
     tick.search_sweep(sweep, state, client, active, closed, "2026-10-18 10:22", "2026-10-18", stats, changed)
@@ -567,9 +567,9 @@ def main():
     assert tick.check_priority(active[AE1], "2026-10-19 10:37", vanished=False) == tick.P_FOUND
     tick.apply_page(active[AE1], {"status": "sold", "price": 130.0, "description": None, "favourites": 4}, "2026-10-19 10:37")
     assert active[AE1]["status"] == "sold" and "needs_check" not in active[AE1]
-    # Over a week on Vinted ('6 Wochen'): checked weekly; one within its first week daily.
+    # Over a week on Vinted ('3 Wochen'): checked weekly; one within its first week daily.
     old = {**active[AE1], "status": "active", "closed_at": None, "last_checked_at": "2026-10-19 10:37"}
-    assert active[AE1]["vinted_listed_est"] == "2026-09-06" and active[AE1]["uploaded_ago"] == "6 Wochen"
+    assert active[AE1]["vinted_listed_est"] == "2026-09-27" and active[AE1]["uploaded_ago"] == "3 Wochen"
     assert tick.check_priority(old, "2026-10-25 10:38", vanished=False) is None
     assert tick.check_priority(old, "2026-10-26 10:38", vanished=False) == tick.P_FOUND
     young = {**old, "vinted_listed_est": "2026-10-16"}
@@ -649,7 +649,7 @@ def main():
             it.update(age_source="vinted", vinted_listed_est=(today - timedelta(days=5 * (k + 1))).isoformat(),
                       description="Kamera", description_checked=True, last_checked_at="2026-10-16 12:07")
             store.save(it)
-        young, old_one = 9_600_000_001, 9_000_000_001
+        young, old_one = 10_200_000_001, 9_000_000_001  # about 19 days and half a year old by id
         state = store.load_state()  # the models searched first are done already: the pass starts at 'nikon f'
         tick.sweep_state(state, tick.MODEL_SWEEP, "2026-10-16 12:07")["prioritized"] = list(models.PRIORITY_SEARCH)
         store.save_state(state)
@@ -665,7 +665,7 @@ def main():
         assert r["run"]["enriched"] >= 1 and a[young]["age_source"] == "vinted" and a[young]["uploaded_ago"] == "2 Monaten"
         assert not tick.needs_enrich(a[young]) and a[young]["description"] == "Kamera, Prisma"
         # Estimated ~139 days by id (taken in), '7 Monaten' on its page -> removed and never re-added.
-        assert r["run"]["too_old"] == 1 and old_one not in a and old_one in store.load_state()["model_search"]["skipped"]
+        assert old_one not in a and old_one in store.load_state()["model_search"]["skipped"]  # over a month by id: skipped
 
     # 'Запуски' comment: what entered the list and what sold this tick.
     comment = tick.runs_comment(r2["run"])
@@ -916,6 +916,11 @@ def main():
     assert tick.check_priority({**new, "last_checked_at": "2026-11-01 10:45"}, "2026-11-01 12:00", vanished=False) is None
     assert tick.check_priority({**new, "last_checked_at": "2026-11-01 10:45"}, "2026-11-02 10:50", vanished=False) \
         == tick.P_LIST_DAILY
+    # Over a month on Vinted: monthly.
+    month = {**card("Nikon FM2", 250.0), "flags": ["found"], "vinted_listed_est": "2026-09-01",
+             "last_checked_at": "2026-10-20 10:00"}
+    assert tick.check_priority(month, "2026-11-05 10:00", vanished=False) is None
+    assert tick.check_priority(month, "2026-11-19 10:01", vanished=False) == tick.P_FOUND
     tick._UNTRACKED.clear()
     print("tick tests passed")
 

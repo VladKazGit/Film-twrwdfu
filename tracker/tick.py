@@ -91,10 +91,12 @@ CHEAP_SWEEP = Sweep("search", tuple((q, None) for q in (
 MODEL_SWEEP = Sweep("model_search", tuple((m.lower(), m) for m in models.MODEL_INFO), None, 10, 2, 60, False, True,
                     fill_pages_per_tick=20)
 SWEEPS = (CHEAP_SWEEP, MODEL_SWEEP)
-FOUND_MAX_AGE_DAYS = 183  # half a year on Vinted
+FOUND_MAX_AGE_DAYS = 183  # half a year on Vinted: older found cards leave the data
+FOUND_SEARCH_MAX_AGE_DAYS = 31  # the search takes up listings at most a month old (05.11.2026)
 FOUND_MIN_ID = 8_300_000_000  # older ids are well over half a year old: skipped without opening
 OLD_ON_VINTED_DAYS = 7  # cameras listed on Vinted longer ago than this ...
 OLD_RECHECK_MIN = 7 * 1440  # ... are checked weekly instead of daily
+MONTH_ON_VINTED_DAYS, MONTH_RECHECK_MIN = 30, 30 * 1440  # over a month on Vinted: monthly
 NEW_ROWS_HOURS = 12  # light blue 3: cameras first seen within this many hours
 FRESH_ROWS_HOURS = 3  # light green 3, like 'активен' (above the blue): within this many hours
 FOUND_CHECKS_PER_TICK = 15
@@ -314,9 +316,12 @@ def needs_enrich(item):
 
 
 def recheck_minutes(item, now):
-    """Daily check in a camera's first week on Vinted (or since first seen), weekly after."""
+    """Daily check in a camera's first week on Vinted (or since first seen), weekly up to a month,
+    monthly after."""
     listed = item.get("vinted_listed_est")
     start = f"{listed} 00:00" if listed else item["first_seen"]
+    if clock.minutes_between(start, now) > MONTH_ON_VINTED_DAYS * 1440:
+        return MONTH_RECHECK_MIN
     if clock.minutes_between(start, now) > OLD_ON_VINTED_DAYS * 1440:
         return OLD_RECHECK_MIN
     return 1440
@@ -537,7 +542,7 @@ def search_sweep(sweep, state, client, active, closed, now, today, stats, change
         age = age_days(page["uploaded_ago"])
         item = new_item(rec, now, None, ["found"])
         if page["status"] != "active" or item["group"] != "list" or not tracked(item) or (
-                age is not None and age > FOUND_MAX_AGE_DAYS):
+                age is not None and age > FOUND_SEARCH_MAX_AGE_DAYS):
             st["skipped"].append(rec["id"])
             stats["search_skipped"] += 1
             continue
@@ -592,7 +597,7 @@ def search_sweep(sweep, state, client, active, closed, now, today, stats, change
                 stats["search_candidates"] += 1
                 listed = estimate(rec_id)
                 age = (date.fromisoformat(today) - listed).days
-                if age > FOUND_MAX_AGE_DAYS:
+                if age > FOUND_SEARCH_MAX_AGE_DAYS:
                     st["skipped"].append(rec_id)
                     skipped.add(rec_id)
                     stats["search_skipped"] += 1
