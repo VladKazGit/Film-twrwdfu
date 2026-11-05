@@ -4,6 +4,7 @@ from tracker.models import classify, junk_reason
 CASES = [
     # (title, vinted brand, expected model)
     ("Nikon F Photomic analog", None, "Nikon F Photomic"),
+    ("Nikon F50 reflex argentique", "Reflex autofocus, successeur du Nikon F", None),  # modern AF: no model from the text
     # the Photomic line (1.11.2026): its own models; the Nikkormat FTn and the F2 Photomic stay theirs
     ("Nikon F Photomic FTn", None, "Nikon F Photomic FTn"),
     ("Nikon Photomic FTN schwarz mit Nikkor 50mm", None, "Nikon F Photomic FTn"),

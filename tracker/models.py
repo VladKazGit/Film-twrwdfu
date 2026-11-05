@@ -392,7 +392,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 62
+VERSION = 63
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -1336,7 +1336,10 @@ def classify(title, description=None, vinted_brand=None):
     # '35mm to 120 Film Adapter ... Camera' + 'Tested and working on rb67': an adapter, its description names
     # the cameras it fits
     lens_title = lens_title or (model is None and _ADAPTER.search(norm_title))
+    # A modern autofocus title ('Nikon F50 reflex argentique') takes no model from its description,
+    # which may name another camera.
     if model is None and description and not NON_LIST_SERIES.search(norm_title) and not lens_title \
+            and junk_reason(title, vinted_brand) != "modern AF" \
             and not {"accessory?", "digital?", "compact?"} & set(title_flags):
         norm_desc = normalize(description)
         title_brands = brands_in(title)
