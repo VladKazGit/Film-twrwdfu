@@ -57,6 +57,9 @@ EXTRA_FULL_PAGES = 3
 # page 1 in every tick too). A page of all categories holds ~40 of the model's cameras: reading
 # a little past them catches the sales of popular models within the hour (+~13 pages an hour).
 FRESH_EVERY_MIN, FRESH_PER_CHECK, FRESH_HOURS = 60, 16, 24
+# Models with fewer sales than this in the data are searched twice a day only (06.11.2026): most have
+# hardly any listings, and an hourly search of each was half the load.
+FRESH_RARE_SALES, FRESH_RARE_EVERY_MIN = 3, 8 * 60 + 30
 FRESH_PER_CHEAP = 5  # a cheap check takes a few models too, so the round stays within the hour
 FRESH_PAGE_ITEMS, FRESH_MAX_PAGES = 35, 8
 FRESH_PRIORITY_PAGE_ITEMS, FRESH_PRIORITY_MAX_PAGES = 25, 10
@@ -446,7 +449,10 @@ def fresh_search(state, client, active, closed, now, stats, changed, quick=False
     st = state.setdefault("fresh_search", {"last_run": {}})
     names = [n for n in state.get("models_sheet") or [m for _, m in MODEL_SWEEP.queries] if n not in _UNTRACKED]
     last_run = st["last_run"]
-    due = sorted((n for n in names if not last_run.get(n) or clock.minutes_between(last_run[n], now) >= FRESH_EVERY_MIN - 5),
+    sold = Counter(i["model"] for i in list(active.values()) + list(closed.values())
+                   if i.get("group") == "list" and i.get("status") == "sold" and not report.stat_flags(i) & report.SALES_EXCLUDED)
+    every = {n: FRESH_EVERY_MIN if sold[n] >= FRESH_RARE_SALES or n in FRESH_PRIORITY else FRESH_RARE_EVERY_MIN for n in names}
+    due = sorted((n for n in names if not last_run.get(n) or clock.minutes_between(last_run[n], now) >= every[n] - 5),
                  key=lambda n: last_run.get(n) or "")[:limit]
     live = Counter(i["model"] for i in active.values() if i.get("group") == "list" and i["status"] == "active")
     queries = [(n, min(FRESH_PRIORITY_MAX_PAGES, 1 + live[n] // FRESH_PRIORITY_PAGE_ITEMS) if n in FRESH_PRIORITY
