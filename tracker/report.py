@@ -948,7 +948,7 @@ def readme(summary):
 WEB_MIN_LISTINGS = 3  # a web price needs this many listings
 
 
-def web_model_prices(sale_prices, ka_cards, snapshots):
+def web_model_prices(sale_prices, ka_cards, snapshots, manual=None):
     """For the models without a Vinted sale: the median asking price on the other marketplaces the
     tracker has collected (Kleinanzeigen cards, the OLX / leboncoin snapshots), real prices only (no
     placeholders, flags or sets). {model: (median EUR, 'Kleinanzeigen 12, OLX/leboncoin 3')}."""
@@ -972,6 +972,10 @@ def web_model_prices(sale_prices, ka_cards, snapshots):
         source = ", ".join(f"{name} {len(p)}" for name, p in (("Kleinanzeigen", ka.get(model, [])),
                                                                 ("OLX/leboncoin", snap.get(model, []))) if p)
         out[model] = (round(statistics.median(prices)), source)
+    # Prices the user gathered (model_prices_manual.json in the data) come first.
+    for model, price in ((manual or {}).get("prices") or {}).items():
+        if model not in sale_prices:
+            out[model] = (price, (manual or {}).get("source") or "документ пользователя")
     return out
 
 
@@ -999,3 +1003,13 @@ def no_sales_rows(sheet_models, items, mean_prices, sale_prices, web, untracked)
                      info["format"], total.get(model, 0), on_sale.get(model, 0),
                      mean_prices.get(model, "нет данных"), price, source, "нет" if model in untracked else "да"])
     return rows
+
+
+def model_listing_counts(items):
+    """{model: (listings in the data, on sale now)} of the list cameras, flagged ones and sets left out."""
+    out = {}
+    for i in items:
+        if i.get("group") == "list" and not stat_flags(i) & SALES_EXCLUDED:
+            total, live = out.get(i.get("model"), (0, 0))
+            out[i.get("model")] = (total + 1, live + (i.get("status") in ("active", "reserved")))
+    return out

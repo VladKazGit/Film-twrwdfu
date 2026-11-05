@@ -292,7 +292,8 @@ def main():
         assert ss.sheets["Сводка"].mode == "RAW" and ss.sheets["Проверка"].rows[0] == report.CHECK_HEADER
         assert ss.sheets["Список"].rows[0][0] == "id" and len(ss.sheets["Список"].rows) >= 4
         assert ss.sheets["Модели"].rows[0] == sheets.MODELS_HEADER + [sheets.MODELS_PRICE_HEADER, sheets.MODELS_SALE_PRICE_HEADER,
-                                                                     sheets.MODELS_WEB_PRICE_HEADER, sheets.MODELS_WEB_SOURCE_HEADER]
+                                                                     sheets.MODELS_WEB_PRICE_HEADER, sheets.MODELS_WEB_SOURCE_HEADER,
+                                                                     sheets.MODELS_LISTINGS_HEADER, sheets.MODELS_ON_SALE_HEADER]
         assert len(ss.sheets["Модели"].rows) > 150
         prices = {r[0]: r[5:7] for r in ss.sheets["Модели"].rows[1:]}
         sold_zenit = [report.current_price(i) for i in r5["items"] if i.get("model") == "Zenit E" and i["status"] == "sold"]

@@ -14,6 +14,7 @@ items, descriptions of new list cameras and pages of fresh list cameras that
 vanished (possible fast sales). The sheet is written only if 'Список' changed.
 """
 import argparse
+import json
 import sys
 
 import gspread
@@ -1176,13 +1177,23 @@ def runs_comment(run, limit=40, cheap=()):
 
 # ---------------------------------------------------------------- sheets and entry point
 
+def listing_columns(items):
+    """'Модели': how many listings the data holds for each model, and how many are on sale now."""
+    from . import sheets
+    counts = report.model_listing_counts(items)
+    return {sheets.MODELS_LISTINGS_HEADER: {m: n for m, (n, _) in counts.items()},
+            sheets.MODELS_ON_SALE_HEADER: {m: live for m, (_, live) in counts.items()}}
+
+
 def web_prices_of(root, items):
     """report.web_model_prices from the Kleinanzeigen cards and price snapshots in the data repo."""
     from . import snapshot
     try:
         ka = DataStore(Path(root) / "kleinanzeigen")
         cards = list({**ka.load_closed(), **ka.load_active()}.values())
-        return report.web_model_prices(report.model_sale_prices(items), cards, snapshot.load_all(root))
+        manual_file = Path(root) / "model_prices_manual.json"
+        manual = json.loads(manual_file.read_text("utf-8")) if manual_file.exists() else None
+        return report.web_model_prices(report.model_sale_prices(items), cards, snapshot.load_all(root), manual)
     except Exception as exc:  # a nicety: the sheets go on without it
         print(f"sheets: web prices not worked out: {type(exc).__name__}")
         return {}
@@ -1248,7 +1259,8 @@ def write_sheets(writer, result, state_flags):
                                    sheets.MODELS_SALE_PRICE_HEADER: sale_prices,
                                    sheets.MODELS_WEB_PRICE_HEADER: {**has_sales, **{m: p for m, (p, _) in web.items()}},
                                    sheets.MODELS_WEB_SOURCE_HEADER: {**{m: "" for m in sale_prices},
-                                                                     **{m: src for m, (_, src) in web.items()}}})
+                                                                     **{m: src for m, (_, src) in web.items()}},
+                                   **listing_columns(items)})
         if not state_flags.get("models_web_v1"):
             writer.color_model_rows()
             updates["models_web_v1"] = True

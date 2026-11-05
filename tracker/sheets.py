@@ -46,6 +46,8 @@ MODELS_SALE_PRICE_HEADER = "Средняя цена продажи, €"  # sold
 MODELS_WEB_PRICE_HEADER = "Цена объявлений в интернете, €"
 MODELS_WEB_SOURCE_HEADER = "Источник цены"
 MODELS_HAS_SALES = "есть продажи Vinted"
+MODELS_LISTINGS_HEADER = "Объявлений Vinted в базе"  # list cameras of the model in the data (06.11.2026)
+MODELS_ON_SALE_HEADER = "Сейчас в продаже на Vinted"
 WEB_CHEAP_PRICE = 65  # light blue 3 below this
 MODELS_NO_PRICE = "нет данных"
 LIGHT_GREEN_3 = {"red": 217 / 255, "green": 234 / 255, "blue": 211 / 255}  # #d9ead3
@@ -309,7 +311,8 @@ class SheetWriter:
                     header[col - 1] = title
                 else:
                     header.append(title)
-            cells = [[title]] + [[prices.get(k, MODELS_NO_PRICE) if k else ""] for k in keys]
+            missing = 0 if title in (MODELS_LISTINGS_HEADER, MODELS_ON_SALE_HEADER) else MODELS_NO_PRICE
+            cells = [[title]] + [[prices.get(k, missing) if k else ""] for k in keys]
             if [[str(c[0])] for c in cells] == [[row[col - 1] if len(row) >= col else ""] for row in values]:
                 continue
             if col > ws.col_count:
