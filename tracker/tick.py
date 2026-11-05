@@ -41,7 +41,8 @@ TICK_TIME_BUDGET_S = 9 * 60  # Vinted traffic per tick; the rest goes to the nex
 QUICK_PAGES, QUICK_TIME_BUDGET_S = 1, 150  # quick checks between ticks (cheap ones end long before)
 CHEAP_PRICE = 20.0  # the cheap check and 'До 20 €' (sheets.CHEAP_MAX_PRICE)
 # Models whose sales average less than this are not tracked (05.11.2026): no new cards, no searches, no
-# page checks - except a camera at CHEAP_PRICE or less and a 'Zenit 1980'. Models without sales stay.
+# page checks, no 'До 20 €' or letters (05.11.2026: even at CHEAP_PRICE or less) - except a 'Zenit 1980'.
+# Models without sales stay.
 TRACK_MIN_SALE_PRICE = 65.0
 _UNTRACKED = set()  # worked out from the data at the start of each run (refresh_untracked)
 # Extra categories: page 1 per check; on full scans (the morning after the night, then every 4 h) 3 pages
@@ -222,11 +223,10 @@ def refresh_untracked(state, active, closed):
 
 
 def tracked(item):
-    """Not a model of _UNTRACKED - unless at CHEAP_PRICE or less ('До 20 €') or a 'Zenit 1980'."""
+    """Not a model of _UNTRACKED - unless a 'Zenit 1980' (its own letter)."""
     if item.get("model") not in _UNTRACKED or item.get("model_source") == "manual":
         return True
-    price = report.current_price(item)
-    return (price is not None and price <= CHEAP_PRICE) or notify.zenit_1980(item)
+    return notify.zenit_1980(item)
 
 
 def _refresh_signal_flags(item):
@@ -331,7 +331,8 @@ def describe_cheap(active, client, now, stats, changed):
     fresh search): read it before 'До 20 €' and the letter, which wait for it. The cheapest
     first, a few per run. Raises BlockedError."""
     todo = sorted((i for i in active.values() if i.get("group") == "list" and i["status"] == "active"
-                   and report.unread_description(i) and (report.current_price(i) or 0) <= CHEAP_PRICE),
+                   and report.unread_description(i) and (report.current_price(i) or 0) <= CHEAP_PRICE
+                   and tracked(i)),
                   key=lambda i: (report.current_price(i) or 0, i["id"]))
     for item in todo[:CHEAP_DESCRIPTIONS_PER_RUN]:
         if not _can_request(client):
@@ -746,7 +747,7 @@ def run_tick(store, client, labels=None, now=None, quick=False):
     # the like stay out): seen like catalog items.
     misplaced, parts_ids = set(), set()
     extra_pages = [(category, page) for category in EXTRA_CATEGORY_IDS
-                   for page in range(1, (EXTRA_FULL_PAGES if full_scan else 1) + 1)]
+                   for page in range(1, (EXTRA_FULL_PAGES if full_scan else 1) + 1)] if not quick else []
     for category, page in extra_pages:
         try:
             for rec in client.catalog_page(page, category):
@@ -1198,7 +1199,7 @@ def write_sheets(writer, result, state_flags):
                                      [price_of[r[0]] for r in list_rows[1:]])
     writer.replace(sheets.LIST_SHEET, list_rows, links=True)
     candidates = report.cheap_cameras(items, sheets.CHEAP_MAX_PRICE)
-    cheap = [i for i in candidates if i.get("model") and sheets.model_key(i["model"]) in allowed]
+    cheap = [i for i in candidates if i.get("model") and sheets.model_key(i["model"]) in allowed and tracked(i)]
     print(f"sheets: cheap sheet {len(cheap)} of {len(candidates)} list cameras at <= 20 EUR"
           f" (the others have models missing from the models sheet)")
     # 'До 20 €' is mostly old cheap cameras found by search: mark what entered the sheet in 12 h.

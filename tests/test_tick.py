@@ -895,8 +895,8 @@ def main():
         tick.search_sweep(sweep, state, client, {}, {}, "2026-10-17 10:52", "2026-10-17", Counter(), set())
         assert not state["model_search"]["pending"], "left for the catalog"
 
-    # Models selling under TRACK_MIN_SALE_PRICE on average are not tracked; 20 EUR or less and
-    # 'Zenit 1980' still are; models without sales stay.
+    # Models selling under TRACK_MIN_SALE_PRICE on average are not tracked, even at 20 EUR or less;
+    # 'Zenit 1980' still is; models without sales stay.
     def card(model, price, status="active", title=None):
         return {"model": model, "title": title or model, "group": "list", "status": status, "flags": [],
                 "price_start": price, "price_history": [{"at": "2026-11-01 10:00", "price": price}],
@@ -905,7 +905,7 @@ def main():
     state = {}
     tick.refresh_untracked(state, {}, sold)
     assert state["untracked_models"] == ["Zenit E"]
-    assert not tick.worth_tracking(card("Zenit E", 45.0)) and tick.worth_tracking(card("Zenit E", 15.0))
+    assert not tick.worth_tracking(card("Zenit E", 45.0)) and not tick.worth_tracking(card("Zenit E", 15.0))
     assert tick.worth_tracking(card("Zenit E", 25.0, title="Zenit E Olympia Moskau 1980"))
     assert tick.worth_tracking(card("Nikon FM2", 250.0)) and tick.worth_tracking(card("Leica M3", 900.0))
     assert tick.check_priority(card("Zenit E", 45.0), "2026-11-03 10:00", vanished=True) is None, "no page checks"

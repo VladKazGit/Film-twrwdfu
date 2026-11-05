@@ -48,7 +48,9 @@ def configured():
 def cheap_now(items, state):
     """The cameras of 'До 20 €' now (the same filter as the sheet)."""
     sheet = set(state.get("models_sheet") or [])
-    return [i for i in report.cheap_cameras(items, CHEAP_MAX_PRICE) if not sheet or i.get("model") in sheet]
+    untracked = set(state.get("untracked_models") or [])  # models selling under 65 EUR (tracker.tick)
+    return [i for i in report.cheap_cameras(items, CHEAP_MAX_PRICE)
+            if (not sheet or i.get("model") in sheet) and i.get("model") not in untracked]
 
 
 def _origin(item):

@@ -51,6 +51,8 @@ def main():
         assert "Продаются в среднем за: 3 дня" in body and "Продаются в среднем за: 3 дня" in html, body
         assert body.index("Zenit E — 8 €") < body.index("Продажи Zenit E") < body.index("items/3"), "paragraphs in order"
         assert notify.run(items, state, "2026-10-18 10:52", sent.append) == 0 and len(sent) == 2, "each camera once"
+        # models selling under 65 EUR (tracker.tick: untracked_models) are out of 'До 20 €' and the letters
+        assert 3 not in {i["id"] for i in notify.cheap_now(items, {**state, "untracked_models": ["Zenit E"]})}
 
         # 'Zenit 1980': the Moscow 1980 Olympic editions at 30 EUR or less, each once
         def zenit(item_id, title, price, description="", status="active", flags=()):
