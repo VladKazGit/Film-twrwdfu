@@ -48,6 +48,7 @@ MODELS_WEB_SOURCE_HEADER = "Источник цены"
 MODELS_HAS_SALES = "есть продажи Vinted"
 MODELS_LISTINGS_HEADER = "Объявлений Vinted в базе"  # list cameras of the model in the data (06.11.2026)
 MODELS_ON_SALE_HEADER = "Сейчас в продаже на Vinted"
+MODELS_TRACKED_HEADER = "Отслеживается"  # да / нет (tracker.tick: cheap or slow to sell, or left out by the user)
 WEB_CHEAP_PRICE = 65  # light blue 3 below this
 MODELS_NO_PRICE = "нет данных"
 LIGHT_GREEN_3 = {"red": 217 / 255, "green": 234 / 255, "blue": 211 / 255}  # #d9ead3
@@ -342,6 +343,15 @@ class SheetWriter:
             "booleanRule": {"condition": {"type": "CUSTOM_FORMULA",
                                           "values": [{"userEnteredValue": f'=AND(ISNUMBER(${web}2),${web}2<{WEB_CHEAP_PRICE})'}]},
                             "format": {"backgroundColor": LIGHT_BLUE_3}}}}}]})
+
+    def color_tracked_models(self):
+        """'Модели': the 'Отслеживается' cell light green 3 when 'да' (the row colours stay the others')."""
+        ws = self._sheets[MODELS_SHEET]
+        col = ws.row_values(1).index(MODELS_TRACKED_HEADER)
+        self.spreadsheet.batch_update({"requests": [{"addConditionalFormatRule": {"index": 0, "rule": {
+            "ranges": [{"sheetId": ws.id, "startRowIndex": 1, "startColumnIndex": col, "endColumnIndex": col + 1}],
+            "booleanRule": {"condition": {"type": "TEXT_EQ", "values": [{"userEnteredValue": "да"}]},
+                            "format": {"backgroundColor": LIGHT_GREEN_3}}}}}]})
 
     def manual_labels(self):
         """{item id: model text} from 'Ручная разметка' (created empty if missing)."""

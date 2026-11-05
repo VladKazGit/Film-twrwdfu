@@ -224,7 +224,7 @@ def main():
         assert updates["runs_header_v5"] and "Zenit E" in updates["models_offered"]
         assert set(updates["status_colors"]) == {"Список", "Остальные", "До 20 €", "Быстрые продажи"}
         rules = [f["addConditionalFormatRule"] for f in ss.formats]
-        assert len(rules) == 11, len(rules)  # 4 green + blue and yellow on 2 sheets + 2 on «Модели» + 1 on «Модели без продаж»
+        assert len(rules) == 12, len(rules)  # 4 green + blue and yellow on 2 sheets + 3 on «Модели» + 1 on «Модели без продаж»
         n = len(report.ITEM_HEADER)
 
         def added(color):
@@ -274,7 +274,7 @@ def main():
         assert marked == {1020, 1021}, marked  # new listings first seen 17.10 07:07; bumped 400 and older ones are not
         assert {r[0] for r in list_rows[1:] if r[-1] == "да"} == {1020, 1021}, "07:07 is within 3 h of the 07:07 tick"
         rule = next(f["addConditionalFormatRule"]["rule"] for f in ss.formats
-                    if f["addConditionalFormatRule"]["rule"]["booleanRule"]["condition"]["type"] != "CUSTOM_FORMULA")
+                    if f["addConditionalFormatRule"]["rule"]["booleanRule"]["condition"].get("values", [{}])[0].get("userEnteredValue") == "активен")
         assert rule["booleanRule"]["condition"]["values"][0]["userEnteredValue"] == "активен"
         assert rule["ranges"][0]["startColumnIndex"] == report.ITEM_HEADER.index("Статус")
         runs = ss.sheets["Запуски"].rows
@@ -293,7 +293,8 @@ def main():
         assert ss.sheets["Список"].rows[0][0] == "id" and len(ss.sheets["Список"].rows) >= 4
         assert ss.sheets["Модели"].rows[0] == sheets.MODELS_HEADER + [sheets.MODELS_PRICE_HEADER, sheets.MODELS_SALE_PRICE_HEADER,
                                                                      sheets.MODELS_WEB_PRICE_HEADER, sheets.MODELS_WEB_SOURCE_HEADER,
-                                                                     sheets.MODELS_LISTINGS_HEADER, sheets.MODELS_ON_SALE_HEADER]
+                                                                     sheets.MODELS_LISTINGS_HEADER, sheets.MODELS_ON_SALE_HEADER,
+                                                                     sheets.MODELS_TRACKED_HEADER]
         assert len(ss.sheets["Модели"].rows) > 150
         prices = {r[0]: r[5:7] for r in ss.sheets["Модели"].rows[1:]}
         sold_zenit = [report.current_price(i) for i in r5["items"] if i.get("model") == "Zenit E" and i["status"] == "sold"]
@@ -469,7 +470,7 @@ def main():
                        "cheap_ids": updates["cheap_ids"], "models_offered": updates["models_offered"],
                        "status_colors": updates["status_colors"], "new_rows_colors": updates["new_rows_colors"],
                        "fresh_rows_colors": updates["fresh_rows_colors"], "fresh_rows_green": True}
-        assert {k: v for k, v in tick.write_sheets(writer, r5, state_flags).items() if k not in ("models_sheet", "models_web_v1", "no_sales_sheet_v1")} == {"cheap_ids": []}, "Zenit E left 'До 20 €'"
+        assert {k: v for k, v in tick.write_sheets(writer, r5, state_flags).items() if k not in ("models_sheet", "models_web_v1", "no_sales_sheet_v1", "models_tracked_v1")} == {"cheap_ids": []}, "Zenit E left 'До 20 €'"
         assert ss.sheets["Запуски"].rows[1][1] == 0
         assert [r[0] for r in ss.sheets["До 20 €"].rows[1:] if r[0] != ""] == [] and ["Zenit E"] not in [r[:1] for r in models_ws.rows]
         assert len(ss.sheets["До 20 €"].rows) == 2 and not any(ss.sheets["До 20 €"].rows[1]), "old data row blanked"
@@ -505,7 +506,7 @@ def main():
             "condition": {"type": "CUSTOM_FORMULA", "values": [{"userEnteredValue": "=$AE2=\"да\""}]},
             "format": {"backgroundColor": {"red": 1, "green": 0.9490196, "blue": 0.8}}}})
         upd = tick.write_sheets(writer, r5, {**state_flags, "fresh_rows_green": None})
-        assert {k: v for k, v in upd.items() if k not in ("models_sheet", "models_web_v1", "no_sales_sheet_v1")} == {"fresh_rows_green": True}, upd
+        assert {k: v for k, v in upd.items() if k not in ("models_sheet", "models_web_v1", "no_sales_sheet_v1", "models_tracked_v1")} == {"fresh_rows_green": True}, upd
         assert ss.rules[sid][1]["booleanRule"]["format"]["backgroundColor"] == sheets.LIGHT_GREEN_3
         print("log:", tick.log_line(r4["run"]))
     # Search for older cheap list cameras: a month limit (half a year before 05.11.2026), list models only.
@@ -915,7 +916,7 @@ def main():
     sold = {1: card("Zenit E", 40.0, "sold"), 2: card("Nikon FM2", 300.0, "sold")}
     state = {}
     tick.refresh_untracked(state, {}, sold)
-    assert state["untracked_models"] == ["Zenit E"]
+    assert state["untracked_models"] == ["Zenit E", "Zorki 4K"]
     assert not tick.worth_tracking(card("Zenit E", 45.0)) and not tick.worth_tracking(card("Zenit E", 15.0))
     assert tick.worth_tracking(card("Zenit E", 25.0, title="Zenit E Olympia Moskau 1980"))
     assert tick.worth_tracking(card("Nikon FM2", 250.0)) and tick.worth_tracking(card("Leica M3", 900.0))
@@ -932,6 +933,10 @@ def main():
              "last_checked_at": "2026-10-20 10:00"}
     assert tick.check_priority(month, "2026-11-05 10:00", vanished=False) is None
     assert tick.check_priority(month, "2026-11-19 10:01", vanished=False) == tick.P_FOUND
+    # Slow sellers (median over 3 weeks) and the user's picks are not tracked either.
+    slow = {1: {**card("Nikon FA", 200.0, "sold"), "listed_after": "2026-09-01 10:00", "sold_detected_at": "2026-10-20 10:00"}}
+    tick.refresh_untracked(state, {}, slow)
+    assert "Nikon FA" in state["untracked_models"] and "Zorki 4K" in state["untracked_models"]
     tick._UNTRACKED.clear()
     print("tick tests passed")
 

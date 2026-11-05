@@ -15,6 +15,7 @@ vanished (possible fast sales). The sheet is written only if 'Список' chan
 """
 import argparse
 import json
+import statistics
 import sys
 
 import gspread
@@ -45,6 +46,9 @@ CHEAP_PRICE = 20.0  # the cheap check and 'До 20 €' (sheets.CHEAP_MAX_PRICE)
 # page checks, no 'До 20 €' or letters (05.11.2026: even at CHEAP_PRICE or less) - except a 'Zenit 1980'.
 # Models without sales stay.
 TRACK_MIN_SALE_PRICE = 65.0
+# Nor those that take longer than this to sell (the median 'продали за', 06.11.2026), nor the user's picks.
+TRACK_MAX_MEDIAN_DAYS = 21
+UNTRACKED_BY_USER = {"Zorki 4K"}
 _UNTRACKED = set()  # worked out from the data at the start of each run (refresh_untracked)
 # Extra categories: page 1 per check; on full scans (the morning after the night, then every 4 h) 3 pages
 EXTRA_FULL_PAGES = 3
@@ -218,10 +222,20 @@ def worth_tracking(item):
 
 
 def refresh_untracked(state, active, closed):
-    """The models whose mean sale price in the data is below TRACK_MIN_SALE_PRICE."""
-    sales = notify.sale_stats(list(active.values()) + list(closed.values()))
+    """The models whose mean sale price in the data is below TRACK_MIN_SALE_PRICE, or whose median
+    time to sell is over TRACK_MAX_MEDIAN_DAYS, and UNTRACKED_BY_USER. Models without sales stay."""
+    items = list(active.values()) + list(closed.values())
+    sales = notify.sale_stats(items)
+    days = {}
+    for i in items:
+        if i.get("group") == "list" and i.get("status") == "sold" and not report.stat_flags(i) & report.SALES_EXCLUDED:
+            d = report.days_to_sell(i)
+            if d is not None:
+                days.setdefault(i.get("model"), []).append(d)
     _UNTRACKED.clear()
     _UNTRACKED.update(m for m, s in sales.items() if m and s[1] < TRACK_MIN_SALE_PRICE)
+    _UNTRACKED.update(m for m, d in days.items() if m and statistics.median(d) > TRACK_MAX_MEDIAN_DAYS)
+    _UNTRACKED.update(UNTRACKED_BY_USER)
     state["untracked_models"] = sorted(_UNTRACKED)
 
 
@@ -1260,7 +1274,11 @@ def write_sheets(writer, result, state_flags):
                                    sheets.MODELS_WEB_PRICE_HEADER: {**has_sales, **{m: p for m, (p, _) in web.items()}},
                                    sheets.MODELS_WEB_SOURCE_HEADER: {**{m: "" for m in sale_prices},
                                                                      **{m: src for m, (_, src) in web.items()}},
-                                   **listing_columns(items)})
+                                   **listing_columns(items),
+                                   sheets.MODELS_TRACKED_HEADER: {m: "нет" if m in _UNTRACKED else "да" for m in models.MODEL_INFO}})
+        if not state_flags.get("models_tracked_v1"):
+            writer.color_tracked_models()
+            updates["models_tracked_v1"] = True
         if not state_flags.get("models_web_v1"):
             writer.color_model_rows()
             updates["models_web_v1"] = True
