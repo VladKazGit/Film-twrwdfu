@@ -937,6 +937,16 @@ def main():
     slow = {1: {**card("Nikon FA", 200.0, "sold"), "listed_after": "2026-09-01 10:00", "sold_detected_at": "2026-10-20 10:00"}}
     tick.refresh_untracked(state, {}, slow)
     assert "Nikon FA" in state["untracked_models"] and "Zorki 4K" in state["untracked_models"]
+    # 'Остальные' rechecked once: a later sale shows in 'Аналитика' by camera name.
+    rest = {7: {**card(None, 30.0, "unsold_3h"), "id": 7, "group": "rest", "camera_name": "Minolta X-300",
+                "closed_at": "2026-10-20 13:00", "listed_after": "2026-10-20 10:00"},
+            8: {**card(None, 25.0, "sold"), "id": 8, "group": "rest", "camera_name": "Minolta X-300",
+                "listed_after": "2026-10-21 10:00", "sold_detected_at": "2026-10-21 11:00"}}
+    got = Counter()
+    tick.rest_recheck(FakeClient({}, {7: {"status": "sold", "price": 28.0}}), rest, "2026-11-06 15:00", got, set())
+    assert rest[7]["recheck_status"] == "sold" and rest[7]["status"] == "unsold_3h" and got["rest_rechecked"] == 1
+    row = next(r for r in report.rest_model_rows(list(rest.values())) if r[0] == "Minolta X-300")
+    assert row[1:8] == [2, 1, 1, 0, 0, 0, "100 %"] and row[8] == 26 and " – до 17 дней" in row[9], row
     tick._UNTRACKED.clear()
     print("tick tests passed")
 

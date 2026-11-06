@@ -765,6 +765,8 @@ def analytics_rows(items, now):
         rows.append([model] + [round(statistics.mean(by_month[m])) if len(by_month.get(m, [])) >= 2 else "" for m in months]
                     + [round(statistics.mean(late)) if late else "", round(statistics.mean(early)) if early else ""])
     width = max(len(r) for r in rows)
+    rows.extend(rest_model_rows(items))
+    width = max(len(r) for r in rows)
     return [r + [""] * (width - len(r)) for r in rows]
 
 
@@ -1013,3 +1015,46 @@ def model_listing_counts(items):
             total, live = out.get(i.get("model"), (0, 0))
             out[i.get("model")] = (total + 1, live + (i.get("status") in ("active", "reserved")))
     return out
+
+
+REST_MODEL_MIN = 2  # 'Остальные' by model: models with at least this many listings
+
+
+def rest_model_rows(items):
+    """'Аналитика', 'Остальные' by camera name: listings, sold within the 3 tracked hours, sold later (the
+    one-off recheck of 06.11.2026), still on sale, deleted, the share sold, the mean sale price and how
+    long they were on sale (a later sale only as a range: from 3 hours to the recheck)."""
+    groups = {}
+    for i in items:
+        if i.get("group") == "rest" and i.get("camera_name"):
+            groups.setdefault(i["camera_name"], []).append(i)
+    rows = [["«Остальные» по моделям: продано за первые 3 часа и позже (перепроверка 06.11.2026)"],
+            ["Модель", "Объявлений", "Продано за 3 ч", "Продано позже", "Ещё в продаже", "Удалено", "Не проверено",
+             "Доля проданных", "Средняя цена продажи, €", "Продали за"]]
+    out = []
+    for name, cards in groups.items():
+        if len(cards) < REST_MODEL_MIN:
+            continue
+        fast = [i for i in cards if i.get("status") == "sold"]
+        later = [i for i in cards if i.get("status") != "sold" and i.get("recheck_status") == "sold"]
+        live = [i for i in cards if i.get("status") == "active" or i.get("recheck_status") in ("active", "reserved", "hidden")]
+        gone = [i for i in cards if i.get("status") != "sold" and (i.get("recheck_status") == "deleted"
+                                                                  or (i.get("status") == "deleted" and not i.get("recheck_status")))]
+        unchecked = [i for i in cards if i.get("status") == "unsold_3h" and not i.get("recheck_at")]
+        prices = [current_price(i) for i in fast if current_price(i)] + [i["recheck_price"] for i in later if i.get("recheck_price")]
+        spans = [d for d in (days_to_sell(i) for i in fast) if d is not None]
+        longest = max((clock.minutes_between(i.get("listed_after") or i["first_seen"], i["recheck_at"]) / 1440
+                       for i in later), default=None)
+        if spans and longest is not None:
+            when = f"{format_on_sale(min(spans))} – до {format_on_sale(longest)}"
+        elif spans:
+            when = f"{format_on_sale(min(spans))} – {format_on_sale(max(spans))}"
+        elif longest is not None:
+            when = f"от 3 ч до {format_on_sale(longest)}"
+        else:
+            when = ""
+        sold = len(fast) + len(later)
+        out.append([name, len(cards), len(fast), len(later), len(live), len(gone), len(unchecked),
+                    f"{100 * sold / len(cards):.0f} %", round(statistics.mean(prices)) if prices else "", when])
+    out.sort(key=lambda r: (-(r[2] + r[3]), -r[1], r[0]))
+    return rows + out + [[]]

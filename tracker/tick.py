@@ -49,6 +49,10 @@ TRACK_MIN_SALE_PRICE = 65.0
 # Nor those that take longer than this to sell (the median 'продали за', 06.11.2026), nor the user's picks.
 TRACK_MAX_MEDIAN_DAYS = 21
 UNTRACKED_BY_USER = {"Zorki 4K"}
+# One-off (06.11.2026, the user's request): the pages of the closed 'Остальные' are opened once more, to see
+# which sold after their 3 hours. Spread over the regular ticks so it is done by REST_RECHECK_BY.
+REST_RECHECK_BY = "2026-11-06 22:00"
+REST_RECHECK_MAX_PER_TICK, REST_RECHECK_AFTER = 120, 40
 _UNTRACKED = set()  # worked out from the data at the start of each run (refresh_untracked)
 # Extra categories: page 1 per check; on full scans (the morning after the night, then every 4 h) 3 pages
 EXTRA_FULL_PAGES = 3
@@ -268,6 +272,34 @@ def set_model(item, model, source):
         item.update(brand=info["brand"], mech_type=info["mech_type"], format=info["format"], region=info["region"])
     if not item.get("closed_at"):
         item["group"] = group_of(item)
+
+
+def rest_recheck(client, closed, now, stats, changed):
+    """Open the page of closed 'Остальные' once more ('не продано за 3 ч', deleted): the status now goes
+    to recheck_status / recheck_at / recheck_price, the card's own status stays. Named cameras first; as
+    many per tick as finish the lot by REST_RECHECK_BY."""
+    todo = sorted((i for i in closed.values() if i.get("group") == "rest" and i.get("status") in ("unsold_3h", "deleted")
+                   and not i.get("recheck_at")), key=lambda i: (not i.get("camera_name"), i["id"]))
+    if not todo:
+        return
+    left = clock.minutes_between(now, REST_RECHECK_BY)
+    per_tick = min(REST_RECHECK_MAX_PER_TICK, -(-len(todo) // max(1, left // 15))) if left > 0 else REST_RECHECK_AFTER
+    for item in todo[:per_tick]:
+        if not _can_request(client):
+            break
+        try:
+            page = client.item_page(item["id"])
+        except BlockedError:
+            raise
+        except VintedError:
+            stats["check_errors"] += 1
+            continue
+        item.update(recheck_status=page["status"], recheck_at=now, recheck_price=page.get("price"))
+        days = age_days(page.get("uploaded_ago"))
+        if days is not None:
+            item["recheck_listed"] = (clock.parse(now) - timedelta(days=days)).strftime("%Y-%m-%d")
+        changed.add(item["id"])
+        stats["rest_rechecked"] += 1
 
 
 def apply_page(item, page, now):
@@ -976,6 +1008,9 @@ def run_tick(store, client, labels=None, now=None, quick=False):
                 break
             except VintedError:
                 stats["check_errors"] += 1
+
+    if not quick:
+        rest_recheck(client, closed, now, stats, changed)
 
     # ---- close items whose tracking period is over
     for item in active.values():
