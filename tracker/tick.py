@@ -52,6 +52,7 @@ UNTRACKED_BY_USER = {"Zorki 4K"}
 # One-off (06.11.2026, the user's request): the pages of the closed 'Остальные' are opened once more, to see
 # which sold after their 3 hours. Spread over the regular ticks so it is done by REST_RECHECK_BY.
 REST_RECHECK_BY = "2026-11-06 22:00"
+REST_RECHECK_MIN_PRICE = 45  # EUR
 # Its own request allowance beyond MAX_REQUESTS: a tick 80, a quick check 30 (time budgets still hold); a run
 # every ~5 minutes (a tick and two quick checks per gap).
 REST_RECHECK_MAX_PER_TICK, REST_RECHECK_MAX_PER_QUICK, REST_RECHECK_AFTER = 80, 30, 40
@@ -280,8 +281,18 @@ def rest_recheck(client, closed, now, stats, changed, quick=False):
     """Open the page of closed 'Остальные' once more ('не продано за 3 ч', deleted): the status now goes
     to recheck_status / recheck_at / recheck_price, the card's own status stays. Named cameras first; as
     many per tick as finish the lot by REST_RECHECK_BY."""
+    # Not the cheap ones (06.11.2026): a camera name whose listings average under REST_RECHECK_MIN_PRICE, or
+    # an unnamed card priced under it.
+    prices = {}
+    for i in closed.values():
+        if i.get("group") == "rest" and i.get("camera_name") and i.get("price_start"):
+            prices.setdefault(i["camera_name"], []).append(i["price_start"])
+
+    def worth(i):
+        own = prices.get(i.get("camera_name")) or [i.get("price_start") or 0]
+        return sum(own) / len(own) >= REST_RECHECK_MIN_PRICE
     todo = sorted((i for i in closed.values() if i.get("group") == "rest" and i.get("status") in ("unsold_3h", "deleted")
-                   and not i.get("recheck_at")), key=lambda i: (not i.get("camera_name"), i["id"]))
+                   and not i.get("recheck_at") and worth(i)), key=lambda i: (not i.get("camera_name"), i["id"]))
     if not todo:
         return
     left = clock.minutes_between(now, REST_RECHECK_BY)
