@@ -109,6 +109,9 @@ MODELS = [
     ("Canon", "Canon TX", MECH, S35, ["^tx"], None),
     ("Pentax", "Pentax Spotmatic", MECH, S35, ["spotmatic!", "^sp"], r"(?:sp ?)?(?:ii|iia|2|500|1000)(?![a-z0-9])"),
     ("Pentax", "Pentax Spotmatic F", MECH, S35, ["spotmatic f!", "^sp f"], None),
+    # added 06.11.2026 (the user's pick after the recheck of the 'Остальные'): the Spotmatic II, not IIa
+    ("Pentax", "Pentax Spotmatic II", MECH, S35, ["spotmatic ii!", "spotmatic sp ii!", "spotmatic 2!", "spotmatic sp 2!",
+                                                  "^sp ii", "^sp 2"], None),
     ("Pentax", "Pentax SV", MECH, S35, ["^sv"], None),
     ("Pentax", "Pentax K1000", MECH, S35, ["k 1000!"], None),
     ("Pentax", "Pentax KM", MECH, S35, ["^=km"], None),
@@ -254,6 +257,7 @@ MODELS = [
     ("Fujica", "Fujica STX-1", MECH, S35, ['^stx 1'], None),
     ("Fujica", "Fujica STX-1N", MECH, S35, ['^stx 1 n'], None),
     ("Nikon", "Nikkormat FT", MECH, S35, ['^ft', 'nikkormat ft!'], r"n(?![a-z])|el\b|[23]"),  # not FTn / FT2 / FT3
+    ("Canon", "Canon Canonet 28", ELEC, S35, ["canonet 28!"], None),  # added 06.11.2026
     ("Canon", "Canon Canonet QL17", ELEC, S35, ['canonet ql 17!', 'canonet g iii ql 17!', 'canonet ql 17 g iii!', 'canonet g iii 17!'], None),
     ("Minolta", "Minolta XG-2", ELEC, S35, ['xg 2'], None),
     ("Minolta", "Minolta Hi-Matic F", ELEC, S35, ['hi matic f!', 'himatic f!', '^matic f'], None),
@@ -392,11 +396,11 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 64
+VERSION = 65
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
-PRIORITY_SEARCH = ("Nikon F Photomic", "Nikon F Photomic T", "Nikon F Photomic Tn", "Nikon F Photomic FTn",
+PRIORITY_SEARCH = ("Canon Canonet 28", "Pentax Spotmatic II", "Nikon F Photomic", "Nikon F Photomic T", "Nikon F Photomic Tn", "Nikon F Photomic FTn",
                    "Canon FX", "Canon FP", "Canon TL", "Canon TLb", "Canon TX", "Canon AT-1", "Nikon FG-20",
                    "Canon AE-1", "Canon AE-1 Program", "Canon AV-1", "Canon F-1", "Canon A-1", "Leica R-E", "Leica R4s",
                    "Minolta SR-1", "Minolta SR-T 102", "Leica R9", "Canon T50", "Canon T60", "Canon T70", "Canon T80",
@@ -1210,7 +1214,8 @@ def bundle_names(title):
             # 'Hasselblad 500C' of '500C/M') is the same camera
             if not any(n.startswith(name) for n in names):
                 names.append(name)
-    if len(names) >= 2 or (names and _LOT.search(norm)):
+    # the same model named twice ('Canonet28 - Canonet 28') is one camera
+    if len(set(names)) >= 2 or (names and _LOT.search(norm)):
         return names
     return []
 
