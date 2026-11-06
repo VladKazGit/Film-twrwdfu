@@ -52,7 +52,9 @@ UNTRACKED_BY_USER = {"Zorki 4K"}
 # One-off (06.11.2026, the user's request): the pages of the closed 'Остальные' are opened once more, to see
 # which sold after their 3 hours. Spread over the regular ticks so it is done by REST_RECHECK_BY.
 REST_RECHECK_BY = "2026-11-06 22:00"
-REST_RECHECK_MAX_PER_TICK, REST_RECHECK_AFTER = 120, 40
+# Its own request allowance beyond MAX_REQUESTS: a tick 80, a quick check 30 (time budgets still hold); a run
+# every ~5 minutes (a tick and two quick checks per gap).
+REST_RECHECK_MAX_PER_TICK, REST_RECHECK_MAX_PER_QUICK, REST_RECHECK_AFTER = 80, 30, 40
 _UNTRACKED = set()  # worked out from the data at the start of each run (refresh_untracked)
 # Extra categories: page 1 per check; on full scans (the morning after the night, then every 4 h) 3 pages
 EXTRA_FULL_PAGES = 3
@@ -274,7 +276,7 @@ def set_model(item, model, source):
         item["group"] = group_of(item)
 
 
-def rest_recheck(client, closed, now, stats, changed):
+def rest_recheck(client, closed, now, stats, changed, quick=False):
     """Open the page of closed 'Остальные' once more ('не продано за 3 ч', deleted): the status now goes
     to recheck_status / recheck_at / recheck_price, the card's own status stays. Named cameras first; as
     many per tick as finish the lot by REST_RECHECK_BY."""
@@ -283,9 +285,11 @@ def rest_recheck(client, closed, now, stats, changed):
     if not todo:
         return
     left = clock.minutes_between(now, REST_RECHECK_BY)
-    per_tick = min(REST_RECHECK_MAX_PER_TICK, -(-len(todo) // max(1, left // 15))) if left > 0 else REST_RECHECK_AFTER
-    for item in todo[:per_tick]:
-        if not _can_request(client):
+    cap = REST_RECHECK_MAX_PER_QUICK if quick else REST_RECHECK_MAX_PER_TICK
+    per_run = min(cap, -(-len(todo) // max(1, left // 5))) if left > 0 else min(cap, REST_RECHECK_AFTER)
+    allowance = client.requests_made + per_run
+    for item in todo[:per_run]:
+        if client.requests_made >= allowance or not getattr(client, "has_time", lambda: True)():
             break
         try:
             page = client.item_page(item["id"])
@@ -1009,8 +1013,7 @@ def run_tick(store, client, labels=None, now=None, quick=False):
             except VintedError:
                 stats["check_errors"] += 1
 
-    if not quick:
-        rest_recheck(client, closed, now, stats, changed)
+    rest_recheck(client, closed, now, stats, changed, quick=quick)
 
     # ---- close items whose tracking period is over
     for item in active.values():
