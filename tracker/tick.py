@@ -41,7 +41,7 @@ LIST_TRACK_MIN = 30 * 1440
 MAX_REQUESTS = 115
 TICK_TIME_BUDGET_S = 9 * 60  # Vinted traffic per tick; the rest goes to the next tick
 QUICK_PAGES, QUICK_TIME_BUDGET_S = 1, 150  # quick checks between ticks (cheap ones end long before)
-CHEAP_PRICE = 20.0  # the cheap check and 'До 20 €' (sheets.CHEAP_MAX_PRICE)
+CHEAP_PRICE = 30.0  # the cheap check and 'Выгодно' (sheets.CHEAP_MAX_PRICE; 20 until 09.11.2026)
 # Models whose sales average less than this are not tracked (05.11.2026): no new cards, no searches, no
 # page checks, no 'До 20 €' or letters (05.11.2026: even at CHEAP_PRICE or less) - except a 'Zenit 1980'.
 # Models without sales stay.
@@ -1237,7 +1237,7 @@ def runs_comment(run, limit=40, cheap=()):
     """'Добавлены (3): Canon AE-1 — 120 €, … | Проданы (1): … | В «До 20 €» (1): Zenit E — 15 €'."""
     parts = []
     for title, names in (("Добавлены", run.get("added") or []), ("Проданы", run.get("sold_names") or []),
-                         ("В «До 20 €»", list(cheap))):
+                         ("В «Выгодно»", list(cheap))):
         if names:
             more = f" … и ещё {len(names) - limit}" if len(names) > limit else ""
             parts.append(f"{title} ({len(names)}): " + ", ".join(names[:limit]) + more)
@@ -1273,6 +1273,18 @@ def write_sheets(writer, result, state_flags):
     from . import sheets
 
     updates = {}
+    # 'До 20 €' became 'Выгодно' (09.11.2026): renamed in place, so its colour rules stay; the flags
+    # that remember which sheets have them follow the new title
+    if writer.has(sheets.CHEAP_SHEET_OLD) and not writer.has(sheets.CHEAP_SHEET):
+        writer.rename(sheets.CHEAP_SHEET_OLD, sheets.CHEAP_SHEET)
+    for key in ("status_colors", "new_rows_colors", "fresh_rows_colors"):
+        titles = state_flags.get(key)
+        if titles and sheets.CHEAP_SHEET_OLD in titles:
+            state_flags[key] = sorted({sheets.CHEAP_SHEET if t == sheets.CHEAP_SHEET_OLD else t for t in titles})
+            updates[key] = state_flags[key]
+    if not state_flags.get("runs_cheap_title_v1") and writer.has(sheets.RUNS_SHEET):
+        writer.rename_runs_column(sheets.RUNS_CHEAP_OLD, sheets.RUNS_FRONT[0])
+        updates["runs_cheap_title_v1"] = True
     items = result["items"]
     offered = state_flags.get("models_offered")
     if offered is None:  # the sheet was filled before offers were tracked
@@ -1299,7 +1311,7 @@ def write_sheets(writer, result, state_flags):
     writer.replace(sheets.LIST_SHEET, list_rows, links=True)
     candidates = report.cheap_cameras(items, sheets.CHEAP_MAX_PRICE)
     cheap = [i for i in candidates if i.get("model") and sheets.model_key(i["model"]) in allowed and tracked(i)]
-    print(f"sheets: cheap sheet {len(cheap)} of {len(candidates)} list cameras at <= 20 EUR"
+    print(f"sheets: cheap sheet {len(cheap)} of {len(candidates)} list cameras at <= {sheets.CHEAP_MAX_PRICE:.0f} EUR"
           f" (the others have models missing from the models sheet)")
     # 'До 20 €' is mostly old cheap cameras found by search: mark what entered the sheet in 12 h.
     # The model's mean sale price right after 'Цена старт' (where 'Группа' was: all are 'Список'), the

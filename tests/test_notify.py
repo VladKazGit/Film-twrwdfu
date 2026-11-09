@@ -43,7 +43,7 @@ def main():
         assert "items/3" in body and "items/4" in body and "items/2" in body and "items/5" not in body
         assert "items/9" not in body and "Praktica" not in body
         assert "items/12" not in body and "items/10" not in body, "a skipped model; 15 EUR is not 50 below 40"
-        assert "найдено поиском" in body and sent[1]["Subject"].startswith("⚡ Vinted «До 20 €»: Zenit E — 8 € и ещё 2")
+        assert "найдено поиском" in body and sent[1]["Subject"].startswith("⚡ Vinted «Выгодно»: Zenit E — 8 € и ещё 2")
         html = sent[1].get_body(("html",)).get_content()
         assert '<img src="https://images1.vinted.net/p3.jpg"' in html and "Kamera funktioniert" in html and "Kamera funktioniert" in body
         assert "Продажи Zenit E в базе: в среднем 80 € (от 70 € до 90 €, продаж: 2)" in body, body

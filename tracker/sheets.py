@@ -7,11 +7,12 @@ from . import env, models
 
 LIST_SHEET = "Список"
 REST_SHEET = "Остальные"
-CHEAP_SHEET = "До 20 €"
+CHEAP_SHEET = "Выгодно"  # was "До 20 €" (renamed in place on 09.11.2026, CHEAP_SHEET_OLD)
+CHEAP_SHEET_OLD = "До 20 €"
 FAST_SHEET = "Быстрые продажи"
 SALES_SHEET = "Продажи"
 CHECK_SHEET = "Проверка"
-CHEAP_MAX_PRICE = 20.0
+CHEAP_MAX_PRICE = 30.0  # 20 EUR until 09.11.2026
 RUNS_SHEET = "Запуски"
 SUMMARY_SHEET = "Сводка"
 TOP_SHEET = "Топ-10"
@@ -32,10 +33,11 @@ RUNS_HEADER_V4 = [
     "Время", "Полный обход", "Страниц", "Запросов", "МБ", "Секунд", "Новых: список", "Новых: остальные",
     "Поднятых старых", "Проверено страниц товара", "Продано: список", "Продано: остальные", "Удалено",
     "Резерв/скрыт", "Закрыто 3 ч", "Закрыто 30 дн", "Описаний", "Описание → список", "Отложено", "Ошибки",
-    "Комментарий", "Новых в «До 20 €»", "Проверок между тиками",
+    "Комментарий", "Новых в «Выгодно»", "Проверок между тиками",
 ]
 # v5: what changed comes first, right after the time
-RUNS_FRONT = ["Новых в «До 20 €»", "Комментарий"]
+RUNS_FRONT = ["Новых в «Выгодно»", "Комментарий"]
+RUNS_CHEAP_OLD = "Новых в «До 20 €»"  # the same column before the rename
 RUNS_HEADER = RUNS_HEADER_V4[:1] + RUNS_FRONT + [c for c in RUNS_HEADER_V4[1:] if c not in RUNS_FRONT]
 _RUNS_FROM_V4 = [RUNS_HEADER_V4.index(c) for c in RUNS_HEADER]
 MANUAL_HEADER = ["id (или ссылка)", "Модель", "Комментарий"]
@@ -236,6 +238,19 @@ class SheetWriter:
         if links:
             rows = [[_as_typed(c) for c in r] for r in rows]
         ws.update(range_name="A1", values=rows, value_input_option="USER_ENTERED" if links else "RAW")
+
+    def rename(self, old, new):
+        """Rename a worksheet in place (its formatting and rules stay)."""
+        ws = self._sheets.pop(old)
+        ws.update_title(new)
+        self._sheets[new] = ws
+
+    def rename_runs_column(self, old, new):
+        """Rename one header cell of 'Запуски' (the rows stay)."""
+        ws = self._get(RUNS_SHEET, RUNS_HEADER)
+        first = ws.row_values(1)
+        if old in first:
+            ws.update_cell(1, first.index(old) + 1, new)
 
     def ensure_runs_header(self):
         """'Запуски' may start with the check-setup test row (header goes on top) or with

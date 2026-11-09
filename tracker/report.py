@@ -286,7 +286,7 @@ def item_rows(items, with_group=False, new_since=None, new_old_listings=False, f
 
 
 SALES_HEADER = [
-    "Модель", "Цена при продаже, €", "История цены, €", "Изменение цены", "Выставлена", "Продана", "В продаже",
+    "Модель", "Цена при продаже, €", "Средняя цена продажи модели, €", "История цены, €", "Изменение цены", "Выставлена", "Продана", "В продаже",
     "Перевыставлялась", "Комплект", "Состояние", "Сохранений", "Описание (начало)", "Ссылка",
 ]
 SALES_DESCRIPTION_LIMIT = 150  # one line per sale; the full text stays in the data repo
@@ -335,6 +335,7 @@ def sales_rows(items):
     sold = sorted((i for i in items if i.get("group") == "list" and i.get("status") == "sold"
                    and not placeholder_price(i) and not i.get("bundle")),
                   key=lambda i: (i.get("sold_detected_at") or "", i["id"]), reverse=True)
+    mean_sale = model_sale_prices(items)  # the model's mean sale price, as in 'Модели' (09.11.2026)
     rows = [SALES_HEADER]
     for i in sold:
         start, final = i.get("price_start"), current_price(i)
@@ -343,7 +344,7 @@ def sales_rows(items):
             prices.append(final)
         history = " → ".join(_price_text(p) for p in prices) if len(set(prices)) > 1 else ""
         rows.append([
-            i.get("model") or "", _num(final), history, _change_text(start, final),
+            i.get("model") or "", _num(final), _num(mean_sale.get(i.get("model"))), history, _change_text(start, final),
             _listed_text(i), i.get("sold_detected_at") or "", on_sale_text(i),
             relist_text(relisted[i["id"]]) if i["id"] in relisted else "", _kit_text(i), i.get("condition") or "", _num(i.get("favourites")),
             _one_line(i.get("description"), SALES_DESCRIPTION_LIMIT), i.get("url") or "",

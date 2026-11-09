@@ -94,7 +94,7 @@ def _sales_lines(model, stats, where="в базе"):
     return [f"Продажи {model} {where}: в среднем {mean} € ({spread}продаж: {n})", f"Продаются в среднем за: {when}"]
 
 
-def message(cameras, now, welcome_count=None, stats=None, letter="До 20 €", mark="⚡", source="Vinted",
+def message(cameras, now, welcome_count=None, stats=None, letter="Выгодно", mark="⚡", source="Vinted",
             sales_where="в базе"):
     """The letter: subject, plain text and HTML. Each camera in paragraphs: model and price, its
     model's sales, the listing, the description. letter / mark: which mailing ('Zenit 1980'); source:
@@ -102,9 +102,9 @@ def message(cameras, now, welcome_count=None, stats=None, letter="До 20 €", 
     stats = stats or {}
     msg = EmailMessage()
     if welcome_count is not None:
-        msg["Subject"] = "⚡ Vinted: уведомления «До 20 €» включены"
-        intro = (f"Уведомления включены. Сейчас в листе «До 20 €» {welcome_count} камер(ы). Дальше письмо придёт, "
-                 "когда в лист попадёт новая камера: новое объявление, найденное старое или подешевевшее до 20 €.")
+        msg["Subject"] = "⚡ Vinted: уведомления «Выгодно» включены"
+        intro = (f"Уведомления включены. Сейчас в листе «Выгодно» {welcome_count} камер(ы). Дальше письмо придёт, "
+                 "когда в лист попадёт новая камера: новое объявление, найденное старое или подешевевшее до 30 €.")
         text, rows = [intro, ""], [f"<p>{escape(intro)}</p>"]
     else:
         first = cameras[0]
