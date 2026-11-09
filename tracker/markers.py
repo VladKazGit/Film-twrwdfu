@@ -182,7 +182,7 @@ TUBES = {
     "ga": ["feadáin síneadh"],
     "hr": ["međuprstenovi", "makro prstenovi"],
     "hu": ["közgyűrű", "közgyűrűk", "makrogyűrű"],
-    "it": ["tubo di prolunga", "tubi di prolunga", "anello di prolunga", "anelli di prolunga", "tubo di estensione",
+    "it": ["tubo di prolunga", "tubi di prolunga", "tubo prolunga", "tubi prolunga", "anelli prolunga", "anello di prolunga", "anelli di prolunga", "tubo di estensione",
            "tubi di estensione", "anello macro", "anelli macro", "tubo macro", "tubi macro"],
     "lt": ["tarpiniai žiedai", "makro žiedai"],
     "lv": ["starpgredzeni", "makro gredzeni"],

@@ -396,7 +396,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 65
+VERSION = 66
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -518,7 +518,8 @@ def _compile_alias(brand, model, alias, not_after):
     if re.search(r"[a-z]$", alias):
         # 'FG-20', 'F 301', 'FM 10' are other models; '50mm', 'f 1.4' are lenses.
         # 'x' is allowed only after one digit ('2x Objektive'), not after a model number ('F-401x').
-        tail += r"(?!\s*-?\s*(?:(?!1[89]\d\d\b)\d{2,}(?![\d.,:]|\s*mm)|\d" + _NOT_OTHER_MODEL + "))"
+        # A comma or dot after a model number ends the sentence ('Nikon F-601, eine ...'), not a decimal.
+        tail += r"(?!\s*-?\s*(?:(?!1[89]\d\d\b)\d{2,}(?!\d|[.,:]\d|\s*mm)|\d" + _NOT_OTHER_MODEL + "))"
     # Mount names: 'Nikon F mount', 'Canon EF Bajonett' are lenses/adapters.
     tail += rf"(?!{SEP}(?:mount|bajonett|bayonet|anschluss|adapter|adaptateur|monture|attacco|innesto|vatting))"
     # 'Canon Kamera F-1', 'Nikon analoge FM': one word naming the camera may sit in between.
@@ -694,7 +695,8 @@ _THING_WORDS = re.compile(
     r"|verlangerung\w*|extension rings?|korrekturlinse|dioptri\w*|augenmuschel|\bokular\w*|weitwinkel ?-?linse"
     r"|tele ?-?linse|zusatzlinse|filmeinsatz|filmmagazin|\w*ruckteil\b")
 # 'Mamiya RB67 Filmrückteil für Mittelformatkamera': the camera it is for
-_FOR_SOME_CAMERA = re.compile(r"\b(?:fur|for|pour|per|zur)\s+(?:die\s+|den\s+|eine?\s+)?\w*(?:kamera|camera)s?\b")
+# and the cameras it fits ('Mamiya 645 Polaroid ... Film Holder ... for 645 Super/ Pro/ TL Cameras')
+_FOR_SOME_CAMERA = re.compile(r"\b(?:fur|for|pour|per|zur)\s+(?:die\s+|den\s+|eine?\s+)?(?:\S+\s+){0,5}?\w*(?:kamera|camera)s?\b")
 _STRONG_ACCESSORY = re.compile(
     _STRONG_ACCESSORY.pattern +
     # books in the plural, works, publications: 'Lot 3 ouvrages anciens Leica - M3, Matheson, Causeries'

@@ -53,7 +53,7 @@ NAME_SOURCE_RU = {"title": "название: заголовок", "description"
                   "photo": "название: надпись на фото", "more_photos": "название: надпись на 2-3 фото"}
 
 ITEM_HEADER = [
-    "id", "Модель", "Заголовок", "Статус", "Цена старт", "Цена финал", "Сохранений", "Выставлен после", "Впервые",
+    "id", "Модель", "Заголовок", "Статус", "Цена старт", "Цена сейчас", "Сохранений", "Выставлен после", "Впервые",
     "Выставлен на Vinted (при обнаружении)",
     "Последний раз активен", "Продажа обнаружена", "Время продажи мин, мин", "Время продажи макс, мин", "Продали за",
     "Корзина", "Комплект", "Детали комплекта", "Тип", "Формат", "Регион", "Бренд", "Источник модели",
@@ -204,7 +204,7 @@ def fast_rows(items):
     rows = [ITEM_HEADER + ["Уверенность"]] + [item_row(i) + [fast_confidence(i)] for i in fast]
     # the model's mean sale price right after the final price, as in 'Продажи' (09.11.2026)
     mean_sale = model_sale_prices(items)
-    return insert_column(rows, "Цена финал", FAST_SALE_PRICE_HEADER, [_num(mean_sale.get(i.get("model"))) for i in fast])
+    return insert_column(rows, "Цена сейчас", FAST_SALE_PRICE_HEADER, [_num(mean_sale.get(i.get("model"))) for i in fast])
 
 
 FAST_SALE_PRICE_HEADER = "Средняя цена продажи модели, €"
@@ -216,7 +216,8 @@ def item_row(item):
     return [
         item["id"], item.get("model") or item.get("camera_name") or "", item.get("title") or "",
         STATUS_RU.get(item.get("status"), item.get("status") or ""),
-        _num(item.get("price_start")), _num(item.get("price_final")), _num(item.get("favourites")),
+        # the price now (after drops), the sale price once sold (09.11.2026; was the sale price only)
+        _num(item.get("price_start")), _num(current_price(item)), _num(item.get("favourites")),
         item.get("listed_after") or "", item.get("first_seen") or "", _vinted_age_text(item),
         item.get("last_seen_active") or "",
         item.get("sold_detected_at") or "", _num(item.get("time_to_sell_min")), _num(item.get("time_to_sell_max")),
