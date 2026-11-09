@@ -284,7 +284,7 @@ def main():
         assert updates["cheap_ids"] == [1021]
         # Links clickable, other text kept literal.
         fast_ws = ss.sheets["Быстрые продажи"]
-        link_col = report.ITEM_HEADER.index("Ссылка")
+        link_col = fast_ws.rows[0].index("Ссылка")
         assert fast_ws.mode == "USER_ENTERED" and fast_ws.rows[1][link_col].startswith("https://")
         status_col = report.ITEM_HEADER.index("Статус")
         assert fast_ws.sent[1][status_col] == "'продан" and fast_ws.rows[1][status_col] == "продан"
@@ -453,8 +453,9 @@ def main():
         assert report._change_text(100.0, 100.0) == "" and report._change_text(80.0, 100.0) == "+20 € (+25 %)"
         fast = ss.sheets["Быстрые продажи"].rows
         assert fast[0][-1] == "Уверенность" and "Группа" not in fast[0], fast[0]
+        assert fast[0][fast[0].index("Цена финал") + 1] == report.FAST_SALE_PRICE_HEADER
         assert [r[0] for r in fast[1:]] == [1011, 400] and fast[1][-1] == "возможно", "reserved fast, sold 3 h later"
-        assert fast[2][-1] == "точно" and "bumped" in fast[2][report.ITEM_HEADER.index("Флаги")], "bumped, sold in 15 min"
+        assert fast[2][-1] == "точно" and "bumped" in fast[2][fast[0].index("Флаги")], "bumped, sold in 15 min"
         assert all(r[0] != 1010 for r in fast[1:]), "preexisting sale is not fast"
         cheap = ss.sheets["Выгодно"].rows
         assert "Группа" not in cheap[0] and [r[0] for r in cheap[1:]] == [1021], "sold Zenit 400 is not shown"

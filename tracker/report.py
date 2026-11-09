@@ -201,7 +201,13 @@ def fast_rows(items):
     Fast sales of other cameras (compacts and the like) only count in 'Сводка'."""
     fast = sorted((i for i in items if i.get("group") == "list" and fast_confidence(i)),
                   key=lambda i: (i.get("sold_detected_at") or "", i["id"]), reverse=True)
-    return [ITEM_HEADER + ["Уверенность"]] + [item_row(i) + [fast_confidence(i)] for i in fast]
+    rows = [ITEM_HEADER + ["Уверенность"]] + [item_row(i) + [fast_confidence(i)] for i in fast]
+    # the model's mean sale price right after the final price, as in 'Продажи' (09.11.2026)
+    mean_sale = model_sale_prices(items)
+    return insert_column(rows, "Цена финал", FAST_SALE_PRICE_HEADER, [_num(mean_sale.get(i.get("model"))) for i in fast])
+
+
+FAST_SALE_PRICE_HEADER = "Средняя цена продажи модели, €"
 
 
 def item_row(item):
