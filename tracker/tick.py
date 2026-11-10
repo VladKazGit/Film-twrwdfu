@@ -1302,7 +1302,8 @@ def write_sheets(writer, result, state_flags):
     sale = report.model_sale_prices(items)
     # 'Список': the model's mean sale price right after 'Сохранений' (the flag columns move one right)
     list_items = [i for i in items if i.get("group") == "list"]
-    list_rows = report.item_rows(list_items, new_since=new_since, fresh_since=fresh_since, on_sale_first=True)
+    list_rows = report.item_rows(list_items, new_since=new_since, fresh_since=fresh_since, on_sale_first=True,
+                                 stale=lambda i: not tracked(i))
     price_of = {i["id"]: sale.get(i["model"], sheets.MODELS_NO_PRICE) for i in list_items}
     list_rows = report.insert_column(list_rows, "Сохранений", sheets.MODELS_SALE_PRICE_HEADER,
                                      [price_of[r[0]] for r in list_rows[1:]])

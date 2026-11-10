@@ -270,13 +270,17 @@ def listed_key(item):
     return item.get("first_seen") or ""
 
 
-def item_rows(items, with_group=False, new_since=None, new_old_listings=False, fresh_since=None, on_sale_first=False):
+def item_rows(items, with_group=False, new_since=None, new_old_listings=False, fresh_since=None, on_sale_first=False,
+              stale=None):
     """Item sheet rows, newest first. with_group adds 'Группа'; new_since / fresh_since add
     columns marking cameras that appeared in the last 12 / 3 hours ('да'); on_sale_first puts the
     cameras on sale (active, reserved) above the closed ones."""
     ordered = sorted(items, key=lambda i: (listed_key(i), i["id"]), reverse=True)
     if on_sale_first:
-        ordered.sort(key=lambda i: i.get("status") not in ("active", "reserved"))  # stable: newest first in each
+        # stable: newest first in each. stale(item): its status is no longer checked (a model not tracked,
+        # 05.11.2026), so 'активен' may be out of date: below the cameras on sale that are (10.11.2026)
+        ordered.sort(key=lambda i: 2 if i.get("status") not in ("active", "reserved")
+                     else 1 if stale and stale(i) else 0)
     header = (ITEM_HEADER + (["Группа"] if with_group else []) + ([NEW_HEADER] if new_since else [])
               + ([FRESH_HEADER] if fresh_since else []))
     rows = [header]
