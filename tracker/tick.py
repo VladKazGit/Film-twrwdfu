@@ -50,6 +50,7 @@ TRACK_MIN_SALE_PRICE = 65.0
 # Nor those that take longer than this to sell (the median 'продали за', 06.11.2026), nor the user's picks.
 TRACK_MAX_MEDIAN_DAYS = 21
 UNTRACKED_BY_USER = {"Zorki 4K"}
+ALWAYS_TRACKED = {"Canon TX"}  # the user's pick (11.11.2026): tracked whatever its sales say
 # One-off (06.11.2026, the user's request): the pages of the closed 'Остальные' are opened once more, to see
 # which sold after their 3 hours. Spread over the regular ticks so it is done by REST_RECHECK_BY.
 REST_RECHECK_BY = "2026-11-06 22:00"
@@ -243,7 +244,7 @@ def worth_tracking(item):
 
 def refresh_untracked(state, active, closed):
     """The models whose mean sale price in the data is below TRACK_MIN_SALE_PRICE, or whose median
-    time to sell is over TRACK_MAX_MEDIAN_DAYS, and UNTRACKED_BY_USER. Models without sales stay."""
+    time to sell is over TRACK_MAX_MEDIAN_DAYS, and UNTRACKED_BY_USER. Models without sales stay, and ALWAYS_TRACKED ones."""
     items = list(active.values()) + list(closed.values())
     sales = notify.sale_stats(items)
     days = {}
@@ -256,6 +257,7 @@ def refresh_untracked(state, active, closed):
     _UNTRACKED.update(m for m, s in sales.items() if m and s[1] < TRACK_MIN_SALE_PRICE)
     _UNTRACKED.update(m for m, d in days.items() if m and statistics.median(d) > TRACK_MAX_MEDIAN_DAYS)
     _UNTRACKED.update(UNTRACKED_BY_USER)
+    _UNTRACKED.difference_update(ALWAYS_TRACKED)
     state["untracked_models"] = sorted(_UNTRACKED)
 
 

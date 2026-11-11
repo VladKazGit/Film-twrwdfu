@@ -930,6 +930,9 @@ def main():
     state = {}
     tick.refresh_untracked(state, {}, sold)
     assert state["untracked_models"] == ["Zenit E", "Zorki 4K"]
+    tick.refresh_untracked(state, {}, {**sold, 3: card("Canon TX", 20.0, "sold")})
+    assert "Canon TX" not in state["untracked_models"], "always tracked (the user's pick)"
+    tick.refresh_untracked(state, {}, sold)
     assert not tick.worth_tracking(card("Zenit E", 45.0)) and not tick.worth_tracking(card("Zenit E", 15.0))
     assert tick.worth_tracking(card("Zenit E", 25.0, title="Zenit E Olympia Moskau 1980"))
     assert tick.worth_tracking(card("Nikon FM2", 250.0)) and tick.worth_tracking(card("Leica M3", 900.0))
