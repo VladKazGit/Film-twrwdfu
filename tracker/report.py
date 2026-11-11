@@ -844,8 +844,48 @@ def unnamed_rows(items):
     return rows
 
 
-SIBLINGS_HEADER = ["Фото", "Камера", "Тип", "Братья в списке", "Откуда название", "Заголовок", "Цена, €", "Статус",
-                   "Впервые", "id", "Ссылка"]
+SIBLINGS_HEADER = ["Фото", "Камера", "Тип", "Братья в списке", "Откуда название", "Заголовок", "Цена, €",
+                   "Цена-ориентир, €", "Статус", "Впервые", "id", "Ссылка"]
+
+# The user's pick (11.11.2026) of the near models worth seeing, with a reference price each (EUR); every
+# other name leaves 'Братья моделей списка' (the cards stay in the data). Spelling is matched loosely:
+# 'Minolta XG 1', 'XG1', 'XG-1 35MM-FILMKAMERA' are the XG-1; 'Electro 35 GS' is an Electro 35.
+SIBLINGS_KEEP = (
+    ("Canon Canonet", 50), ("Canon Canonet QL25", 65), ("Canon Canonet QL19", 145),
+    ("Contax 167 MT", 125), ("Contax 137 MA Quartz", 95),
+    ("Fujica STX-2", 70), ("Fujica ST601", 55),
+    ("Hasselblad 500 EL", 480),
+    ("Leica M1", 980),
+    ("Mamiya 7 II", 3850), ("Mamiya 7", 3650), ("Mamiya 6", 1950), ("Mamiya 645N", 700), ("Mamiya C220", 420),
+    ("Mamiya RZ67", 1100), ("Mamiya RZ", 1100),
+    ("Minolta X-300S", 45), ("Minolta X-300", 55), ("Minolta X-370S", 45), ("Minolta X-370", 45),
+    ("Minolta XG-1", 52), ("Minolta XG-9", 60), ("Minolta XD-5", 95), ("Minolta SR-T 100B", 50), ("Minolta X-9", 65),
+    ("Nikon EL", 70), ("Nikkormat EL", 70), ("Nikon FE10", 115), ("Nikon FM10", 110), ("Nikon F-301", 45),
+    ("Olympus OM-20", 65), ("Olympus OM-101", 45), ("Olympus OM-30", 60),
+    ("Pentax 645", 520), ("Pentax MV-1", 55),
+    ("Praktica Super TL1000", 48), ("Praktica B100 Electronic", 45), ("Praktica B100", 45),
+    ("Praktica Super TL 500", 45),
+    ("Yashica Electro 35", 70), ("Yashica Mat", 110), ("Yashica 635", 130), ("Yashica 44", 95),
+    ("Yashica FX-70 Quartz", 45), ("Yashica FX-103 Program", 55),
+    ("Zenit 21XS", 45), ("Zenit 12XP", 45), ("Zenit 22XP", 45), ("Zenit 412LS", 55),
+)
+
+
+def _loose(name):
+    """'Minolta XG-1' -> a pattern for 'minolta xg 1', 'minolta xg1', 'minolta xg-1 35mm…' (not 'xg-10')."""
+    chars = [re.escape(c) for c in name.lower() if c.isalnum()]
+    return re.compile("^" + r"[\W_]*".join(chars) + r"(?![a-z0-9])")
+
+
+# longest names first: 'Canon Canonet QL25' before 'Canon Canonet', 'Mamiya 7 II' before 'Mamiya 7'
+_SIBLINGS_KEEP = [(_loose(name), price) for name, price in
+                  sorted(SIBLINGS_KEEP, key=lambda np: -sum(c.isalnum() for c in np[0]))]
+
+
+def sibling_reference_price(camera_name):
+    """The user's reference price of a near model on the keep list, or None (not to be shown)."""
+    name = (camera_name or "").lower()
+    return next((price for rx, price in _SIBLINGS_KEEP if rx.search(name)), None)
 
 
 def near_list_models(item):
@@ -932,7 +972,7 @@ def sibling_rows(items):
         if i.get("group") != "rest" or not i.get("camera_name"):
             continue
         near = near_list_models(i)
-        if near:
+        if near and sibling_reference_price(i["camera_name"]) is not None:
             found.append((i, near))
     found.sort(key=lambda f: (f[0].get("first_seen") or "", f[0]["id"]), reverse=True)
     rows = [SIBLINGS_HEADER]
@@ -940,7 +980,8 @@ def sibling_rows(items):
         rows.append([photos.image_formula(i.get("photo")), i["camera_name"], kinds.camera_kind(i["camera_name"]),
                      ", ".join(near[:4]),
                      NAME_SOURCE_RU.get(i.get("camera_name_source"), ""), i.get("title") or "",
-                     _num(current_price(i)), STATUS_RU.get(i.get("status"), i.get("status") or ""),
+                     _num(current_price(i)), sibling_reference_price(i["camera_name"]),
+                     STATUS_RU.get(i.get("status"), i.get("status") or ""),
                      i.get("first_seen") or "", i["id"], i.get("url") or ""])
     return rows
 

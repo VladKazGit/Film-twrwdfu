@@ -979,6 +979,14 @@ def main():
               "price_history": [], "first_seen": "2026-11-10 10:00"} for n, s, p in ((1, "sold", 100.0), (2, "active", 45.0),
                                                                                  (3, "active", 70.0))]
     assert [r[-2] for r in report.proposal_rows(named)[1:]] == [2], "50 EUR under the mean sale of 100 only"
+    # 'Братья моделей списка': the user's keep list only, spelling matched loosely, the longest name first
+    ref = report.sibling_reference_price
+    assert ref("Minolta XG 1") == ref("Minolta XG-1 35MM-FILMKAMERA") == 52 and ref("Minolta XG-10") is None
+    assert ref("Canon Canonet QL 25") == 65 and ref("Canon Canonet") == 50 and ref("Mamiya 7 II") == 3850
+    assert ref("Yashica 108") is None and ref("Canon 2828") is None and ref("Praktica B100ELECTRONIC") == 45
+    near = [{"id": n, "group": "rest", "camera_name": c, "status": "unsold_3h", "price_start": 40.0, "price_history": [],
+             "first_seen": "2026-11-10 10:00"} for n, c in ((5, "Minolta X300"), (6, "Yashica 108"))]
+    assert [(r[1], r[7]) for r in report.sibling_rows(near)[1:]] == [("Minolta X300", 55)]
     with tempfile.TemporaryDirectory() as tmp:
         store = DataStore(Path(tmp))
         assert store.load_manual_labels() == {}
