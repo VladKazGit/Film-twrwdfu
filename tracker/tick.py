@@ -1210,7 +1210,7 @@ def _finish(store, state, now, started, client, stats, errors, full_scan, pages,
     store.save_state(state)
     store.append_run(run)
     all_items = list(active.values()) + list(closed.values())
-    summary = report.summarize(all_items, now)
+    summary = report.summarize(all_items, now, stale=lambda i: i.get("group") == "list" and not tracked(i))
     if daily:
         store.write_exports(all_items, summary, report.readme(summary))
     return {"run": run, "fatal": fatal, "daily": daily, "items": all_items, "summary": summary,
@@ -1275,9 +1275,11 @@ def runs_comment(run, limit=40, cheap=()):
 def listing_columns(items):
     """'Модели': how many listings the data holds for each model, and how many are on sale now."""
     from . import sheets
-    counts = report.model_listing_counts(items)
+    counts = report.model_listing_counts(items, stale=lambda i: not tracked(i))
+    # a model not tracked: its cameras' statuses are no longer checked, so no count of the ones on sale
     return {sheets.MODELS_LISTINGS_HEADER: {m: n for m, (n, _) in counts.items()},
-            sheets.MODELS_ON_SALE_HEADER: {m: live for m, (_, live) in counts.items()}}
+            sheets.MODELS_ON_SALE_HEADER: {m: report.NOT_CHECKED if m in _UNTRACKED else live
+                                           for m, (_, live) in counts.items()}}
 
 
 def web_prices_of(root, items):

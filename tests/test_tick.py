@@ -979,6 +979,14 @@ def main():
               "price_history": [], "first_seen": "2026-11-10 10:00"} for n, s, p in ((1, "sold", 100.0), (2, "active", 45.0),
                                                                                  (3, "active", 70.0))]
     assert [r[-2] for r in report.proposal_rows(named)[1:]] == [2], "50 EUR under the mean sale of 100 only"
+    named[1]["status"] = "unsold_3h"
+    assert report.proposal_rows(named)[1:] == [], "only the listings on sale"
+    # A card whose status is no longer checked is neither on sale nor hanging.
+    stale_card = {"id": 7, "group": "list", "model": "Canon T50", "status": "active", "flags": [], "price_start": 40.0,
+                  "price_history": [], "first_seen": "2026-10-20 10:00", "listed_after": "2026-10-20 09:45"}
+    assert report.model_listing_counts([stale_card], stale=lambda i: True) == {"Canon T50": (1, 0)}
+    summary = report.summarize([stale_card], now, stale=lambda i: True)
+    assert summary["groups"]["list"]["active"] == 0 and summary["models"][0]["mean_unsold_days"] is None
     # 'Братья моделей списка': the user's keep list only, spelling matched loosely, the longest name first
     ref = report.sibling_reference_price
     assert ref("Minolta XG 1") == ref("Minolta XG-1 35MM-FILMKAMERA") == 52 and ref("Minolta XG-10") is None

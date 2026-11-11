@@ -504,8 +504,11 @@ def relist_text(chain):
     return text + (f", первая цена {_price_text(first)} €" if first is not None else "")
 
 
-def summarize(items, now):
-    """Aggregates for 'Сводка', summary.json and README.md."""
+def summarize(items, now, stale=None):
+    """Aggregates for 'Сводка', summary.json and README.md. stale(item): a camera whose status is no
+    longer checked (its model is not tracked): its 'active' may be out of date, so it counts neither as
+    on sale nor in 'Непроданные висят' (11.11.2026)."""
+    stale = stale or (lambda item: False)
     counted = [i for i in items if not stat_flags(i) & EXCLUDED_FLAGS]
     groups = {"list": [i for i in counted if i.get("group") == "list"],
               "rest": [i for i in counted if i.get("group") == "rest"]}
@@ -515,7 +518,7 @@ def summarize(items, now):
         flags = Counter(f for i in group for f in i.get("flags") or [])
         totals[name] = {
             "tracked": len(group),
-            "active": status["active"] + status["reserved"] + status["hidden"],
+            "active": sum(i.get("status") in ("active", "reserved", "hidden") and not stale(i) for i in group),
             "sold": status["sold"],
             "deleted": status["deleted"],
             "unsold_3h": status["unsold_3h"],
@@ -537,7 +540,7 @@ def summarize(items, now):
             stats["prices"].append(current_price(item))  # sold: the sale price
             if item.get("status") == "sold" and current_price(item) > SALE_MIN_PRICE:
                 stats["sale_prices"].append(current_price(item))
-        if unsold_days(item, now) is not None:
+        if unsold_days(item, now) is not None and not stale(item):
             stats["unsold_days"].append(unsold_days(item, now))
         if item.get("favourites") is not None:
             stats["favourites"].append(item["favourites"])
@@ -833,7 +836,7 @@ def unnamed_rows(items):
         similar = (i.get("photo_label") or {}).get("similar") or ""
         return similar[len("model:"):] if similar.startswith("model:") else None
 
-    cards = [i for i in cards if is_deal(current_price(i), sale.get(looks_like(i)))]
+    cards = [i for i in cards if is_deal(current_price(i), sale.get(looks_like(i))) and on_sale(i)]
     for i in cards:
         more = (i.get("photos_more") or []) + ["", ""]
         similar = ((i.get("photo_label") or {}).get("similar") or "").replace("model:", "").replace("junk:", "мусор: ")
@@ -934,6 +937,12 @@ def rest_sale_prices(items):
     return {name: statistics.mean(prices) for name, prices in sold.items()}
 
 
+def on_sale(item):
+    """Still on sale as far as the tracker saw (11.11.2026: the review lists show only these; an
+    'Остальные' card is followed for its first 3 hours)."""
+    return item.get("status") in ("active", "reserved")
+
+
 def is_deal(price, mean_sale):
     """A card worth a look: no sales to compare with, or REVIEW_MARGIN under the mean sale price."""
     return mean_sale is None or (price is not None and price <= mean_sale - REVIEW_MARGIN)
@@ -949,7 +958,7 @@ def proposal_rows(items):
     seen = Counter(i["camera_name"] for i in cards)  # all listings of the name, before the price filter
     # only the deals (11.11.2026): 50 EUR under the name's mean sale price, or no sales of it yet
     sale = rest_sale_prices(items)
-    cards = [i for i in cards if is_deal(current_price(i), sale.get(i["camera_name"]))]
+    cards = [i for i in cards if is_deal(current_price(i), sale.get(i["camera_name"])) and on_sale(i)]
     cards.sort(key=lambda i: (i.get("first_seen") or "", i["id"]), reverse=True)  # newest first ...
     cards.sort(key=lambda i: (-seen[i["camera_name"]], i["camera_name"]))       # ... within each model
     rows = [PROPOSAL_HEADER]
@@ -1073,6 +1082,9 @@ NO_SALES_HEADER = ["Модель", "Марка", "Тип", "Формат", "Ка
                    "Отслеживается"]
 
 
+NOT_CHECKED = "не проверяется"  # on sale now, for a model not tracked: its statuses are out of date
+
+
 def no_sales_rows(sheet_models, items, mean_prices, sale_prices, web, untracked):
     """'Модели без продаж': the models of 'Модели' without a Vinted sale yet, by brand and model: how
     many cameras the data holds, how many are on sale, their mean asking price, the web price
@@ -1081,7 +1093,7 @@ def no_sales_rows(sheet_models, items, mean_prices, sale_prices, web, untracked)
     for i in items:
         if i.get("group") == "list" and not stat_flags(i) & SALES_EXCLUDED:
             total[i.get("model")] = total.get(i.get("model"), 0) + 1
-            if i.get("status") in ("active", "reserved"):
+            if i.get("status") in ("active", "reserved") and i.get("model") not in untracked:
                 on_sale[i.get("model")] = on_sale.get(i.get("model"), 0) + 1
     rows = [NO_SALES_HEADER]
     missing = [m for m in sheet_models if m not in sale_prices]
@@ -1089,18 +1101,21 @@ def no_sales_rows(sheet_models, items, mean_prices, sale_prices, web, untracked)
         info = models.MODEL_INFO[model]
         price, source = web.get(model, ("нет данных", ""))
         rows.append([model, info["brand"], "механика" if info["mech_type"] == models.MECH else "электроника",
-                     info["format"], total.get(model, 0), on_sale.get(model, 0),
+                     info["format"], total.get(model, 0),
+                     NOT_CHECKED if model in untracked else on_sale.get(model, 0),
                      mean_prices.get(model, "нет данных"), price, source, "нет" if model in untracked else "да"])
     return rows
 
 
-def model_listing_counts(items):
-    """{model: (listings in the data, on sale now)} of the list cameras, flagged ones and sets left out."""
+def model_listing_counts(items, stale=None):
+    """{model: (listings in the data, on sale now)} of the list cameras, flagged ones and sets left out.
+    stale(item): its status is no longer checked - not counted as on sale."""
     out = {}
     for i in items:
         if i.get("group") == "list" and not stat_flags(i) & SALES_EXCLUDED:
             total, live = out.get(i.get("model"), (0, 0))
-            out[i.get("model")] = (total + 1, live + (i.get("status") in ("active", "reserved")))
+            on_sale = i.get("status") in ("active", "reserved") and not (stale and stale(i))
+            out[i.get("model")] = (total + 1, live + on_sale)
     return out
 
 
