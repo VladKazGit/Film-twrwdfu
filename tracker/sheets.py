@@ -14,6 +14,7 @@ SALES_SHEET = "Продажи"
 CHECK_SHEET = "Проверка"
 CHEAP_MAX_PRICE = 30.0  # 20 EUR until 09.11.2026
 RUNS_SHEET = "Запуски"
+RUNS_KEEP, RUNS_TRIM_SLACK = 300, 50  # rows kept in 'Запуски' (newest), cut once 50 more piled up
 SUMMARY_SHEET = "Сводка"
 TOP_SHEET = "Топ-10"
 PHOTO_KEEP_SHEET = "По фото: оставить"   # kept by the photo verdict (and the ones for 'Список'), trial
@@ -274,8 +275,12 @@ class SheetWriter:
             ws.insert_row(RUNS_HEADER, 1, value_input_option="RAW")
 
     def append_run(self, row):
-        """The newest run goes on top, right under the header."""
-        self._get(RUNS_SHEET, RUNS_HEADER).insert_row(row, index=2, value_input_option="RAW")
+        """The newest run goes on top, right under the header; the oldest beyond RUNS_KEEP rows are cut
+        (11.11.2026: the sheet weighed the table down; every run stays in runs.jsonl)."""
+        ws = self._get(RUNS_SHEET, RUNS_HEADER)
+        ws.insert_row(row, index=2, value_input_option="RAW")
+        if ws.row_count > RUNS_KEEP + RUNS_TRIM_SLACK:
+            ws.resize(rows=RUNS_KEEP + 1)
 
     def runs_newest_first(self):
         """Rows written oldest first (before newest-on-top) turned around once; numbers stay numbers."""
@@ -369,8 +374,11 @@ class SheetWriter:
                             "format": {"backgroundColor": LIGHT_GREEN_3}}}}}]})
 
     def manual_labels(self):
-        """{item id: model text} from 'Ручная разметка' (created empty if missing)."""
-        ws = self._get(MANUAL_SHEET, MANUAL_HEADER)
+        """{item id: model text} from 'Ручная разметка', {} without the sheet (since 11.11.2026 the labels
+        live in the data, manual_labels.json, and the sheet is removed once they are there)."""
+        if not self.has(MANUAL_SHEET):
+            return {}
+        ws = self._sheets[MANUAL_SHEET]
         labels = {}
         for row in ws.get_all_values()[1:]:
             if len(row) < 2 or not row[1].strip():

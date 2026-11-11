@@ -251,13 +251,16 @@ def main():
         assert ss.sheets["Список"].rows[0][7:9] == [sheets.MODELS_SALE_PRICE_HEADER, "Ссылка"], "the link in column I"
         statuses = [r[3] for r in ss.sheets["Список"].rows[1:]]
         assert statuses == sorted(statuses, key=lambda s: s not in ("активен", "зарезервирован")), "on sale first"
-        assert 400 in {r[0] for r in ss.sheets["Список"].rows[1:]} and "https://www.vinted.de/items/400" in {r[-1] for r in ss.sheets["Продажи"].rows[1:]}
+        # Zenit 12XP sold at 10 EUR: its model is no longer tracked, so the camera stays in the data and
+        # 'Продажи' only (11.11.2026)
+        assert 400 not in {r[0] for r in ss.sheets["Список"].rows[1:]} and "https://www.vinted.de/items/400" in {r[-1] for r in ss.sheets["Продажи"].rows[1:]}
         list_rows = ss.sheets["Список"].rows
         assert list_rows[0][-2:] == [report.NEW_HEADER, report.FRESH_HEADER] and len(list_rows[0]) == n + 3
         at = list_rows[0].index("Сохранений") + 1
         assert list_rows[0][at] == sheets.MODELS_SALE_PRICE_HEADER, "the mean sale price right after 'Сохранений'"
-        price_400 = next(r[at] for r in list_rows[1:] if r[0] == 400)
-        model_400 = next(i["model"] for i in r5["items"] if i["id"] == 400)
+        row_1 = list_rows[1]
+        price_400 = row_1[at]
+        model_400 = next(i["model"] for i in r5["items"] if i["id"] == row_1[0])
         assert price_400 == report.model_sale_prices(r5["items"]).get(model_400, sheets.MODELS_NO_PRICE), price_400
         # The row colours made before the column follow the flags one column right.
         ss2 = FakeSpreadsheet()
@@ -471,7 +474,7 @@ def main():
                        "cheap_ids": updates["cheap_ids"], "models_offered": updates["models_offered"],
                        "status_colors": updates["status_colors"], "new_rows_colors": updates["new_rows_colors"],
                        "fresh_rows_colors": updates["fresh_rows_colors"], "fresh_rows_green": True}
-        assert {k: v for k, v in tick.write_sheets(writer, r5, state_flags).items() if k not in ("models_sheet", "models_web_v1", "no_sales_sheet_v1", "models_tracked_v1", "runs_cheap_title_v1")} == {"cheap_ids": []}, "Zenit E left 'До 20 €'"
+        assert {k: v for k, v in tick.write_sheets(writer, r5, state_flags).items() if k not in ("models_sheet", "models_web_v1", "no_sales_sheet_v1", "models_tracked_v1", "runs_cheap_title_v1", "heavy_sheets_at")} == {"cheap_ids": []}, "Zenit E left 'До 20 €'"
         assert ss.sheets["Запуски"].rows[1][1] == 0
         assert [r[0] for r in ss.sheets["Выгодно"].rows[1:] if r[0] != ""] == [] and ["Zenit E"] not in [r[:1] for r in models_ws.rows]
         assert len(ss.sheets["Выгодно"].rows) == 2 and not any(ss.sheets["Выгодно"].rows[1]), "old data row blanked"
@@ -507,7 +510,7 @@ def main():
             "condition": {"type": "CUSTOM_FORMULA", "values": [{"userEnteredValue": "=$AE2=\"да\""}]},
             "format": {"backgroundColor": {"red": 1, "green": 0.9490196, "blue": 0.8}}}})
         upd = tick.write_sheets(writer, r5, {**state_flags, "fresh_rows_green": None})
-        assert {k: v for k, v in upd.items() if k not in ("models_sheet", "models_web_v1", "no_sales_sheet_v1", "models_tracked_v1", "runs_cheap_title_v1")} == {"fresh_rows_green": True}, upd
+        assert {k: v for k, v in upd.items() if k not in ("models_sheet", "models_web_v1", "no_sales_sheet_v1", "models_tracked_v1", "runs_cheap_title_v1", "heavy_sheets_at")} == {"fresh_rows_green": True}, upd
         assert ss.rules[sid][1]["booleanRule"]["format"]["backgroundColor"] == sheets.LIGHT_GREEN_3
         print("log:", tick.log_line(r4["run"]))
     # Search for older cheap list cameras: a month limit (half a year before 05.11.2026), list models only.
@@ -953,6 +956,22 @@ def main():
     row = next(r for r in report.rest_model_rows(list(rest.values())) if r[0] == "Minolta X-300")
     assert row[1:8] == [2, 1, 1, 0, 0, 0, "100 %"] and row[8] == 42 and " – до 17 дней" in row[9], row
     tick._UNTRACKED.clear()
+    # A lighter table (11.11.2026): long-closed cameras out of 'Список'; review lists keep only the deals;
+    # manual labels live in the data.
+    now = "2026-11-11 12:00"
+    assert tick.long_closed({"status": "sold", "sold_detected_at": "2026-10-01 10:00"}, now)
+    assert not tick.long_closed({"status": "sold", "sold_detected_at": "2026-11-01 10:00"}, now)
+    assert not tick.long_closed({"status": "active", "first_seen": "2026-01-01 10:00"}, now)
+    assert report.is_deal(None, None) and report.is_deal(40.0, 95.0) and not report.is_deal(50.0, 95.0)
+    named = [{"id": n, "group": "rest", "camera_name": "Voigtländer Vito B", "status": s, "price_start": p,
+              "price_history": [], "first_seen": "2026-11-10 10:00"} for n, s, p in ((1, "sold", 100.0), (2, "active", 45.0),
+                                                                                 (3, "active", 70.0))]
+    assert [r[-2] for r in report.proposal_rows(named)[1:]] == [2], "50 EUR under the mean sale of 100 only"
+    with tempfile.TemporaryDirectory() as tmp:
+        store = DataStore(Path(tmp))
+        assert store.load_manual_labels() == {}
+        store.save_manual_labels({1021: "Zenit E"})
+        assert store.load_manual_labels() == {1021: "Zenit E"}
     print("tick tests passed")
 
 

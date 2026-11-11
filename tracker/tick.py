@@ -52,6 +52,11 @@ UNTRACKED_BY_USER = {"Zorki 4K"}
 # One-off (06.11.2026, the user's request): the pages of the closed 'Остальные' are opened once more, to see
 # which sold after their 3 hours. Spread over the regular ticks so it is done by REST_RECHECK_BY.
 REST_RECHECK_BY = "2026-11-06 22:00"
+# A lighter table (11.11.2026, the user's phone): what the sheets leave to the data only, and how often
+# the heavy sheets (statistics, models, review lists) are rewritten.
+LIST_CLOSED_DAYS = 30  # 'Список': closed cameras for this long after closing
+REST_SHEET_DAYS = 7  # 'Остальные': listings first seen this recently
+HEAVY_SHEETS_EVERY_MIN = 60
 REST_RECHECK_MIN_PRICE = 45  # EUR
 # Its own request allowance beyond MAX_REQUESTS: a tick 80, a quick check 30 (time budgets still hold); a run
 # every ~5 minutes (a tick and two quick checks per gap).
@@ -1268,6 +1273,14 @@ def web_prices_of(root, items):
         return {}
 
 
+def long_closed(item, now):
+    """Closed (sold, deleted, unsold) more than LIST_CLOSED_DAYS ago."""
+    if item.get("status") in ("active", "reserved", "hidden"):
+        return False
+    when = item.get("closed_at") or item.get("sold_detected_at") or item.get("last_seen_active") or item.get("first_seen")
+    return bool(when) and clock.minutes_between(when, now) > LIST_CLOSED_DAYS * 1440
+
+
 def write_sheets(writer, result, state_flags):
     """Write all sheets. Returns state keys to remember (runs header, offered models)."""
     from . import sheets
@@ -1301,9 +1314,11 @@ def write_sheets(writer, result, state_flags):
     fresh_since = clock.stamp(clock.parse(result["run"]["at"]) - timedelta(hours=FRESH_ROWS_HOURS))
     sale = report.model_sale_prices(items)
     # 'Список': the model's mean sale price right after 'Сохранений' (the flag columns move one right)
-    list_items = [i for i in items if i.get("group") == "list"]
-    list_rows = report.item_rows(list_items, new_since=new_since, fresh_since=fresh_since, on_sale_first=True,
-                                 stale=lambda i: not tracked(i))
+    # models no longer tracked (their status is not checked) and cameras closed over LIST_CLOSED_DAYS ago
+    # stay in the data only (11.11.2026: a lighter table)
+    list_items = [i for i in items if i.get("group") == "list" and tracked(i)
+                  and not long_closed(i, result["run"]["at"])]
+    list_rows = report.item_rows(list_items, new_since=new_since, fresh_since=fresh_since, on_sale_first=True)
     price_of = {i["id"]: sale.get(i["model"], sheets.MODELS_NO_PRICE) for i in list_items}
     list_rows = report.insert_column(list_rows, "Сохранений", sheets.MODELS_SALE_PRICE_HEADER,
                                      [price_of[r[0]] for r in list_rows[1:]])
@@ -1331,79 +1346,78 @@ def write_sheets(writer, result, state_flags):
         updates["cheap_ids"] = cheap_ids
     writer.replace(sheets.FAST_SHEET, report.fast_rows(items), links=True)
     writer.replace(sheets.SALES_SHEET, report.sales_rows(items), links=True)
-    writer.replace(sheets.CHECK_SHEET, report.check_rows(items), links=True)
-    writer.replace(sheets.SUMMARY_SHEET, report.summary_rows(result["summary"]))
-    try:  # 'Модели' belongs to the user: only the price column is written
-        sale_prices = report.model_sale_prices(items)
-        web = result.get("web_prices") or {}
-        has_sales = {m: sheets.MODELS_HAS_SALES for m in sale_prices}
-        writer.write_model_prices({sheets.MODELS_PRICE_HEADER: report.model_prices(result["summary"]),
-                                   sheets.MODELS_SALE_PRICE_HEADER: sale_prices,
-                                   sheets.MODELS_WEB_PRICE_HEADER: {**has_sales, **{m: p for m, (p, _) in web.items()}},
-                                   sheets.MODELS_WEB_SOURCE_HEADER: {**{m: "" for m in sale_prices},
-                                                                     **{m: src for m, (_, src) in web.items()}},
-                                   **listing_columns(items),
-                                   sheets.MODELS_TRACKED_HEADER: {m: "нет" if m in _UNTRACKED else "да" for m in models.MODEL_INFO}})
-        if not state_flags.get("models_tracked_v1"):
-            writer.color_tracked_models()
-            updates["models_tracked_v1"] = True
-        if not state_flags.get("models_web_v1"):
-            writer.color_model_rows()
-            updates["models_web_v1"] = True
-        sheet_models = [m for m in models.MODEL_INFO if sheets.model_key(m) in allowed]
-        writer.replace(sheets.NO_SALES_SHEET, report.no_sales_rows(
-            sheet_models, items, report.model_prices(result["summary"]), sale_prices, web, _UNTRACKED))
-        if not state_flags.get("no_sales_sheet_v1"):
-            writer.color_cheap_web_rows(sheets.NO_SALES_SHEET, report.NO_SALES_HEADER.index("Цена объявлений в интернете, €") + 1)
-            updates["no_sales_sheet_v1"] = True
-    except Exception as exc:
-        print(f"sheets: model prices not written: {type(exc).__name__}: {env.redact(exc, 200)}")
-    writer.replace(sheets.TOP_SHEET, report.top_rows(items, result["run"]["at"]), links=True)
-    writer.replace(sheets.ANALYTICS_SHEET, report.analytics_rows(items, result["run"]["at"]))
-    if any(i.get("photo_label") for i in items):
-        writer.replace(sheets.PHOTO_KEEP_SHEET, report.photo_rows(items, dropped=False), links=True)
-        try:  # cosmetic: room for the photos (rows added by the rewrite are short again)
-            writer.set_row_height(sheets.PHOTO_KEEP_SHEET, PHOTO_ROW_PX)
-        except Exception as exc:
-            print(f"sheets: photo rows not resized: {type(exc).__name__}")
     # What the photo check dropped is gone from the data; its sheet only weighed the table down
-    # (the short records stay in photo_dropped.json). The tracker made both sheets: nothing of the user's.
-    for old in (sheets.OLD_PHOTO_SHEET, sheets.PHOTO_DROP_SHEET):
+    # (the short records stay in photo_dropped.json). 11.11.2026, the user's request for a lighter table:
+    # 'По фото: оставить' and 'Наборы' go too (their data stays on the cards), and 'Ручная разметка' once
+    # its labels are in the data (manual_labels.json, committed before the sheets are written).
+    for old in (sheets.OLD_PHOTO_SHEET, sheets.PHOTO_DROP_SHEET, sheets.PHOTO_KEEP_SHEET, sheets.BUNDLES_SHEET):
         if writer.has(old):
             writer.delete(old)
-    # The user marks these three sheets by hand (colours, comments): while a review is open they are not
-    # rewritten, so the marks stay on the right rows.
-    if not REVIEW_HOLD and not state_flags.get("review_colors_cleared_v1"):
-        try:  # the review is applied: its colours would sit on other rows once the sheets are rewritten
-            for title in (sheets.UNNAMED_SHEET, sheets.PROPOSAL_SHEET, sheets.SIBLINGS_SHEET):
-                if writer.has(title):
-                    writer.clear_backgrounds(title)
-            updates["review_colors_cleared_v1"] = True
+    if result.get("manual_in_data") and writer.has(sheets.MANUAL_SHEET):
+        writer.delete(sheets.MANUAL_SHEET)
+    # The heavy sheets (statistics, models, review lists) once an hour, never in a quick check: every
+    # rewrite makes the table reload on the phone.
+    last = state_flags.get("heavy_sheets_at")
+    heavy_due = not result["run"].get("quick") and (
+        not last or clock.minutes_between(last, result["run"]["at"]) >= HEAVY_SHEETS_EVERY_MIN)
+    if heavy_due:
+        updates["heavy_sheets_at"] = result["run"]["at"]
+        writer.replace(sheets.CHECK_SHEET, report.check_rows(items), links=True)
+        writer.replace(sheets.SUMMARY_SHEET, report.summary_rows(result["summary"]))
+        try:  # 'Модели' belongs to the user: only the price column is written
+            sale_prices = report.model_sale_prices(items)
+            web = result.get("web_prices") or {}
+            has_sales = {m: sheets.MODELS_HAS_SALES for m in sale_prices}
+            writer.write_model_prices({sheets.MODELS_PRICE_HEADER: report.model_prices(result["summary"]),
+                                       sheets.MODELS_SALE_PRICE_HEADER: sale_prices,
+                                       sheets.MODELS_WEB_PRICE_HEADER: {**has_sales, **{m: p for m, (p, _) in web.items()}},
+                                       sheets.MODELS_WEB_SOURCE_HEADER: {**{m: "" for m in sale_prices},
+                                                                         **{m: src for m, (_, src) in web.items()}},
+                                       **listing_columns(items),
+                                       sheets.MODELS_TRACKED_HEADER: {m: "нет" if m in _UNTRACKED else "да" for m in models.MODEL_INFO}})
+            if not state_flags.get("models_tracked_v1"):
+                writer.color_tracked_models()
+                updates["models_tracked_v1"] = True
+            if not state_flags.get("models_web_v1"):
+                writer.color_model_rows()
+                updates["models_web_v1"] = True
+            sheet_models = [m for m in models.MODEL_INFO if sheets.model_key(m) in allowed]
+            writer.replace(sheets.NO_SALES_SHEET, report.no_sales_rows(
+                sheet_models, items, report.model_prices(result["summary"]), sale_prices, web, _UNTRACKED))
+            if not state_flags.get("no_sales_sheet_v1"):
+                writer.color_cheap_web_rows(sheets.NO_SALES_SHEET, report.NO_SALES_HEADER.index("Цена объявлений в интернете, €") + 1)
+                updates["no_sales_sheet_v1"] = True
         except Exception as exc:
-            print(f"sheets: review colours not cleared: {type(exc).__name__}")
-    if any(i.get("bundle") for i in items):
-        writer.replace(sheets.BUNDLES_SHEET, report.bundle_rows(items), links=True)
-        try:
-            writer.set_row_height(sheets.BUNDLES_SHEET, PHOTO_ROW_PX)
-        except Exception as exc:
-            print(f"sheets: bundle rows not resized: {type(exc).__name__}")
-    if not REVIEW_HOLD and any(i.get("name_tried") for i in items):
-        writer.replace(sheets.UNNAMED_SHEET, report.unnamed_rows(items), links=True)
-        try:
-            writer.set_row_height(sheets.UNNAMED_SHEET, PHOTO_ROW_PX)
-        except Exception as exc:
-            print(f"sheets: unnamed rows not resized: {type(exc).__name__}")
-    if not REVIEW_HOLD and any(i.get("camera_name") for i in items):
-        writer.replace(sheets.PROPOSAL_SHEET, report.proposal_rows(items), links=True)
-        try:
-            writer.set_row_height(sheets.PROPOSAL_SHEET, PHOTO_ROW_PX)
-        except Exception as exc:
-            print(f"sheets: proposal rows not resized: {type(exc).__name__}")
-        writer.replace(sheets.SIBLINGS_SHEET, report.sibling_rows(items), links=True)
-        try:
-            writer.set_row_height(sheets.SIBLINGS_SHEET, PHOTO_ROW_PX)
-        except Exception as exc:
-            print(f"sheets: sibling rows not resized: {type(exc).__name__}")
+            print(f"sheets: model prices not written: {type(exc).__name__}: {env.redact(exc, 200)}")
+        writer.replace(sheets.TOP_SHEET, report.top_rows(items, result["run"]["at"]), links=True)
+        writer.replace(sheets.ANALYTICS_SHEET, report.analytics_rows(items, result["run"]["at"]))
+        # The user marks these three sheets by hand (colours, comments): while a review is open they are not
+        # rewritten, so the marks stay on the right rows.
+        if not REVIEW_HOLD and not state_flags.get("review_colors_cleared_v1"):
+            try:  # the review is applied: its colours would sit on other rows once the sheets are rewritten
+                for title in (sheets.UNNAMED_SHEET, sheets.PROPOSAL_SHEET, sheets.SIBLINGS_SHEET):
+                    if writer.has(title):
+                        writer.clear_backgrounds(title)
+                updates["review_colors_cleared_v1"] = True
+            except Exception as exc:
+                print(f"sheets: review colours not cleared: {type(exc).__name__}")
+        if not REVIEW_HOLD and any(i.get("name_tried") for i in items):
+            writer.replace(sheets.UNNAMED_SHEET, report.unnamed_rows(items), links=True)
+            try:
+                writer.set_row_height(sheets.UNNAMED_SHEET, PHOTO_ROW_PX)
+            except Exception as exc:
+                print(f"sheets: unnamed rows not resized: {type(exc).__name__}")
+        if not REVIEW_HOLD and any(i.get("camera_name") for i in items):
+            writer.replace(sheets.PROPOSAL_SHEET, report.proposal_rows(items), links=True)
+            try:
+                writer.set_row_height(sheets.PROPOSAL_SHEET, PHOTO_ROW_PX)
+            except Exception as exc:
+                print(f"sheets: proposal rows not resized: {type(exc).__name__}")
+            writer.replace(sheets.SIBLINGS_SHEET, report.sibling_rows(items), links=True)
+            try:
+                writer.set_row_height(sheets.SIBLINGS_SHEET, PHOTO_ROW_PX)
+            except Exception as exc:
+                print(f"sheets: sibling rows not resized: {type(exc).__name__}")
     if not state_flags.get("runs_header_v5"):  # v5: 'Новых в «До 20 €»' and 'Комментарий' right after the time
         writer.ensure_runs_header()
         updates["runs_header_v5"] = True
@@ -1412,7 +1426,9 @@ def write_sheets(writer, result, state_flags):
         updates["runs_newest_first"] = True
     writer.append_run(runs_row(result["run"], cheap_added))
     if result["daily"]:
-        writer.replace(sheets.REST_SHEET, report.item_rows([i for i in items if i.get("group") == "rest"]), links=True)
+        since = clock.stamp(clock.parse(result["run"]["at"]) - timedelta(days=REST_SHEET_DAYS))
+        writer.replace(sheets.REST_SHEET, report.item_rows([i for i in items if i.get("group") == "rest"
+                                                            and (i.get("first_seen") or "") >= since]), links=True)
     colored = set(state_flags.get("status_colors") or [])
     todo = [t for t in (sheets.LIST_SHEET, sheets.REST_SHEET, sheets.CHEAP_SHEET, sheets.FAST_SHEET)
             if t not in colored and writer.has(t)]
@@ -1645,7 +1661,14 @@ def _main(args):
         root = Path(args.local) if args.local else datarepo.clone(Path(tmp) / "data")
         store = DataStore(root)
         state_flags = store.load_state()
+        # Manual labels live in the data since 11.11.2026 (manual_labels.json); the sheet 'Ручная разметка',
+        # while it is still there, adds to them, and goes once they are saved (write_sheets).
+        sheet_labels, saved = labels, store.load_manual_labels()
+        labels = {**saved, **sheet_labels}
+        if labels != saved:
+            store.save_manual_labels(labels)
         result = run_cheap(store, client, labels) if args.cheap else run_tick(store, client, labels, quick=args.quick)
+        result["manual_in_data"] = writer is not None and not args.local
         print(log_line(result["run"]))
         if not (args.quick or args.cheap or result["fatal"]):
             photo_step(store, result, started)

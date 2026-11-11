@@ -33,6 +33,15 @@ class DataStore:
     def save_state(self, state):
         self._write_json(self.root / "state.json", state)
 
+    def load_manual_labels(self):
+        """{item id: model or name} the user labelled by hand (was the sheet 'Ручная разметка')."""
+        path = self.root / "manual_labels.json"
+        raw = json.loads(path.read_text("utf-8")) if path.exists() else {}
+        return {int(k): v for k, v in raw.items()}
+
+    def save_manual_labels(self, labels):
+        self._write_json(self.root / "manual_labels.json", {str(k): v for k, v in sorted(labels.items())})
+
     def append_run(self, run):
         with (self.root / "runs.jsonl").open("a", encoding="utf-8", newline="\n") as f:
             f.write(json.dumps(run, ensure_ascii=False) + "\n")

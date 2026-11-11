@@ -825,6 +825,15 @@ def unnamed_rows(items):
     cards = sorted((i for i in items if i.get("group") == "rest" and i.get("name_tried") and not i.get("camera_name")
                     and i.get("model_source") != "manual"),
                    key=lambda i: (i.get("first_seen") or "", i["id"]), reverse=True)
+    # only the deals (11.11.2026): no name, so compared with the list model the photo looks like - 50 EUR
+    # under its mean sale price, or no such model / no sales of it
+    sale = model_sale_prices(items)
+
+    def looks_like(i):
+        similar = (i.get("photo_label") or {}).get("similar") or ""
+        return similar[len("model:"):] if similar.startswith("model:") else None
+
+    cards = [i for i in cards if is_deal(current_price(i), sale.get(looks_like(i)))]
     for i in cards:
         more = (i.get("photos_more") or []) + ["", ""]
         similar = ((i.get("photo_label") or {}).get("similar") or "").replace("model:", "").replace("junk:", "мусор: ")
@@ -868,6 +877,28 @@ PROPOSAL_HEADER = ["Фото", "Камера", "Тип", "Таких объяв�
                    "Впервые", "id", "Ссылка"]
 
 
+REVIEW_MARGIN = 50  # EUR: 'Предложение' / 'По фото: без названия' keep cards this much under the mean sale
+
+
+def rest_sale_prices(items):
+    """{exact camera name: mean sale price} of 'Остальные' - sold within the 3 tracked hours, or later
+    (the recheck of 06.11.2026)."""
+    sold = {}
+    for i in items:
+        if i.get("group") != "rest" or not i.get("camera_name") or i.get("bundle"):
+            continue
+        price = current_price(i) if i.get("status") == "sold" else (
+            i.get("recheck_price") if i.get("recheck_status") == "sold" else None)
+        if price:
+            sold.setdefault(i["camera_name"], []).append(price)
+    return {name: statistics.mean(prices) for name, prices in sold.items()}
+
+
+def is_deal(price, mean_sale):
+    """A card worth a look: no sales to compare with, or REVIEW_MARGIN under the mean sale price."""
+    return mean_sale is None or (price is not None and price <= mean_sale - REVIEW_MARGIN)
+
+
 def proposal_rows(items):
     """'Предложение': cards of 'Остальные' with an exact name outside the list (not near a list model:
     those are on 'Братья моделей списка'), for the user to pick models for the list. The models seen
@@ -875,7 +906,10 @@ def proposal_rows(items):
     from . import photos
 
     cards = [i for i in items if i.get("group") == "rest" and i.get("camera_name") and not near_list_models(i)]
-    seen = Counter(i["camera_name"] for i in cards)
+    seen = Counter(i["camera_name"] for i in cards)  # all listings of the name, before the price filter
+    # only the deals (11.11.2026): 50 EUR under the name's mean sale price, or no sales of it yet
+    sale = rest_sale_prices(items)
+    cards = [i for i in cards if is_deal(current_price(i), sale.get(i["camera_name"]))]
     cards.sort(key=lambda i: (i.get("first_seen") or "", i["id"]), reverse=True)  # newest first ...
     cards.sort(key=lambda i: (-seen[i["camera_name"]], i["camera_name"]))       # ... within each model
     rows = [PROPOSAL_HEADER]
