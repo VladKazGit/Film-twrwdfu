@@ -149,6 +149,9 @@ def main():
     # One Vinted session for the whole run: the ticks' cookies in the runner's temp folder (not the data).
     os.environ.setdefault("VINTED_COOKIE_FILE", os.path.join(os.environ.get("RUNNER_TEMP") or tempfile.gettempdir(),
                                                            "vinted_session.json"))
+    # The data clone kept between the runs too (datarepo.clone_or_update): a fetch instead of a clone.
+    os.environ.setdefault("DATA_CLONE_DIR", os.path.join(os.environ.get("RUNNER_TEMP") or tempfile.gettempdir(),
+                                                         "tracker_data"))
     first = {"force": args.force}
 
     def tick(mode):

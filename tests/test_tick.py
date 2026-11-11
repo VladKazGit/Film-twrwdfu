@@ -897,7 +897,16 @@ def main():
         client.search[("canon ae-1", "fresh")] = fresh[1:]
         tick.fresh_search(state, client, active, {}, "2026-10-17 11:52", st, set(), quick=True)
         assert state["fresh_search"]["last_run"]["Canon AE-1"] == "2026-10-17 11:52" and st["fresh_pages"] == 2
-        assert cam["needs_check"] and st["fresh_missing"] == 1
+        # (11.11.2026) one miss is no alarm: Vinted's search leaves listings out now and then
+        assert not cam.get("needs_check") and cam["fresh_missed"] == 1 and not st["fresh_missing"]
+        tick.fresh_search(state, client, active, {}, "2026-10-17 12:52", st, set(), quick=True)
+        assert cam["needs_check"] and st["fresh_missing"] == 1 and "fresh_missed" not in cam
+        # Still on sale: a false alarm; after two its absence from the fresh search stops counting.
+        tick.apply_page(cam, {"status": "active", "price": 90.0, "description": "", "uploaded_ago": None}, "2026-10-17 13:00")
+        assert cam["fresh_false"] == 1 and cam["fresh_query"] == "Canon AE-1" and not cam.get("needs_check")
+        cam["fresh_flagged"] = True
+        tick.apply_page(cam, {"status": "active", "price": 90.0, "description": "", "uploaded_ago": None}, "2026-10-17 14:00")
+        assert cam["fresh_unreliable"] and "fresh_query" not in cam
         # A sighting counts as a check, but the page is opened every week.
         seen = {"group": "list", "flags": ["found"], "last_checked_at": "2026-10-15 10:00",
                 "fresh_seen_at": "2026-10-17 11:00", "first_seen": "2026-10-10 10:00"}

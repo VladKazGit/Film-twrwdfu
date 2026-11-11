@@ -4,6 +4,7 @@ The token only lives in the remote URL of a temporary clone; git output is
 redacted before it can reach the logs.
 """
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -39,6 +40,23 @@ def clone(dest):
     _git(["config", "user.name", BOT_NAME], cwd=dest)
     _git(["config", "user.email", BOT_EMAIL], cwd=dest)
     return dest
+
+
+def clone_or_update(dest):
+    """The clone kept between the runs of one Actions run (11.11.2026): brought to the remote's latest
+    state - a shallow fetch takes ~3 s, a fresh clone ~12 s, and there are ~200 runs a day. Anything
+    left by a broken run is thrown away; if the update fails, a fresh clone."""
+    dest = Path(dest)
+    if (dest / ".git").exists():
+        try:
+            _git(["fetch", "--quiet", "--depth", "1", "origin", "HEAD"], cwd=dest)
+            _git(["reset", "--quiet", "--hard", "FETCH_HEAD"], cwd=dest)
+            _git(["clean", "--quiet", "-fdx"], cwd=dest)
+            return dest
+        except DataRepoError:
+            pass
+    shutil.rmtree(dest, ignore_errors=True)
+    return clone(dest)
 
 
 def commit_and_push(repo_dir, message):

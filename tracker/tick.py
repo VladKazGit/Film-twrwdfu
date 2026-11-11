@@ -15,6 +15,7 @@ vanished (possible fast sales). The sheet is written only if 'Список' chan
 """
 import argparse
 import json
+import os
 import statistics
 import sys
 
@@ -57,6 +58,10 @@ REST_RECHECK_BY = "2026-11-06 22:00"
 LIST_CLOSED_DAYS = 30  # 'Список': closed cameras for this long after closing
 REST_SHEET_DAYS = 7  # 'Остальные': listings first seen this recently
 HEAVY_SHEETS_EVERY_MIN = 60
+# A camera missing from its model's fresh search (11.11.2026): 2777 such misses a day were checked and 98 %
+# were still on sale (Vinted's search leaves listings out now and then). Its page is opened after this many
+# misses in a row; after FRESH_FALSE_ALARMS false alarms its absence there no longer counts at all.
+FRESH_MISSES, FRESH_FALSE_ALARMS = 2, 2
 REST_RECHECK_MIN_PRICE = 45  # EUR
 # Its own request allowance beyond MAX_REQUESTS: a tick 80, a quick check 30 (time budgets still hold); a run
 # every ~5 minutes (a tick and two quick checks per gap).
@@ -348,6 +353,13 @@ def apply_page(item, page, now):
         close(item, "sold", now, page["price"])
     elif status == "deleted":
         close(item, "deleted", now)
+    # Opened because its fresh search lost it, and still there: a false alarm. After a few its absence
+    # from the fresh search stops counting (the scheduled checks go on).
+    if item.pop("fresh_flagged", None) and status in ("active", "reserved", "hidden"):
+        item["fresh_false"] = item.get("fresh_false", 0) + 1
+        if item["fresh_false"] >= FRESH_FALSE_ALARMS:
+            item["fresh_unreliable"] = True
+            item.pop("fresh_query", None)
     return status
 
 
@@ -537,7 +549,8 @@ def fresh_search(state, client, active, closed, now, stats, changed, quick=False
                 item = active[rec_id]
                 mark_seen(item, rec, now, checked=False)
                 item["fresh_seen_at"] = now
-                if item.get("model") == model:
+                item.pop("fresh_missed", None)
+                if item.get("model") == model and not item.get("fresh_unreliable"):
                     item["fresh_query"] = model
                 changed.add(rec_id)
             # Newer than the catalog's top: the next catalog read takes it (if it is a film camera).
@@ -561,9 +574,12 @@ def fresh_search(state, client, active, closed, now, stats, changed, quick=False
         for item in active.values():
             if (item.get("fresh_query") == model and item["id"] not in ids and item["id"] >= boundary
                     and item["status"] == "active" and not item.get("needs_check")):
-                item["needs_check"] = True
+                item["fresh_missed"] = item.get("fresh_missed", 0) + 1
                 changed.add(item["id"])
-                stats["fresh_missing"] += 1
+                if item["fresh_missed"] >= FRESH_MISSES:
+                    item.pop("fresh_missed")
+                    item["needs_check"] = item["fresh_flagged"] = True
+                    stats["fresh_missing"] += 1
         if (model, pages) in queries[:len(due)]:
             last_run[model] = now
 
@@ -1658,7 +1674,9 @@ def _main(args):
                           time_budget=QUICK_TIME_BUDGET_S if args.quick else TICK_TIME_BUDGET_S)
 
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
-        root = Path(args.local) if args.local else datarepo.clone(Path(tmp) / "data")
+        kept = os.environ.get("DATA_CLONE_DIR")  # set by tracker.loop: one clone for the whole Actions run
+        root = (Path(args.local) if args.local else datarepo.clone_or_update(Path(kept)) if kept
+                else datarepo.clone(Path(tmp) / "data"))
         store = DataStore(root)
         state_flags = store.load_state()
         # Manual labels live in the data since 11.11.2026 (manual_labels.json); the sheet 'Ручная разметка',
