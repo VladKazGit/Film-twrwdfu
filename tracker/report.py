@@ -532,14 +532,20 @@ def summarize(items, now, stale=None):
             "fast_maybe": sum(_maybe_fast(i) for i in group),
         }
     per_model = {}
+    # the last RECENT_DAYS next to all the time (11.11.2026, the user's request): sold, mean sale price, days to sell
+    recent_since = clock.stamp(clock.parse(now) - timedelta(days=RECENT_DAYS))
     for item in groups["list"]:
         stats = per_model.setdefault(item["model"], {"seen": 0, "sold": 0, "fast": 0, "maybe": 0, "times": [],
-                                                     "favourites": [], "days": [], "unsold_days": [], "prices": [], "sale_prices": []})
+                                                     "favourites": [], "days": [], "unsold_days": [], "prices": [], "sale_prices": [],
+                                                     "sold_recent": 0, "sale_prices_recent": [], "days_recent": []})
+        recent = item.get("status") == "sold" and (item.get("sold_detected_at") or "") >= recent_since
         stats["seen"] += 1
         if current_price(item) is not None:
             stats["prices"].append(current_price(item))  # sold: the sale price
             if item.get("status") == "sold" and current_price(item) > SALE_MIN_PRICE:
                 stats["sale_prices"].append(current_price(item))
+                if recent:
+                    stats["sale_prices_recent"].append(current_price(item))
         if unsold_days(item, now) is not None and not stale(item):
             stats["unsold_days"].append(unsold_days(item, now))
         if item.get("favourites") is not None:
@@ -548,6 +554,10 @@ def summarize(items, now, stale=None):
             stats["sold"] += 1
             if days_to_sell(item) is not None:
                 stats["days"].append(days_to_sell(item))
+            if recent:
+                stats["sold_recent"] += 1
+                if days_to_sell(item) is not None:
+                    stats["days_recent"].append(days_to_sell(item))
             if bucket(item):
                 stats["times"].append(item["time_to_sell_max"])
             if bucket(item) == BUCKETS[0][1]:
@@ -561,11 +571,17 @@ def summarize(items, now, stale=None):
          "median_days_to_sell": statistics.median(s["days"]) if s["days"] else None,
          "mean_unsold_days": round(statistics.mean(s["unsold_days"]), 2) if s["unsold_days"] else None,
          "mean_price": round(statistics.mean(s["prices"])) if s["prices"] else None,
-         "mean_sale_price": round(statistics.mean(s["sale_prices"])) if s["sale_prices"] else None}
+         "mean_sale_price": round(statistics.mean(s["sale_prices"])) if s["sale_prices"] else None,
+         "sold_recent": s["sold_recent"],
+         "mean_sale_price_recent": round(statistics.mean(s["sale_prices_recent"])) if s["sale_prices_recent"] else None,
+         "median_days_to_sell_recent": statistics.median(s["days_recent"]) if s["days_recent"] else None}
         for model, s in per_model.items()
     ]
     models.sort(key=lambda m: (-m["sold_under_30"], -m["maybe_under_30"], -m["sold"], -m["seen"], m["model"]))
     return {"updated": now, "excluded_flagged": len(items) - len(counted), "groups": totals, "models": models}
+
+
+RECENT_DAYS = 90  # 'Сводка': the last 3 months next to all the time
 
 
 TOTAL_ROWS = [
@@ -1006,15 +1022,18 @@ def summary_rows(summary):
     rows += [[label, lst["buckets"][label], rest["buckets"][label]] for _, label in BUCKETS]
     rows += [["Возможно < 30 мин (по нижней оценке)", lst["fast_maybe"], rest["fast_maybe"]]]
     rows += [["Продано без оценки (preexisting/night/bumped/found)", lst["sold_without_estimate"], rest["sold_without_estimate"]]]
-    rows += [[], ["Модель", "Появилось", "Продано", "Средняя цена, €", f"Средняя цена продажи (> {SALE_MIN_PRICE:.0f} €), €",
+    rows += [[], ["Модель", "Появилось", "Продано (всё время)", "Продано (3 мес.)", "Средняя цена, €",
+                  f"Средняя цена продажи > {SALE_MIN_PRICE:.0f} € (всё время), €",
+                  f"Средняя цена продажи > {SALE_MIN_PRICE:.0f} € (3 мес.), €",
                   "Продано < 30 мин", "Возможно < 30 мин",
-                  "Медиана макс. времени продажи, мин", "Сохранений в среднем", "Продали за (медиана)",
-                  "Непроданные висят (в среднем)"]]
-    rows += [[m["model"], m["seen"], m["sold"], _num(m.get("mean_price")), _num(m.get("mean_sale_price")),
+                  "Медиана макс. времени продажи, мин", "Сохранений в среднем", "Продали за (медиана, всё время)",
+                  "Продали за (медиана, 3 мес.)", "Непроданные висят (в среднем)"]]
+    rows += [[m["model"], m["seen"], m["sold"], m.get("sold_recent", 0), _num(m.get("mean_price")),
+              _num(m.get("mean_sale_price")), _num(m.get("mean_sale_price_recent")),
               m["sold_under_30"], m["maybe_under_30"],
               _num(m["median_max_minutes"]),
               _num(m["mean_favourites"]), format_on_sale(m.get("median_days_to_sell")),
-              format_on_sale(m.get("mean_unsold_days"))]
+              format_on_sale(m.get("median_days_to_sell_recent")), format_on_sale(m.get("mean_unsold_days"))]
              for m in summary["models"]]
     width = max(len(r) for r in rows)
     return [r + [""] * (width - len(r)) for r in rows]

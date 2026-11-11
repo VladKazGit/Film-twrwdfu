@@ -423,11 +423,16 @@ def main():
         pricy = next(k for k, r in enumerate(top) if r[0].startswith("Продажи дороже 100"))
         assert [r[:3] for r in top[pricy + 2:pricy + 4]] == [["Leica M6", 1, 2500], ["Canon AE-1", 1, 120]], top[pricy:pricy + 4]
         model_header = next(r for r in ss.sheets["Сводка"].rows if r[0] == "Модель")
-        assert model_header[3] == "Средняя цена, €" and model_header[4] == "Средняя цена продажи (> 40 €), €", model_header
+        assert model_header[2:7] == ["Продано (всё время)", "Продано (3 мес.)", "Средняя цена, €",
+                                     "Средняя цена продажи > 40 € (всё время), €", "Средняя цена продажи > 40 € (3 мес.), €"], model_header
         sold = [{"group": "list", "model": "Nikon FM2", "status": "sold", "flags": [], "price_start": p, "price_final": p,
                  "price_history": [{"at": "x", "price": p}], "first_seen": "2026-10-16 10:00"} for p in (30.0, 150.0, 170.0)]
         fm2 = next(m for m in report.summarize(sold, "2026-10-17 10:00")["models"] if m["model"] == "Nikon FM2")
         assert fm2["mean_sale_price"] == 160 and fm2["mean_price"] == 117, fm2
+        # the last 3 months next to all the time: a sale detected 4 months ago counts only in the first
+        old_sale = {**sold[1], "sold_detected_at": "2026-06-10 10:00"}
+        fm2 = report.summarize([old_sale, {**sold[2], "sold_detected_at": "2026-10-16 12:00"}], "2026-10-17 10:00")["models"][0]
+        assert fm2["sold"] == 2 and fm2["sold_recent"] == 1 and fm2["mean_sale_price_recent"] == 170, fm2
         assert "Остальные" in ss.sheets
         sales = ss.sheets["Продажи"].rows
         ids = [r[-1].rsplit("/", 1)[-1] for r in sales[1:]]
