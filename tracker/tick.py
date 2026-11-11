@@ -1371,7 +1371,9 @@ def write_sheets(writer, result, state_flags):
     # (the short records stay in photo_dropped.json). 11.11.2026, the user's request for a lighter table:
     # 'По фото: оставить' and 'Наборы' go too (their data stays on the cards), and 'Ручная разметка' once
     # its labels are in the data (manual_labels.json, committed before the sheets are written).
-    for old in (sheets.OLD_PHOTO_SHEET, sheets.PHOTO_DROP_SHEET, sheets.PHOTO_KEEP_SHEET, sheets.BUNDLES_SHEET):
+    # 'Проверка' too (11.11.2026, the user's request)
+    for old in (sheets.OLD_PHOTO_SHEET, sheets.PHOTO_DROP_SHEET, sheets.PHOTO_KEEP_SHEET, sheets.BUNDLES_SHEET,
+                sheets.CHECK_SHEET):
         if writer.has(old):
             writer.delete(old)
     if result.get("manual_in_data") and writer.has(sheets.MANUAL_SHEET):
@@ -1383,7 +1385,6 @@ def write_sheets(writer, result, state_flags):
         not last or clock.minutes_between(last, result["run"]["at"]) >= HEAVY_SHEETS_EVERY_MIN)
     if heavy_due:
         updates["heavy_sheets_at"] = result["run"]["at"]
-        writer.replace(sheets.CHECK_SHEET, report.check_rows(items), links=True)
         writer.replace(sheets.SUMMARY_SHEET, report.summary_rows(result["summary"]))
         try:  # 'Модели' belongs to the user: only the price column is written
             sale_prices = report.model_sale_prices(items)

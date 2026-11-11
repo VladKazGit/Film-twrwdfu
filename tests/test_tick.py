@@ -292,7 +292,7 @@ def main():
         status_col = report.ITEM_HEADER.index("Статус")
         assert fast_ws.sent[1][status_col] == "'продан" and fast_ws.rows[1][status_col] == "продан"
         assert fast_ws.rows[1][0] == 1011 and fast_ws.sent[1][link_col] == fast_ws.rows[1][link_col]
-        assert ss.sheets["Сводка"].mode == "RAW" and ss.sheets["Проверка"].rows[0] == report.CHECK_HEADER
+        assert ss.sheets["Сводка"].mode == "RAW" and "Проверка" not in ss.sheets
         assert ss.sheets["Список"].rows[0][0] == "id" and len(ss.sheets["Список"].rows) >= 4
         assert ss.sheets["Модели"].rows[0] == sheets.MODELS_HEADER + [sheets.MODELS_PRICE_HEADER, sheets.MODELS_SALE_PRICE_HEADER,
                                                                      sheets.MODELS_WEB_PRICE_HEADER, sheets.MODELS_WEB_SOURCE_HEADER,
