@@ -50,7 +50,10 @@ TRACK_MIN_SALE_PRICE = 65.0
 # Nor those that take longer than this to sell (the median 'продали за', 06.11.2026), nor the user's picks.
 TRACK_MAX_MEDIAN_DAYS = 21
 UNTRACKED_BY_USER = {"Zorki 4K"}
-ALWAYS_TRACKED = {"Canon TX"}  # the user's pick (11.11.2026): tracked whatever its sales say
+# The user's pick (11.11.2026): tracked whatever their sales say - the mechanical and semi-automatic Canon
+# (aperture priority like the AV-1); not the program-only / autofocus T50, T70, T80 or the Canonet 28.
+ALWAYS_TRACKED = {"Canon TX", "Canon AV-1", "Canon AL-1", "Canon T60", "Canon FT QL", "Canon Pellix", "Canon FP",
+                  "Canon P", "Canon F-1", "Canon New F-1"}
 # One-off (06.11.2026, the user's request): the pages of the closed 'Остальные' are opened once more, to see
 # which sold after their 3 hours. Spread over the regular ticks so it is done by REST_RECHECK_BY.
 REST_RECHECK_BY = "2026-11-06 22:00"
