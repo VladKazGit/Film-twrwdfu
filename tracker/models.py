@@ -313,12 +313,8 @@ MODELS = [
     ("Canon", "Canon AL-1", ELEC, S35, ["al 1"], None),
     # right after the brand only: 'shutter at 1/125' in a description is no camera
     ("Canon", "Canon AT-1", ELEC, S35, ["^at 1"], None),
-    ("Canon", "Canon T90", ELEC, S35, ["t 90"], None),
-    # the rest of the FD-mount T series
-    ("Canon", "Canon T50", ELEC, S35, ["t 50"], None),
-    ("Canon", "Canon T60", ELEC, S35, ["t 60"], None),
-    ("Canon", "Canon T70", ELEC, S35, ["t 70"], None),
-    ("Canon", "Canon T80", ELEC, S35, ["t 80"], None),
+    # the FD-mount T series (T50, T60, T70, T80, T90) left the list on 12.11.2026 (the user's request):
+    # not collected at all, see 'not wanted (user)'
     ("Canon", "Canon EF", ELEC, S35, ["^ef"],
      r"\d|s(?![a-z])|m(?![a-z])|objektiv|obiettiv|objectif|lens|zoom|usm|optik"),
     ("Canon", "Canon New F-1", ELEC, S35, ["new f 1"], None),
@@ -396,14 +392,14 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 66
+VERSION = 67
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
 PRIORITY_SEARCH = ("Canon Canonet 28", "Pentax Spotmatic II", "Nikon F Photomic", "Nikon F Photomic T", "Nikon F Photomic Tn", "Nikon F Photomic FTn",
                    "Canon FX", "Canon FP", "Canon TL", "Canon TLb", "Canon TX", "Canon AT-1", "Nikon FG-20",
                    "Canon AE-1", "Canon AE-1 Program", "Canon AV-1", "Canon F-1", "Canon A-1", "Leica R-E", "Leica R4s",
-                   "Minolta SR-1", "Minolta SR-T 102", "Leica R9", "Canon T50", "Canon T60", "Canon T70", "Canon T80",
+                   "Minolta SR-1", "Minolta SR-T 102", "Leica R9",
                    "Praktiflex", "Praktica FX", "Praktica FX2", "Praktica FX3", "Praktica IV", "Praktica IVB", "Praktica IVM", "Praktica IVBM", "Praktica IVF", "Praktica IVFB", "Praktica V", "Praktica VF", "Praktica Nova", "Praktica Nova B", "Praktica Nova I", "Praktica Nova IB", "Praktica Super TL2", "Praktica Super TL3", "Praktica L2", "Praktica LTL2", "Praktica LTL3", "Praktica LLC", "Praktica Mat", "Praktica MTL 50", "Praktica PLC2", "Praktica PLC3", "Praktica VLC", "Praktica VLC2", "Praktica VLC3", "Kiev 2", "Kiev 2A", "Kiev 3", "Kiev 3A", "Kiev 5", "Kiev 17", "Kiev 19", "Kiev 19M", "Kiev 20", "Kiev 88CM", "Kiev Salut", "Kiev Salut-S", "Kiev 90",
                    "Olympus M-1", "Olympus OM-2000", "Olympus FTL", "Olympus Pen F", "Olympus Pen FT", "Olympus Pen FV",
                    "Minolta SR-T 100X", "Yashica FX-2", "Yashica FX-3 Super", "Zenit 12", "Zorki 1", "Zorki 2C", "Mamiya C33",
@@ -1267,7 +1263,9 @@ _JUNK = [
         r"chicco|spielzeug|giocattol|jouet|\bkinder|\btoy\b|brownie|box ?kamera|box camera|tengor|\b(?:agfa|kodak|zeiss) box\b"
         r"|\bbox (?:agfa|kodak)\b|agfa-box|einweg|jetable|usa e getta|disposable|quicksnap|fun ?saver|lomograph|\blomo\b"
         r"|\blc-?a\b|holga|\bdiana\b|super color 35|ektar h35|\bm35\b|\bm38\b|pouva|la sardina")),
-    ("not wanted (user)", re.compile(r"\bnikon f-?301\b|\bom-?30\b|\byashica fx-?7\b")),
+    ("not wanted (user)", re.compile(r"\bnikon f-?301\b|\bom-?30\b|\byashica fx-?7\b"
+                                     # the Canon T line, 12.11.2026: 'Canon T70', 'Canon T-50 + FD 50mm', 'T90 Canon'
+                                     r"|\bcanon\b.*\bt ?-?(?:50|60|70|80|90)\b|\bt ?-?(?:50|60|70|80|90)\b.*\bcanon\b")),
     ("action camera / drone", re.compile(
         r"\bdji\b|\bosmo\b|gimbal|zenmuse|gopro|go pro|insta ?360|\bdrone|\baction ?cam")),  # not '4K': Zorki 4K
     ("movie / video / projector", re.compile(
@@ -1346,7 +1344,7 @@ def classify(title, description=None, vinted_brand=None):
     # A modern autofocus title ('Nikon F50 reflex argentique') takes no model from its description,
     # which may name another camera.
     if model is None and description and not NON_LIST_SERIES.search(norm_title) and not lens_title \
-            and junk_reason(title, vinted_brand) != "modern AF" \
+            and junk_reason(title, vinted_brand) not in ("modern AF", "not wanted (user)") \
             and not {"accessory?", "digital?", "compact?"} & set(title_flags):
         norm_desc = normalize(description)
         title_brands = brands_in(title)

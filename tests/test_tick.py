@@ -104,6 +104,9 @@ class FakeWorksheet:
     def append_rows(self, rows, value_input_option):
         self.rows += [list(r) for r in rows]
 
+    def delete_rows(self, index):
+        del self.rows[index - 1]
+
 
 class FakeSpreadsheet:
     def __init__(self):
@@ -479,7 +482,7 @@ def main():
                        "cheap_ids": updates["cheap_ids"], "models_offered": updates["models_offered"],
                        "status_colors": updates["status_colors"], "new_rows_colors": updates["new_rows_colors"],
                        "fresh_rows_colors": updates["fresh_rows_colors"], "fresh_rows_green": True}
-        assert {k: v for k, v in tick.write_sheets(writer, r5, state_flags).items() if k not in ("models_sheet", "models_web_v1", "no_sales_sheet_v1", "models_tracked_v1", "runs_cheap_title_v1", "heavy_sheets_at", "reoffer_v1", "models_missing_from_sheet")} == {"cheap_ids": []}, "Zenit E left 'До 20 €'"
+        assert {k: v for k, v in tick.write_sheets(writer, r5, state_flags).items() if k not in ("models_sheet", "models_web_v1", "no_sales_sheet_v1", "models_tracked_v1", "runs_cheap_title_v1", "heavy_sheets_at", "reoffer_v1", "models_missing_from_sheet", "t_line_removed_v1")} == {"cheap_ids": []}, "Zenit E left 'До 20 €'"
         assert ss.sheets["Запуски"].rows[1][1] == 0
         assert [r[0] for r in ss.sheets["Выгодно"].rows[1:] if r[0] != ""] == [] and ["Zenit E"] not in [r[:1] for r in models_ws.rows]
         assert len(ss.sheets["Выгодно"].rows) == 2 and not any(ss.sheets["Выгодно"].rows[1]), "old data row blanked"
@@ -515,7 +518,7 @@ def main():
             "condition": {"type": "CUSTOM_FORMULA", "values": [{"userEnteredValue": "=$AE2=\"да\""}]},
             "format": {"backgroundColor": {"red": 1, "green": 0.9490196, "blue": 0.8}}}})
         upd = tick.write_sheets(writer, r5, {**state_flags, "fresh_rows_green": None})
-        assert {k: v for k, v in upd.items() if k not in ("models_sheet", "models_web_v1", "no_sales_sheet_v1", "models_tracked_v1", "runs_cheap_title_v1", "heavy_sheets_at", "reoffer_v1", "models_missing_from_sheet")} == {"fresh_rows_green": True}, upd
+        assert {k: v for k, v in upd.items() if k not in ("models_sheet", "models_web_v1", "no_sales_sheet_v1", "models_tracked_v1", "runs_cheap_title_v1", "heavy_sheets_at", "reoffer_v1", "models_missing_from_sheet", "t_line_removed_v1")} == {"fresh_rows_green": True}, upd
         assert ss.rules[sid][1]["booleanRule"]["format"]["backgroundColor"] == sheets.LIGHT_GREEN_3
         print("log:", tick.log_line(r4["run"]))
     # Search for older cheap list cameras: a month limit (half a year before 05.11.2026), list models only.
@@ -770,7 +773,7 @@ def main():
         "Praktica L - Spiegelreflexkamera - DDR - all in - Belichtungsmesser, Blitz, Objektive",
         "Nikon F3 Analoge Kamera Set DW-3 DW-4 Sucher MF-14 Rückwand",
         "Appareil photo CANON A-1 Speedlite 155A, son flash et ses trois objectifs",
-        "Canon T90 Kamera Objektiv Speedlite 300TL Blitz Professionell",
+        "Canon AT-1 Kamera Objektiv Speedlite 300TL Blitz Professionell",
         "Appareil photo Olympus OM 2 N analogique, flash, optique Tamron",
         "Fotocamera Canon AE1 Program - Zoom -2 Flash- optical filter vintage",
         "Fotocamera Olympus OM-1 completa di obiettivo",

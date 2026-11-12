@@ -52,8 +52,9 @@ TRACK_MAX_MEDIAN_DAYS = 21
 UNTRACKED_BY_USER = {"Zorki 4K"}
 # The user's pick (11.11.2026): tracked whatever their sales say - the mechanical and semi-automatic Canon
 # (aperture priority like the AV-1); not the program-only / autofocus T50, T70, T80 or the Canonet 28.
+REMOVED_MODELS = ("Canon T50", "Canon T60", "Canon T70", "Canon T80", "Canon T90")  # out of the list, 12.11.2026
 REOFFER_ONCE = {"Nikon FG"}  # back into 'Модели' once (11.11.2026, the user's request); flag reoffer_v1
-ALWAYS_TRACKED = {"Canon TX", "Canon AV-1", "Canon AL-1", "Canon T60", "Canon FT QL", "Canon Pellix", "Canon FP",
+ALWAYS_TRACKED = {"Canon TX", "Canon AV-1", "Canon AL-1", "Canon FT QL", "Canon Pellix", "Canon FP",
                   "Canon P", "Canon F-1", "Canon New F-1"}
 # One-off (06.11.2026, the user's request): the pages of the closed 'Остальные' are opened once more, to see
 # which sold after their 3 hours. Spread over the regular ticks so it is done by REST_RECHECK_BY.
@@ -1327,6 +1328,10 @@ def write_sheets(writer, result, state_flags):
     if offered is None:  # the sheet was filled before offers were tracked
         offered = sorted(models.MODEL_INFO)
         updates["models_offered"] = offered
+    # The Canon T line left the dictionary (12.11.2026): its rows leave 'Модели' too, once.
+    if not state_flags.get("t_line_removed_v1"):
+        writer.delete_models(REMOVED_MODELS)
+        updates["t_line_removed_v1"] = True
     # Models the user asked back (11.11.2026): offered once more, so the sync appends them if their row is gone.
     reoffer = set() if state_flags.get("reoffer_v1") else REOFFER_ONCE
     names, allowed = writer.sync_models(set(offered) - reoffer)

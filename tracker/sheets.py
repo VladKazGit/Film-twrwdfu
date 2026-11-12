@@ -310,6 +310,18 @@ class SheetWriter:
             keys |= {model_key(r[0]) for r in new}
         return names, keys
 
+    def delete_models(self, names):
+        """Remove the rows of these models from 'Модели' (the user asked them out, 12.11.2026). Returns how
+        many rows went."""
+        if MODELS_SHEET not in self._sheets:
+            return 0
+        ws = self._sheets[MODELS_SHEET]
+        keys = {model_key(n) for n in names}
+        rows = [n for n, v in enumerate(ws.col_values(1), start=1) if n > 1 and v.strip() and model_key(v) in keys]
+        for n in reversed(rows):  # from the bottom, so the row numbers above stay right
+            ws.delete_rows(n)
+        return len(rows)
+
     def write_model_prices(self, columns):
         """'Модели': the tracker's columns {header: {model: price}} (the mean price, the mean sale
         price), 'нет данных' for a model without one. Matched by the model in column A, so the
