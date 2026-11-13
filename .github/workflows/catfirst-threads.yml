@@ -26,9 +26,13 @@ concurrency:
 
 jobs:
   collect:
-    runs-on: ubuntu-latest
+    # pinned: ubuntu-latest became 26.04 on 2026-11-09, where Playwright 1.52 cannot install Chromium
+    runs-on: ubuntu-24.04
     timeout-minutes: 355
     steps:
+      - name: Mark the start
+        run: echo "STARTED=$(date +%s)" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v5
 
       - uses: actions/setup-python@v6
@@ -51,4 +55,7 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run catfirst-threads.yml --repo "${{ github.repository }}" --ref "${{ github.ref_name }}" -f chained=true
+        # a run that ended within 10 minutes (a failed setup) does not hand over: no restart loop
+        run: |
+          if [ $(( $(date +%s) - STARTED )) -lt 600 ]; then echo "run ended within 10 minutes: not starting the next one"; exit 1; fi
+          gh workflow run catfirst-threads.yml --repo "${{ github.repository }}" --ref "${{ github.ref_name }}" -f chained=true
