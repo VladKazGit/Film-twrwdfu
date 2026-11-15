@@ -45,6 +45,8 @@ MANUAL_HEADER = ["id (или ссылка)", "Модель", "Комментар
 MODELS_HEADER = ["Модель", "Бренд", "Тип", "Формат", "Регион"]
 MODELS_PRICE_HEADER = "Средняя цена, €"  # from the statistics, as in 'Сводка'; the tracker writes it
 MODELS_SALE_PRICE_HEADER = "Средняя цена продажи, €"  # sold cameras only
+MODELS_SALE_BODY_HEADER = "Средняя цена продажи без объектива, €"  # sold with kit "body" (11.11.2026)
+MODELS_SALE_LENS_HEADER = "Средняя цена продажи с объективом, €"  # sold with kit "with_lens"
 # Models without a Vinted sale: the median asking price on the other marketplaces collected (05.11.2026)
 MODELS_WEB_PRICE_HEADER = "Цена объявлений в интернете, €"
 MODELS_WEB_SOURCE_HEADER = "Источник цены"

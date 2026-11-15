@@ -1406,8 +1406,11 @@ def write_sheets(writer, result, state_flags):
             sale_prices = report.model_sale_prices(items)
             web = result.get("web_prices") or {}
             has_sales = {m: sheets.MODELS_HAS_SALES for m in sale_prices}
+            by_kit = report.model_sale_prices_by_kit(items)
             writer.write_model_prices({sheets.MODELS_PRICE_HEADER: report.model_prices(result["summary"]),
                                        sheets.MODELS_SALE_PRICE_HEADER: sale_prices,
+                                       sheets.MODELS_SALE_BODY_HEADER: {m: b for m, (b, _) in by_kit.items() if b is not None},
+                                       sheets.MODELS_SALE_LENS_HEADER: {m: l for m, (_, l) in by_kit.items() if l is not None},
                                        sheets.MODELS_WEB_PRICE_HEADER: {**has_sales, **{m: p for m, (p, _) in web.items()}},
                                        sheets.MODELS_WEB_SOURCE_HEADER: {**{m: "" for m in sale_prices},
                                                                          **{m: src for m, (_, src) in web.items()}},

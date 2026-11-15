@@ -408,6 +408,23 @@ def model_sale_prices(items):
     return {model: round(statistics.mean(prices)) for model, prices in sold.items()}
 
 
+def model_sale_prices_by_kit(items):
+    """{model: (mean sale price without a lens, mean sale price with a lens)} of the sold list cameras
+    (same filters as model_sale_prices). The kit: 'body' is without a lens, 'with_lens' with one; the
+    rest ('extras', 'unklar') counts in neither (11.11.2026, the user's request)."""
+    sold = {}
+    for i in items:
+        if (i.get("group") == "list" and i.get("status") == "sold" and current_price(i) is not None
+                and not stat_flags(i) & SALES_EXCLUDED and i.get("kit") in ("body", "with_lens")):
+            sold.setdefault(i.get("model"), {"body": [], "with_lens": []})[i["kit"]].append(current_price(i))
+    out = {}
+    for model, by in sold.items():
+        body = round(statistics.mean(by["body"])) if by["body"] else None
+        lens = round(statistics.mean(by["with_lens"])) if by["with_lens"] else None
+        out[model] = (body, lens)
+    return out
+
+
 def unread_description(item):
     """Carded without its description yet (a found one): out of 'До 20 €' and the letters until it
     is read - a manual or a part hides there ('Praktica MTL50': 'Mode d'emploi…')."""
