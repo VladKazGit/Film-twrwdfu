@@ -297,7 +297,7 @@ def main():
         assert fast_ws.rows[1][0] == 1011 and fast_ws.sent[1][link_col] == fast_ws.rows[1][link_col]
         assert ss.sheets["Сводка"].mode == "RAW" and "Проверка" not in ss.sheets
         assert ss.sheets["Список"].rows[0][0] == "id" and len(ss.sheets["Список"].rows) >= 4
-        assert ss.sheets["Модели"].rows[0] == sheets.MODELS_HEADER + [sheets.MODELS_PRICE_HEADER, sheets.MODELS_SALE_PRICE_HEADER,
+        assert ss.sheets["Модели"].rows[0] == sheets.MODELS_HEADER + [sheets.MODELS_PRICE_HEADER, sheets.MODELS_SALE_PRICE_HEADER, sheets.MODELS_SALE_BODY_HEADER, sheets.MODELS_SALE_LENS_HEADER,
                                                                      sheets.MODELS_WEB_PRICE_HEADER, sheets.MODELS_WEB_SOURCE_HEADER,
                                                                      sheets.MODELS_LISTINGS_HEADER, sheets.MODELS_ON_SALE_HEADER,
                                                                      sheets.MODELS_TRACKED_HEADER]
