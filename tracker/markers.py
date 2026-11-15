@@ -210,7 +210,7 @@ PARTS = {
     "es": ["placa inferior", "tapa inferior", "tapa superior", "tapa trasera", "puerta trasera", "placas inferiores", "tapas inferiores", "tapas superiores", "tapas traseras", "puertas traseras"],
     "et": ["põhjaplaat", "ülakaas", "tagakaas", "põhjaplaadid", "tagakaaned"],
     "fi": ["pohjalevy", "yläkansi", "takakansi", "pohjalevyt", "takakannet"],
-    "fr": ["pièce", "pièces", "plaque inférieure", "plaque de fond", "capot supérieur", "porte arrière", "dos du boîtier",
+    "fr": ["pièce", "pièces", "moteur", "moteurs", "plaque inférieure", "plaque de fond", "capot supérieur", "porte arrière", "dos du boîtier",
            "trappe à pile", "trappe", "plaques inférieures", "plaques de fond", "capots supérieurs", "portes arrière", "trappes"],
     "ga": ["clúdach cúil"],
     "hr": ["donja ploča", "gornji poklopac", "stražnji poklopac", "stražnja vrata", "donje ploče", "stražnji poklopci"],
