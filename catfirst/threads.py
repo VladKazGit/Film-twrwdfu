@@ -38,8 +38,9 @@ OLD_POSTS_TAB = "Threads"  # all languages in one tab, first run of 2026-11-01: 
 KEYWORDS_TAB = "Ключевые слова"
 SEEN_TAB = "threads_seen"
 POSTS_HEADER = ["Найден", "Дата поста", "Ключевые слова", "Автор", "Текст",
-                "Лайки", "Ответы", "Ссылка", "Ответил", "Комментарий"]
-POSTS_WIDTHS = [120, 120, 150, 140, 460, 60, 60, 300, 70, 220]
+                "Лайки", "Ответы", "Ссылка", "Ответил", "Комментарий", "Вопрос"]
+POSTS_WIDTHS = [120, 120, 150, 140, 460, 60, 60, 300, 70, 220, 120]
+FRESH_DAYS = 3  # a question this recent is marked «вопрос, свежий»
 ANSWERED_COL = 8  # 0-based index of «Ответил»: a checkbox
 DAY_COLOR = {"red": 0.851, "green": 0.918, "blue": 0.827}  # light green 3
 WHITE = {"red": 1, "green": 1, "blue": 1}
@@ -49,15 +50,39 @@ KEYWORDS_HEADER = ["Слово", "Язык", "Постов в выдаче", "С
 # Checked logged out on 2026-11-01: each gives a page of posts, mostly from the last two weeks.
 # "cat vet", "adopted a cat", "first time cat owner", "indoor cat", "Tierschutz", "Katzenbaby",
 # "Wohnungskatze", "Katzenhaltung", "Katze Tierarzt" gave nothing at all; "Kater" is a hangover too.
+# Short topic phrases only: a long phrase or a word like "advice" gives nothing logged out, while
+# topics give ~20 posts each, and about a third of them are questions (checked 2026-11-16).
 DEFAULT_KEYWORDS = [
     ("kitten", "EN"), ("new kitten", "EN"), ("rescue cat", "EN"), ("shelter cat", "EN"),
     ("cat shelter", "EN"), ("foster kittens", "EN"), ("cat adoption", "EN"), ("sick cat", "EN"),
     ("senior cat", "EN"), ("cat health", "EN"), ("cat food", "EN"), ("cat mom", "EN"),
     ("cats of threads", "EN"), ("vet", "EN"),
+    ("litter box", "EN"), ("cat behavior", "EN"), ("cat peeing", "EN"), ("cat scratching", "EN"),
+    ("cat biting", "EN"), ("cat hissing", "EN"), ("kitten biting", "EN"), ("cat vomiting", "EN"),
+    ("cat diarrhea", "EN"), ("cat weight", "EN"), ("cat diet", "EN"), ("wet food", "EN"),
+    ("dry cat food", "EN"), ("kitten food", "EN"), ("cat treats", "EN"), ("cat toys", "EN"),
+    ("cat tree", "EN"), ("cat bed", "EN"), ("cat sitter", "EN"), ("cat travel", "EN"),
+    ("cat vaccines", "EN"), ("cat dental", "EN"), ("cat fleas", "EN"), ("cat grooming", "EN"),
+    ("cat nails", "EN"), ("cat shedding", "EN"), ("hairball", "EN"), ("indoor cat", "EN"),
+    ("outdoor cat", "EN"), ("first cat", "EN"), ("new cat owner", "EN"), ("cat introduction", "EN"),
+    ("second cat", "EN"), ("cat stress", "EN"), ("cat anxiety", "EN"), ("old cat", "EN"),
+    ("cat aggression", "EN"), ("cat meowing", "EN"), ("cat night", "EN"), ("cat furniture", "EN"),
+    ("cat safety home", "EN"), ("cat proofing", "EN"), ("kitten litter", "EN"), ("cat nap", "EN"),
     ("Katze", "DE"), ("Katzen", "DE"), ("Katzenfutter", "DE"), ("Tierarzt", "DE"),
     ("Tierheim", "DE"), ("Katzenleben", "DE"), ("Katzenliebe", "DE"), ("Katzenmama", "DE"),
-    ("Pflegestelle", "DE"),
+    ("Pflegestelle", "DE"), ("Katzenklo", "DE"), ("Katzenverhalten", "DE"), ("Katzenpflege", "DE"),
+    ("Kätzchen", "DE"), ("Katzenbesitzer", "DE"), ("Katzengesundheit", "DE"),
 ]
+
+# A post is kept when it asks something or names a care topic; the rest (jokes, ads, fan posts) is dropped.
+QUESTION = re.compile(
+    r"\?|(help|advice|tips?|any idea|how do|how to|should i|what should|recommend|suggest|"
+    r"anyone know|does anyone)|(hilfe|tipp|tipps|frage|rat|ratschlag)", re.I)
+CARE = re.compile(
+    r"litter|food|kibble|diet|treat|scratch|furniture|couch|sofa|behavio|aggress|bit(e|ing)|"
+    r"hiss|stress|anxious|weight|vomit|diarr|vet|meow|introduc|second cat|pee|poop|night|play|"
+    r"sleep|senior|old cat|kitten|first cat|new cat|sitter|travel|bath|nail|groom|shed|toy|"
+    r"climb|jump|bowl|water|futter|katzenklo|verhalten|gesundheit|pflege|tierarzt", re.I)
 
 MAX_AGE_DAYS = 14
 TEXT_MAX = 500
@@ -153,6 +178,11 @@ def keyword_rows(ws, created):
     if created:
         ws.update(values=[list(k) for k in DEFAULT_KEYWORDS], range_name="A2",
                   value_input_option="RAW")
+    else:  # topics added to DEFAULT_KEYWORDS after the sheet was made: append the missing ones
+        have = {r[0].strip().lower() for r in ws.get_values("A2:A") if r and r[0].strip()}
+        missing = [list(k) for k in DEFAULT_KEYWORDS if k[0].lower() not in have]
+        if missing:
+            ws.append_rows(missing, value_input_option="RAW")
     keywords = []
     for r in ws.get_values("A2:F"):
         r = r + [""] * (6 - len(r))
@@ -168,6 +198,9 @@ def tab_lang(lang):
 
 def posts_tab(sh, lang):
     ws, created = _tab(sh, POSTS_TABS[tab_lang(lang)], POSTS_HEADER)
+    if not created and ws.col_count < len(POSTS_HEADER):  # tab made before the «Вопрос» column
+        ws.add_cols(len(POSTS_HEADER) - ws.col_count)
+        ws.update(values=[POSTS_HEADER], range_name="A1", value_input_option="RAW")
     if created:
         sh.batch_update({"requests": [
             {"updateDimensionProperties": {
@@ -287,7 +320,7 @@ def collect(keywords, seen, now):
                 fresh = added = 0
                 for post in posts:
                     at = datetime.fromisoformat(post["at"].replace("Z", "+00:00"))
-                    if now - at > timedelta(days=MAX_AGE_DAYS) or not about_cats(post["text"]):
+                    if now - at > timedelta(days=MAX_AGE_DAYS) or not about_cats(post["text"]) or not wanted(post):
                         continue
                     fresh += 1
                     code = post_code(post["href"])
@@ -304,7 +337,22 @@ def collect(keywords, seen, now):
     return new, stats
 
 
-def post_row(post, found):
+def is_question(text):
+    return bool(QUESTION.search(text or ""))
+
+
+def wanted(post):
+    """A question, or a care topic. Jokes and ads stay out of the sheet."""
+    return is_question(post["text"]) or bool(CARE.search(post["text"] or ""))
+
+
+def question_mark(post, now):
+    if not is_question(post["text"]):
+        return ""
+    return "вопрос, свежий" if now - post["at"] <= timedelta(days=FRESH_DAYS) else "вопрос"
+
+
+def post_row(post, found, now):
     return [
         found,
         post["at"].astimezone(env.BERLIN).strftime("%d.%m.%Y %H:%M"),
@@ -316,6 +364,7 @@ def post_row(post, found):
         "https://www.threads.com" + post["href"],
         "",
         "",
+        question_mark(post, now),
     ]
 
 
@@ -323,7 +372,8 @@ def write(sh, ws_seen, seen_count, ws_keywords, keywords, new, stats, found):
     if new:
         by_lang = {}
         for p in sorted(new.values(), key=lambda p: p["at"], reverse=True):
-            by_lang.setdefault(tab_lang(p["lang"]), []).append(post_row(p, found))
+            by_lang.setdefault(tab_lang(p["lang"]), []).append(
+                post_row(p, found, datetime.now(timezone.utc)))
         for lang, rows in by_lang.items():
             insert_block(sh, posts_tab(sh, lang), rows, day=found[:10])
         ws_seen.append_rows([[code, found] for code in new], value_input_option="RAW")
