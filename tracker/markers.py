@@ -65,7 +65,7 @@ PRINT = {
     "ga": ["leabhar", "bróisiúr", "póstaer", "leabhair", "bróisiúir", "póstaeir"],
     "hr": ["časopis", "knjiga", "brošura", "katalog", "plakat", "reklama", "časopisi", "knjige", "brošure", "katalozi", "plakati", "reklame"],
     "hu": ["folyóirat", "könyv", "prospektus", "katalógus", "plakát", "reklám", "folyóiratok", "könyvek", "prospektusok", "katalógusok", "plakátok", "reklámok"],
-    "it": ["rivista", "libro", "libri", "opuscolo", "depliant", "catalogo", "manifesto", "locandina", "pubblicità", "incorniciato", "incorniciata", "riviste", "opuscoli", "depliants", "cataloghi", "manifesti", "locandine"],
+    "it": ["cartonato pubblicitario", "cartonato", "cartone pubblicitario", "espositore", "rivista", "libro", "libri", "opuscolo", "depliant", "catalogo", "manifesto", "locandina", "pubblicità", "incorniciato", "incorniciata", "riviste", "opuscoli", "depliants", "cataloghi", "manifesti", "locandine"],
     "lt": ["žurnalas", "knyga", "brošiūra", "katalogas", "plakatas", "reklama", "žurnalai", "knygos", "brošiūros", "katalogai", "plakatai", "reklamos"],
     "lv": ["žurnāls", "grāmata", "brošūra", "katalogs", "plakāts", "reklāma", "žurnāli", "grāmatas", "brošūras", "katalogi", "plakāti", "reklāmas"],
     "mt": ["rivista", "ktieb", "fuljett", "reklam", "rivisti", "kotba", "fuljetti"],
