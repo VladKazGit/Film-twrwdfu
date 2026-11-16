@@ -332,6 +332,8 @@ def collect(keywords, seen, now):
                     new[code] = {**post, "at": at, "lang": lang, "keywords": [word]}
                     added += 1
                 stats[word] = (len(posts), fresh, added)
+                print(f"threads: {i + 1}/{len(order)} searched, posts {len(posts)}, fresh {fresh}, new {added}",
+                      flush=True)  # counts only: no words, no authors, no links
         finally:
             browser.close()
     return new, stats
