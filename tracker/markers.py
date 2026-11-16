@@ -177,7 +177,7 @@ TUBES = {
     "es": ["tubo de extensión", "tubos de extensión", "anillo macro", "anillos macro"],
     "et": ["vaheringid", "makrorõngad"],
     "fi": ["välirenkaat", "makrorenkaat"],
-    "fr": ["bague allonge", "bagues allonges", "bagues allonge", "bagues macro", "bagues d'extension",
+    "fr": ["bague allonge", "bagues allonges", "bague d'allonge", "bagues d'allonge", "jeu de bagues", "jeu complet de bagues", "bagues allonge", "bagues macro", "bagues d'extension",
            "tubes allonge", "tube allonge", "tubes macro", "tube macro", "bague macro"],
     "ga": ["feadáin síneadh"],
     "hr": ["međuprstenovi", "makro prstenovi"],
