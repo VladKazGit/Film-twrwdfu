@@ -33,8 +33,11 @@ from tracker import env
 # CATFIRST_SHEET_ID, when set, is used instead.
 SHEET_KEY_SHA256 = "98dafd11118df5b9cad590b7ce8806293a2937496970d3d849633a076131e1d1"
 
-POSTS_TABS = {"EN": "Threads — английский", "DE": "Threads — немецкий"}
+POSTS_TABS = {"EN": "английский - сегодня", "DE": "немецкий - сегодня"}  # posts of the last 24 hours
+ARCHIVE_TABS = {"EN": "английский - архив", "DE": "немецкий - архив"}  # everything older
+OLD_POSTS_TABS = {"EN": "Threads — английский", "DE": "Threads — немецкий"}  # before 2026-11-17
 OLD_POSTS_TAB = "Threads"  # all languages in one tab, first run of 2026-11-01: split once
+KEEP_HOURS = 24
 KEYWORDS_TAB = "Ключевые слова"
 SEEN_TAB = "threads_seen"
 POSTS_HEADER = ["Найден", "Дата поста", "Ключевые слова", "Автор", "Текст",
@@ -197,7 +200,13 @@ def tab_lang(lang):
 
 
 def posts_tab(sh, lang):
-    ws, created = _tab(sh, POSTS_TABS[tab_lang(lang)], POSTS_HEADER)
+    lang = tab_lang(lang)
+    try:  # the tabs were renamed on 2026-11-17: keep the old ones' rows
+        if POSTS_TABS[lang] not in [w.title for w in sh.worksheets()]:
+            sh.worksheet(OLD_POSTS_TABS[lang]).update_title(POSTS_TABS[lang])
+    except gspread.WorksheetNotFound:
+        pass
+    ws, created = _tab(sh, POSTS_TABS[lang], POSTS_HEADER)
     if not created and ws.col_count < len(POSTS_HEADER):  # tab made before the «Вопрос» column
         ws.add_cols(len(POSTS_HEADER) - ws.col_count)
         ws.update(values=[POSTS_HEADER], range_name="A1", value_input_option="RAW")
@@ -242,6 +251,43 @@ def insert_block(sh, ws, rows, day=None):
             {"setDataValidation": {"range": cells(1 + n, 2 + n)}},  # no rule: no checkbox
         ]
     sh.batch_update({"requests": requests})
+
+
+def _found_at(value):
+    """The «Найден» cell as an aware Berlin time, or None for a day separator or junk."""
+    try:
+        return datetime.strptime(str(value).strip(), "%d.%m.%Y %H:%M").replace(tzinfo=env.BERLIN)
+    except ValueError:
+        return None
+
+
+def rotate(sh, lang, now):
+    """Move the rows of the today tab found more than KEEP_HOURS ago to the archive tab (newest on top),
+    and drop the day separators from the today tab: insert_block writes new ones."""
+    lang = tab_lang(lang)
+    today = posts_tab(sh, lang)
+    values = today.get_values("A2:K", value_render_option=ValueRenderOption.unformatted)
+    cutoff = now - timedelta(hours=KEEP_HOURS)
+    moved, drop = [], []
+    for i, r in enumerate(values):
+        r = list(r) + [""] * (11 - len(r))
+        found = _found_at(r[0])
+        if found is None:
+            drop.append(i)
+        elif found < cutoff:
+            moved.append(r)
+            drop.append(i)
+    if not drop:
+        return 0
+    if moved:
+        archive, _ = _tab(sh, ARCHIVE_TABS[lang], POSTS_HEADER)
+        archive.insert_rows(moved, row=2, value_input_option="RAW")
+    requests = []
+    for i in sorted(drop, reverse=True):  # bottom up, so the indices stay valid
+        requests.append({"deleteDimension": {"range": {
+            "sheetId": today.id, "dimension": "ROWS", "startIndex": i + 1, "endIndex": i + 2}}})
+    sh.batch_update({"requests": requests})
+    return len(moved)
 
 
 def split_old_tab(sh):
@@ -406,6 +452,10 @@ def run_once():
     new, stats = collect(keywords, seen, now)
     found = env.now_berlin().strftime("%d.%m.%Y %H:%M")
     write(sh, ws_seen, len(seen), ws_keywords, keywords, new, stats, found)
+    for lang in POSTS_TABS:
+        moved = rotate(sh, lang, env.now_berlin())
+        if moved:
+            print(f"threads: {moved} {lang} rows moved to the archive")
     on_page = sum(s[0] for s in stats.values())
     fresh = sum(s[1] for s in stats.values())
     empty = sum(1 for s in stats.values() if not s[0])
