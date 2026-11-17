@@ -392,7 +392,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 71
+VERSION = 73
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -567,7 +567,7 @@ _CAMERA_WORDS = re.compile(
     r"|\btoestel|spiegelreflex|\bslr\b|\breflex\b|\bbody\b|gehause|boitier|\bcorpo\b|messsucher"
     r"|rangefinder|telemetr|sucherkamera|compatta|\bcompact|kompakt|point (?:and|&) shoot")
 _ACCESSORY_WORDS = re.compile(
-    r"tasche|\bbag\b|\bcase\b|\betui|\bsac\b|\bborsa|hulle|gurt\b|\bstrap|sangle|tracolla"
+    r"tasche|sacoche|\bbag\b|\bcase\b|\betui|\bsac\b|\bborsa|hulle|gurt\b|\bstrap|sangle|tracolla"
     # cases: it / fr / nl / es ('Custodia in pelle originale Olympus OM series')
     r"|custodia|astuccio|\bfodero|\bhousse|\bhoes\b|\bfunda\b"
     r"|objektiv|\blens(?:es)?\b|obiettiv|objectif|\blente\b|blitz|\bflash|speedlite"
@@ -1253,7 +1253,7 @@ _JUNK = [
                                    r"|agfamatic|\bpocket|\b110\b|\b126")),
     ("compact", re.compile(
         r"\bprima\b|\bmju\b|\bmu-?\d|µ|espio|superzoom|zoom ?\d{2,3}\b(?! ?mm|-\d)|\baf ?-?\d{3}\b|\b[a-z]{0,2}35 ?af\b|\baf ?35"
-        r"|\bl35\b|\btrip\b|sure ?shot|autoboy|\briva\b|\bxa ?\d?\b|contax t ?[2-5]\b|minilux|leica c ?[1-3]\b|leica mini"
+        r"|\bl35\b|\btrip\b|sure ?shot|autoboy|\briva\b|\boptio\b|\bxa ?\d?\b|contax t ?[2-5]\b|minilux|leica c ?[1-3]\b|leica mini"
         r"|\bz2x\b|big mini|yashica t ?[2-5]\b|\b(?:28|35) ?ti\b|\bgr ?1[sv]?\b|stylus|\bultra f9\b|euming|optima|vitolux"
         r"|super shot|top shot|\bis-?\d{1,3}\b|\bez-?35|reusable|wiederverwendbar|\bbv ?35|\bfex\b|halina|tronic\b"
         r"|datematic|canomati[ck]|kanomatic|discomini"
