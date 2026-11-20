@@ -22,6 +22,7 @@ INTERESTING_MARGIN = notify.MAIL_MARGIN
 INTERESTING_HEADER = ["Модель", "Цена, €", "Vinted: средняя цена продажи, €", "Дешевле на, €", "Дешевле на, %",
                       "Vinted: продано", "Заголовок", "Состояние", "Комплект", "Выставлено", "Флаги", "Ссылка", "id"]
 CANON_SHEET = "Canon"
+CANON_ACTIVE_SHEET = "Canon в продаже"  # only the cameras on sale now (the models of the sweep)
 CANON_HEADER = ["Модель", "Статус", "Цена, €", "VB", "Vinted: средняя цена продажи, €", "Дешевле Vinted на, €",
                 "Заголовок", "Состояние", "Комплект", "Выставлено", "Последний раз активно", "Снято (обнаружено)",
                 "Флаги", "Ссылка", "id"]
@@ -241,6 +242,31 @@ def canon_rows(cards, vinted, run):
     return rows
 
 
+def canon_active_rows(cards, vinted, vinted_items, run):
+    """The cameras of the sweep's models on sale now (status 'активно', not waiting for their page check), in
+    the sweep's order, the cheapest first; the last row: Vinted's average sale price of these models."""
+    order = {m: n for n, m in enumerate(ka_tick.SWEEP_MODELS)}
+    picked = [c for c in cards if c.get("model") in order and not c.get("closed_at") and not c.get("recheck")
+              and c["status"] == "active"]
+    picked.sort(key=lambda c: (order[c["model"]], report.current_price(c) or 0, -c["id"]))
+    header = ["Модель", "Цена, €", "VB", "Vinted: средняя цена продажи, €", "Дешевле Vinted на, €", "Заголовок",
+              "Состояние", "Комплект", "Выставлено", "Последний раз активно", "Флаги", "Ссылка", "id"]
+    rows = [header + [f"Обновлено ({run['at']})"]]
+    for c in picked:
+        price = report.current_price(c)
+        mean = (vinted.get(c["model"]) or {}).get("sale_mean")
+        rows.append([c["model"], _num(price), "да" if c.get("vb") else "", _num(mean),
+                     _num(mean - price) if mean is not None and price is not None else "", c["title"],
+                     c.get("condition") or "", report.KIT_RU.get(c.get("kit"), c.get("kit") or ""),
+                     c.get("listed_at") or "", c.get("last_seen_active") or "", _flags(c), c["url"], c["id"]])
+    sales = [report.current_price(i) for i in vinted_items if i.get("status") == "sold" and i.get("model") in order
+             and i.get("group") == "list" and not report.stat_flags(i) & report.SALES_EXCLUDED
+             and report.current_price(i) is not None]
+    rows.append(["Средняя цена продаж на Vinted, все модели", "", "", _mean(sales), "", f"продаж: {len(sales)}"]
+                + [""] * 7)
+    return rows
+
+
 def load_vinted(root):
     """Vinted's cameras from the same data repo (none without it)."""
     if root is None:
@@ -263,6 +289,7 @@ def write(writer, cards, run, root=None):
     vinted = vinted_model_stats(load_vinted(root))
     writer.replace(INTERESTING_SHEET, interesting_rows(cards, vinted), links=True)
     writer.replace(CANON_SHEET, canon_rows(cards, vinted, run), links=True)
+    writer.replace(CANON_ACTIVE_SHEET, canon_active_rows(cards, vinted, load_vinted(root), run), links=True)
     writer._get(RUNS_SHEET, RUNS_HEADER).insert_row(runs_row(run), index=2, value_input_option="RAW")
 
 
