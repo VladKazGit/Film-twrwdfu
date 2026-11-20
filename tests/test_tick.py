@@ -195,6 +195,11 @@ def main():
         # Tick 5: next morning -> full scan, new items flagged night, daily exports.
         pages[1] = [rec(1020, "Olympus OM-1 analog", 120.0), rec(1021, "Zenit-E Kamera", 15.0)] + pages[1]
         r5 = tick.run_tick(store, FakeClient(pages), now="2026-10-17 07:07")
+        # 20.11.2026: 'Выгодно' needs the model's mean sale price: a sold Zenit E makes one (the 1 EUR placeholder does not)
+        r5["items"].append({"id": 9_900_000_001, "group": "list", "model": "Zenit E", "status": "sold", "flags": [],
+                            "price_start": 40.0, "price_final": 40.0, "price_history": [{"at": "x", "price": 40.0}],
+                            "title": "Zenit E sold", "url": "https://www.vinted.de/items/9900000001",
+                            "first_seen": "2026-09-01 10:00", "sold_detected_at": "2026-09-01 12:00"})
         a = store.load_active()
         assert r5["run"]["full_scan"] and r5["daily"] and "night" in a[1020]["flags"]
         assert (store.root / "listings.csv").exists() and (store.root / "README.md").exists()
@@ -250,7 +255,8 @@ def main():
         assert updates["new_rows_colors"] == updates["fresh_rows_colors"] == ["Выгодно", "Список"]
         cheap_rows = ss.sheets["Выгодно"].rows
         assert cheap_rows[0][-2:] == [report.NEW_HEADER, report.FRESH_HEADER] and len(cheap_rows[0]) == n + 3, "flags stay at n+1, n+2"
-        assert {r[0] for r in cheap_rows[1:] if r[-2] == "да"} == {1021} and {r[0] for r in cheap_rows[1:] if r[-1] == "да"} == {1021}
+        # 20.11.2026: 'Выгодно' needs a mean sale price of the model; Zenit E has none (its only sale is a 1 EUR placeholder)
+        assert [r[0] for r in cheap_rows[1:]] == [1021], "a sale price of Zenit E: in Выгодно"
         assert ss.sheets["Список"].rows[0][7:9] == [sheets.MODELS_SALE_PRICE_HEADER, "Ссылка"], "the link in column I"
         statuses = [r[3] for r in ss.sheets["Список"].rows[1:]]
         assert statuses == sorted(statuses, key=lambda s: s not in ("активен", "зарезервирован")), "on sale first"
@@ -287,7 +293,7 @@ def main():
         assert runs[0] == sheets.RUNS_HEADER and runs[2][1] == "check-setup" and len(runs) == 3, "newest on top"
         assert updates["runs_header_v5"] and runs[1][1] == 0, "first tick: nothing counted as new in 'До 20 €'"
         assert updates["runs_newest_first"]
-        assert updates["cheap_ids"] == [1021]
+        assert updates["cheap_ids"] == [1021]  # 20.11.2026: no sale price of the model, so not in 'Выгодно'
         # Links clickable, other text kept literal.
         fast_ws = ss.sheets["Быстрые продажи"]
         link_col = fast_ws.rows[0].index("Ссылка")
@@ -439,6 +445,7 @@ def main():
         assert "Остальные" in ss.sheets
         sales = ss.sheets["Продажи"].rows
         ids = [r[-1].rsplit("/", 1)[-1] for r in sales[1:]]
+        ids = [x for x in ids if x != "9900000001"]  # the 20.11 Zenit E sale added for 'Выгодно'
         assert sales[0] == report.SALES_HEADER and len(sales[0]) == 14 and ids == ["1011", "400", "1010"], ids
         fm2 = dict(zip(report.SALES_HEADER, sales[1]))
         assert fm2["Модель"] == "Nikon FM2" and fm2["Цена при продаже, €"] == 140.0 and fm2["Средняя цена продажи модели, €"] != "" and fm2["История цены, €"] == "150 → 140"

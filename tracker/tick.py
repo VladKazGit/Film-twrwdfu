@@ -87,6 +87,8 @@ FRESH_PER_CHEAP = 5  # a cheap check takes a few models too, so the round stays 
 FRESH_PAGE_ITEMS, FRESH_MAX_PAGES = 35, 8
 FRESH_PRIORITY_PAGE_ITEMS, FRESH_PRIORITY_MAX_PAGES = 25, 10
 FRESH_PRIORITY = ("Canon AE-1", "Yashica FX-3 Super 2000", "Olympus OM-10")
+# Every Canon of the list is searched every hour too (11.11.2026 -> 20.11.2026, the user's request), whatever its sales.
+FRESH_HOURLY_BRANDS = ("Canon",)
 PAGE_RECHECK_MIN = 7 * 1440  # a camera the fresh search keeps seeing: its page every week
 # Item pages of tracked listings (05.11.2026): every 30 minutes in the first hour, then daily up to
 # a week on Vinted, then weekly. A listing gone from the pages read is still opened at once.
@@ -522,7 +524,8 @@ def fresh_search(state, client, active, closed, now, stats, changed, quick=False
     last_run = st["last_run"]
     sold = Counter(i["model"] for i in list(active.values()) + list(closed.values())
                    if i.get("group") == "list" and i.get("status") == "sold" and not report.stat_flags(i) & report.SALES_EXCLUDED)
-    every = {n: FRESH_EVERY_MIN if sold[n] >= FRESH_RARE_SALES or n in FRESH_PRIORITY else FRESH_RARE_EVERY_MIN for n in names}
+    every = {n: FRESH_EVERY_MIN if sold[n] >= FRESH_RARE_SALES or n in FRESH_PRIORITY or n.startswith(FRESH_HOURLY_BRANDS)
+             else FRESH_RARE_EVERY_MIN for n in names}
     due = sorted((n for n in names if not last_run.get(n) or clock.minutes_between(last_run[n], now) >= every[n] - 5),
                  key=lambda n: last_run.get(n) or "")[:limit]
     live = Counter(i["model"] for i in active.values() if i.get("group") == "list" and i["status"] == "active")
@@ -1363,7 +1366,9 @@ def write_sheets(writer, result, state_flags):
     list_rows = report.move_column(list_rows, "Ссылка", list_rows[0].index(sheets.MODELS_SALE_PRICE_HEADER) + 1)
     writer.replace(sheets.LIST_SHEET, list_rows, links=True)
     candidates = report.cheap_cameras(items, sheets.CHEAP_MAX_PRICE)
-    cheap = [i for i in candidates if i.get("model") and sheets.model_key(i["model"]) in allowed and tracked(i)]
+    # 'Выгодно' shows only the cameras whose model has a mean sale price (20.11.2026, the user's request)
+    cheap = [i for i in candidates if i.get("model") and sheets.model_key(i["model"]) in allowed and tracked(i)
+             and i["model"] in sale]
     print(f"sheets: cheap sheet {len(cheap)} of {len(candidates)} list cameras at <= {sheets.CHEAP_MAX_PRICE:.0f} EUR"
           f" (the others have models missing from the models sheet)")
     # 'До 20 €' is mostly old cheap cameras found by search: mark what entered the sheet in 12 h.
