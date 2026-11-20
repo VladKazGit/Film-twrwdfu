@@ -38,16 +38,16 @@ def main():
                   dict(card(8, "Zenit E", 90.0, status="sold"),
                        listed_after="2026-10-16 10:00", sold_detected_at="2026-10-20 10:00")]
         items[1]["price_history"].append({"at": "2026-10-18 10:45", "price": 20.0})
-        assert notify.run(items, state, "2026-10-18 10:47", sent.append) == 3 and len(sent) == 2
+        assert notify.run(items, state, "2026-10-18 10:47", sent.append) == 1 and len(sent) == 2  # 20.11: Canon AE-1 has no sale price, no letter
         body = sent[1].get_body(("plain",)).get_content()
-        assert "items/3" in body and "items/4" in body and "items/2" in body and "items/5" not in body
+        assert "items/3" in body and "items/4" not in body and "items/2" not in body and "items/5" not in body
         assert "items/9" not in body and "Praktica" not in body
         assert "items/12" not in body and "items/10" not in body, "a skipped model; 15 EUR is not 50 below 40"
-        assert "найдено поиском" in body and sent[1]["Subject"].startswith("⚡ Vinted «Выгодно»: Zenit E — 8 € и ещё 2")
+        assert "найдено поиском" not in body and sent[1]["Subject"].startswith("⚡ Vinted «Выгодно»: Zenit E — 8 €")
         html = sent[1].get_body(("html",)).get_content()
         assert '<img src="https://images1.vinted.net/p3.jpg"' in html and "Kamera funktioniert" in html and "Kamera funktioniert" in body
         assert "Продажи Zenit E в базе: в среднем 80 € (от 70 € до 90 €, продаж: 2)" in body, body
-        assert "Продажи Canon AE-1 в базе: пока нет" in body and "в среднем 80 €" in html
+        assert "Canon AE-1" not in body and "в среднем 80 €" in html
         assert "Продаются в среднем за: 3 дня" in body and "Продаются в среднем за: 3 дня" in html, body
         assert body.index("Zenit E — 8 €") < body.index("Продажи Zenit E") < body.index("items/3"), "paragraphs in order"
         assert notify.run(items, state, "2026-10-18 10:52", sent.append) == 0 and len(sent) == 2, "each camera once"

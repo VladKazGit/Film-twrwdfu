@@ -157,7 +157,8 @@ def worth_a_letter(item, stats):
         return False
     price = report.current_price(item)
     known = stats.get(item.get("model"))
-    return known is None or (price is not None and price <= known[1] - MAIL_MARGIN)
+    # no mean sale price yet: no letter (20.11.2026, the user's request)
+    return known is not None and (price is not None and price <= known[1] - MAIL_MARGIN)
 
 
 def run(items, state, now, send_fn=send):
