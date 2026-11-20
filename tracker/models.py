@@ -392,7 +392,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 73
+VERSION = 74
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -1267,7 +1267,7 @@ _JUNK = [
                                      # the Canon T line, 12.11.2026: 'Canon T70', 'Canon T-50 + FD 50mm', 'T90 Canon'
                                      r"|\bcanon\b.*\bt ?-?(?:50|60|70|80|90)\b|\bt ?-?(?:50|60|70|80|90)\b.*\bcanon\b"
                                      # Nikon AS-1, an accessory (16.11.2026)
-                                     r"|\bnikon as-?1\b")),
+                                     r"|\bnikon as-?1\b|lens ?adapter")),
     ("action camera / drone", re.compile(
         r"\bdji\b|\bosmo\b|gimbal|zenmuse|gopro|go pro|insta ?360|\bdrone|\baction ?cam")),  # not '4K': Zorki 4K
     ("movie / video / projector", re.compile(

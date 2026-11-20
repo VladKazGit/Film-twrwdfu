@@ -295,7 +295,7 @@ ADAPTER = {
     "da": ["adapter", "adapterring", "adaptere", "adapterringe"],
     "de": ["Adapter", "Adapterring", "Objektivadapter", "Bajonettadapter", "Adapterringe", "Objektivadaptern"],
     "el": ["αντάπτορας", "προσαρμογέας", "αντάπτορες", "προσαρμογείς"],
-    "en": ["adapter", "adaptor", "mount adapter", "adapter ring", "lens adapter", "adapters", "adaptors", "adapter rings", "lens adapters", "mount adapters"],
+    "en": ["connecter", "connector", "connecteur", "adapter", "adaptor", "mount adapter", "adapter ring", "lens adapter", "adapters", "adaptors", "adapter rings", "lens adapters", "mount adapters"],
     "es": ["adaptador", "anillo adaptador", "adaptadores", "anillos adaptadores"],
     "et": ["adapter", "adapterid"],
     "fi": ["adapteri", "sovitin", "adapterit", "sovittimet"],
