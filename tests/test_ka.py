@@ -194,7 +194,8 @@ def test_sweep_and_interesting():
         active = ka_report.canon_active_rows(list(cards.values()), ka_report.vinted_model_stats(vinted), vinted,
                                              result["run"])
         assert [r[0] for r in active[1:]] == ["Canon AE-1", "Средняя цена продаж на Vinted, все модели"], active
-        assert active[-1][3] == 230 and active[-1][5] == "продаж: 2", active[-1]
+        assert active[-1][2] == 230 and active[-1][5] == "продаж: 2", active[-1]
+        assert active[1][2] == 230 and active[0][2] == "Vinted: средняя цена продажи, €", active
         # missing from the searches: 'проверяется' in the list, not interesting until its page is read
         picked = next(c for c in cards.values() if c["id"] == rows[1][-1])
         picked["recheck"] = True

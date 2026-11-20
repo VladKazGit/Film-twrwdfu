@@ -249,20 +249,20 @@ def canon_active_rows(cards, vinted, vinted_items, run):
     picked = [c for c in cards if c.get("model") in order and not c.get("closed_at") and not c.get("recheck")
               and c["status"] == "active"]
     picked.sort(key=lambda c: (order[c["model"]], report.current_price(c) or 0, -c["id"]))
-    header = ["Модель", "Цена, €", "VB", "Vinted: средняя цена продажи, €", "Дешевле Vinted на, €", "Заголовок",
+    header = ["Модель", "Цена, €", "Vinted: средняя цена продажи, €", "VB", "Дешевле Vinted на, €", "Заголовок",
               "Состояние", "Комплект", "Выставлено", "Последний раз активно", "Флаги", "Ссылка", "id"]
     rows = [header + [f"Обновлено ({run['at']})"]]
     for c in picked:
         price = report.current_price(c)
         mean = (vinted.get(c["model"]) or {}).get("sale_mean")
-        rows.append([c["model"], _num(price), "да" if c.get("vb") else "", _num(mean),
+        rows.append([c["model"], _num(price), _num(mean), "да" if c.get("vb") else "",
                      _num(mean - price) if mean is not None and price is not None else "", c["title"],
                      c.get("condition") or "", report.KIT_RU.get(c.get("kit"), c.get("kit") or ""),
                      c.get("listed_at") or "", c.get("last_seen_active") or "", _flags(c), c["url"], c["id"]])
     sales = [report.current_price(i) for i in vinted_items if i.get("status") == "sold" and i.get("model") in order
              and i.get("group") == "list" and not report.stat_flags(i) & report.SALES_EXCLUDED
              and report.current_price(i) is not None]
-    rows.append(["Средняя цена продаж на Vinted, все модели", "", "", _mean(sales), "", f"продаж: {len(sales)}"]
+    rows.append(["Средняя цена продаж на Vinted, все модели", "", _mean(sales), "", "", f"продаж: {len(sales)}"]
                 + [""] * 7)
     return rows
 
