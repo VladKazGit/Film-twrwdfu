@@ -3,7 +3,8 @@ name: kleinanzeigen
 # The Kleinanzeigen collector (tracker.ka_loop): its own chain of runs on its own machine, like the
 # lenses'. A check every ~30 minutes in the 07:00-00:00 Berlin window; while the first collection runs,
 # one check right after another. Start: Run workflow by hand. Stop: Disable workflow (after the current
-# run) and cancel the run (at once).
+# run) and cancel the run (at once). until_done: checks until a sweep is over, then no next run (a one-off
+# check while the collector is off - 20.11.2026, the Canon the user follows).
 on:
   workflow_dispatch:
     inputs:
@@ -19,6 +20,10 @@ on:
         description: "Time of the first check, from the previous run (internal)"
         type: string
         default: ""
+      until_done:
+        description: "Stop when the sweep is over, start no next run"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -57,13 +62,13 @@ jobs:
           NEXT_CHECK: ${{ inputs.next_check }}
         run: >-
           python -u -m tracker.ka_loop ${{ inputs.force && '--force' || '' }} ${{ inputs.chained && '--chained' || '' }}
-          --next-check "$NEXT_CHECK"
+          --next-check "$NEXT_CHECK" ${{ inputs.until_done && '--until-done' || '' }}
 
       - name: Start the next run
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.loop.outputs.done != 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
           NEXT_CHECK: ${{ steps.loop.outputs.next_check }}
         run: >-
           gh workflow run kleinanzeigen.yml --repo "${{ github.repository }}" --ref "${{ github.ref_name }}"
-          -f chained=true -f next_check="$NEXT_CHECK"
+          -f chained=true -f next_check="$NEXT_CHECK" -f until_done=${{ inputs.until_done }}

@@ -157,35 +157,40 @@ def test_checks():
 
 
 def test_sweep_and_interesting():
-    """A finished model search that no longer shows a listing reads its page; a new SWEEP_VERSION runs every
-    model's search once more; 'Интересно' lists cameras 50 EUR below Vinted's mean sale price."""
+    """A finished model search that no longer shows a listing reads its page; a new SWEEP_VERSION runs the
+    search of every model of SWEEP_MODELS once more; 'Интересно' lists cameras 50 EUR below Vinted's mean sale
+    price; 'Canon' the sweep's models on sale and taken down by it."""
     with tempfile.TemporaryDirectory() as tmp:
         store = DataStore(tmp)
-        fm2 = rec(200, "Nikon FM2 Gehäuse", "12.10.2026", "350 €", kind=None)
-        cheap = rec(201, "Nikon FM2 analog", "11.10.2026", "150 €", kind=None)
-        ka_tick.run_check(store, FakeClient(searches={("Nikon FM2", 1): [fm2, cheap]}), NOW)
+        fm2 = rec(200, "Canon AE-1 Gehäuse", "12.10.2026", "350 €", kind=None)
+        cheap = rec(201, "Canon AE-1 analog", "11.10.2026", "150 €", kind=None)
+        ka_tick.run_check(store, FakeClient(searches={("Canon AE-1", 1): [fm2, cheap]}), NOW)
         state = store.load_state()
         assert state["model_search"]["sweep"] == {"version": ka_tick.SWEEP_VERSION, "left": [], "status": "done"}
 
         # a new sweep: every model searched again to the end; the FM2 at 350 EUR is gone from its results
         state["model_search"]["sweep"]["version"] = ka_tick.SWEEP_VERSION - 1
         store.save_state(state)
-        client = FakeClient(searches={("Nikon FM2", 1): [cheap]},
+        client = FakeClient(searches={("Canon AE-1", 1): [cheap]},
                             ads={fm2["url"]: {"status": "gone", "price": None, "vb": False, "date": None,
                                               "condition": None}})
-        result = ka_tick.run_check(store, client, "2026-10-28 12:30")
+        result = ka_tick.run_check(store, client, "2026-11-20 12:30")
         cards = {c["id"]: c for c in result["cards"]}
-        assert len({t for t, _ in client.searched}) == len(models.MODEL_INFO), "every model searched again"
+        assert {t for t, _ in client.searched} == set(ka_tick.SWEEP_MODELS), "the sweep's models searched again"
         assert cards[200]["status"] == "removed" and not cards[200].get("recheck"), cards[200]
         assert cards[201]["status"] == "active" and fm2["url"] in client.opened
         assert result["run"]["recheck"] == 1 and store.load_state()["model_search"]["sweep"]["status"] == "done"
         assert not result["backfill"], "the sweep is over: no checks back to back"
 
-        vinted = [{"id": i, "group": "list", "model": "Nikon FM2", "status": "sold", "price_start": p,
+        vinted = [{"id": i, "group": "list", "model": "Canon AE-1", "status": "sold", "price_start": p,
                    "price_history": [], "flags": []} for i, p in ((1, 250.0), (2, 210.0))]
         rows = ka_report.interesting_rows(list(cards.values()), ka_report.vinted_model_stats(vinted))
         assert rows[0] == ka_report.INTERESTING_HEADER and len(rows) == 2, rows
-        assert rows[1][:6] == ["Nikon FM2", 150.0, 230, 80, "35 %", 2], rows[1]
+        assert rows[1][:6] == ["Canon AE-1", 150.0, 230, 80, "35 %", 2], rows[1]
+        canon = ka_report.canon_rows(list(cards.values()), ka_report.vinted_model_stats(vinted), result["run"])
+        assert canon[0][:-1] == ka_report.CANON_HEADER and "закончена" in canon[0][-1], canon[0]
+        assert [r[:3] for r in canon[1:]] == [["Canon AE-1", "активно", 150.0], ["Canon AE-1", "снято", 350.0]], canon
+        assert canon[1][5] == 80, "80 EUR below Vinted's mean sale price"
         # missing from the searches: 'проверяется' in the list, not interesting until its page is read
         picked = next(c for c in cards.values() if c["id"] == rows[1][-1])
         picked["recheck"] = True
@@ -212,6 +217,19 @@ def test_loop():
     assert ka_loop.next_check(at, True, rng) - at == timedelta(seconds=ka_loop.BACKFILL_PAUSE_S)
     night = ka_loop.next_check(datetime(2026, 10, 28, 23, 55, tzinfo=BERLIN), False, rng)
     assert (night.day, night.hour) == (29, 7) and 3 <= night.minute <= 12, night
+    # until_done: checks back to back while the sweep runs (10), then the run stops with no next run
+    clock = {"t": at}
+    codes = iter([ka_loop.PENDING, ka_loop.PENDING, 0])
+
+    def sleep(seconds):
+        clock["t"] += timedelta(seconds=seconds)
+
+    def check():
+        clock["t"] += timedelta(minutes=20)
+        return next(codes)
+    failures, when = ka_loop.run_loop(lambda: clock["t"], sleep, check, force=True, log=lambda _: None,
+                                      rng=rng, until_done=True)
+    assert (failures, when) == (0, None) and clock["t"] - at < timedelta(hours=2), clock["t"]
 
 
 def main():

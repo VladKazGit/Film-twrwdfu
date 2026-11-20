@@ -5,7 +5,10 @@ one check right after another. Before each check the latest code from main is fe
 time budget ends the workflow starts the next run and hands it the time of its first check
 (--next-check), so a hand-over adds no check of its own.
 
-Run: python -m tracker.ka_loop [--force] [--chained] [--next-check ISO-TIME]
+With --until-done the run stops once a check no longer asks for the next one at once (the first collection
+or a sweep is over) and starts no next run (a one-off check while the collector is off).
+
+Run: python -m tracker.ka_loop [--force] [--chained] [--next-check ISO-TIME] [--until-done]
 """
 import argparse
 import os
@@ -47,10 +50,11 @@ def first_check(start, given, rng):
     return when if when.hour >= WINDOW_START_HOUR else next_check(when, True, rng)
 
 
-def run_loop(now_fn, sleep_fn, check_fn, force=False, first=None, budget_min=BUDGET_MIN, log=print, rng=None):
+def run_loop(now_fn, sleep_fn, check_fn, force=False, first=None, budget_min=BUDGET_MIN, log=print, rng=None,
+             until_done=False):
     """Checks until the budget ends. Returns (the number of failed checks, the time of the next check,
-    for the next run). A run that has not checked yet (night) sleeps until its budget ends, so runs
-    never chain in a tight loop."""
+    for the next run; None: until_done and done). A run that has not checked yet (night) sleeps until its
+    budget ends, so runs never chain in a tight loop."""
     rng = rng or random.Random()
     start = now_fn()
     deadline = (start.astimezone(timezone.utc) + timedelta(minutes=budget_min)).astimezone(start.tzinfo)
@@ -70,6 +74,9 @@ def run_loop(now_fn, sleep_fn, check_fn, force=False, first=None, budget_min=BUD
         ok = code in (0, PENDING)
         failures += 0 if ok else 1
         in_row = 0 if ok else in_row + 1
+        if until_done and code == 0:
+            log("ka loop: done; no next run")
+            return failures, None
         if in_row >= FAILED_IN_ROW_MAX:
             log(f"ka loop: {in_row} checks failed in a row; handing over to a new run (a new machine)")
             return failures, now_fn()
@@ -91,6 +98,7 @@ def main():
     parser.add_argument("--force", action="store_true", help="check at once, even outside the window")
     parser.add_argument("--chained", action="store_true", help="started by the previous run")
     parser.add_argument("--next-check", default="", help="the first check's time, from the previous run (ISO)")
+    parser.add_argument("--until-done", action="store_true", help="stop when no check is pending, no next run")
     args = parser.parse_args()
 
     def check():
@@ -104,10 +112,11 @@ def main():
         first = datetime.fromisoformat(args.next_check).astimezone(env.BERLIN)
     elif args.chained:
         first = next_check(env.now_berlin(), False, rng)
-    failures, when = run_loop(env.now_berlin, time.sleep, check, force=args.force, first=first, rng=rng)
+    failures, when = run_loop(env.now_berlin, time.sleep, check, force=args.force, first=first, rng=rng,
+                              until_done=args.until_done)
     if os.environ.get("GITHUB_OUTPUT"):  # for the step that starts the next run
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
-            out.write(f"next_check={when.isoformat(timespec='seconds')}\n")
+            out.write("done=true\n" if when is None else f"next_check={when.isoformat(timespec='seconds')}\n")
     if failures:
         print(f"ka loop: {failures} check(s) failed")
     return 1 if failures else 0

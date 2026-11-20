@@ -50,8 +50,13 @@ AD_PAGES_MAX = 10
 RECHECK_PAGES_MAX = 40
 # Bump to run every model's search once more to the end (MODEL_PAGES, checks back to back): the open
 # cards a finished search no longer shows get their page read. 1: 30.10.2026, deleted listings still shown
-# as on sale after the first collection.
-SWEEP_VERSION = 1
+# as on sale after the first collection. 2: 20.11.2026, only the Canon the user follows (SWEEP_MODELS; the
+# collector had been off since 4.11), with their own sheet 'Canon' (ka_report.canon_rows).
+SWEEP_VERSION = 2
+SWEEP_MODELS = ("Canon 7", "Canon A-1", "Canon AE-1", "Canon AE-1 Program", "Canon AL-1", "Canon AT-1", "Canon AV-1",
+                "Canon Canonet QL17", "Canon EF", "Canon F-1", "Canon F-1n", "Canon FP", "Canon FT QL", "Canon FTb",
+                "Canon FX", "Canon New F-1", "Canon P", "Canon Pellix", "Canon TL", "Canon TLb", "Canon TX")
+SWEEP_SINCE = "2026-11-20"  # taken down from this day on: found by this sweep
 SWEEP_RECHECK_MAX = 200
 OFFERS_PRICE = 5.0  # 'VB' up to this asks for offers ('1 € VB'): no price, skipped
 # Page checks by the listing's age in minutes: (up to, minutes between checks)
@@ -231,7 +236,8 @@ class Check:
         st = self.state.setdefault("model_search", {"last_run": {}, "backfill": "running"})
         sweep = st.get("sweep") or {}
         if st["backfill"] == "done" and sweep.get("version") != SWEEP_VERSION:
-            sweep = st["sweep"] = {"version": SWEEP_VERSION, "left": list(models.MODEL_INFO), "status": "running"}
+            sweep = st["sweep"] = {"version": SWEEP_VERSION, "left": list(SWEEP_MODELS or models.MODEL_INFO),
+                                   "status": "running"}
         return sweep
 
     def sweeping(self):

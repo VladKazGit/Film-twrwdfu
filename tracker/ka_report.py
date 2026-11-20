@@ -2,7 +2,8 @@
 
 Kleinanzeigen spreadsheet (secret KA_SHEET_ID): 'Список' (every camera, newest listings first),
 'Снятые' (taken down: sold or withdrawn - Kleinanzeigen does not tell), 'Сводка' (per model),
-'Запуски' (a row per check, newest on top).
+'Интересно', 'Canon' (the models of the sweep, ka_tick.SWEEP_MODELS: on sale and taken down since the
+sweep began), 'Запуски' (a row per check, newest on top).
 Comparison spreadsheet (secret COMPARE_SHEET_ID): 'Сравнение' - per model, Vinted next to
 Kleinanzeigen: listings and their mean price, sales (taken down on Kleinanzeigen) and their mean
 price, how long they were on sale; then the latest price snapshot of other marketplaces (tracker.snapshot). Both without placeholder prices, flagged listings and bundles.
@@ -10,7 +11,7 @@ By brand: Canon, Nikon, Zenit first, then the others A-Z; within a brand the mos
 """
 import statistics
 
-from . import clock, models, notify, report, sheets, snapshot
+from . import clock, ka_tick, models, notify, report, sheets, snapshot
 from .store import DataStore
 
 LIST_SHEET, REMOVED_SHEET, SUMMARY_SHEET, RUNS_SHEET = "Список", "Снятые", "Сводка", "Запуски"
@@ -20,6 +21,10 @@ INTERESTING_SHEET = "Интересно"
 INTERESTING_MARGIN = notify.MAIL_MARGIN
 INTERESTING_HEADER = ["Модель", "Цена, €", "Vinted: средняя цена продажи, €", "Дешевле на, €", "Дешевле на, %",
                       "Vinted: продано", "Заголовок", "Состояние", "Комплект", "Выставлено", "Флаги", "Ссылка", "id"]
+CANON_SHEET = "Canon"
+CANON_HEADER = ["Модель", "Статус", "Цена, €", "VB", "Vinted: средняя цена продажи, €", "Дешевле Vinted на, €",
+                "Заголовок", "Состояние", "Комплект", "Выставлено", "Последний раз активно", "Снято (обнаружено)",
+                "Флаги", "Ссылка", "id"]
 COMPARE_SHEET = "Сравнение"
 COMPARE_BRANDS = ["Canon", "Nikon", "Zenit"]  # first in 'Сравнение', the other brands after them A-Z
 NEW_HEADER = "Новая (12 ч)"
@@ -212,6 +217,30 @@ def interesting_rows(cards, vinted):
     return rows
 
 
+def canon_rows(cards, vinted, run):
+    """The models of the sweep (ka_tick.SWEEP_MODELS, in their order): listings on sale (those still waiting
+    for their page check - 'проверяется') and those taken down since the sweep began (ka_tick.SWEEP_SINCE);
+    on sale first, the cheapest first. The last header cell tells whether the check is still running."""
+    order = {m: n for n, m in enumerate(ka_tick.SWEEP_MODELS)}
+    picked = [c for c in cards if c.get("model") in order
+              and (not c.get("closed_at") or (c.get("removed_detected_at") or "") >= ka_tick.SWEEP_SINCE)]
+
+    def rank(c):
+        group = 2 if c.get("closed_at") else 1 if c.get("recheck") else 0
+        return order[c["model"]], group, report.current_price(c) or 0, -c["id"]
+    running = run.get("backfill") == "перепроверка"
+    rows = [CANON_HEADER + [f"Проверка Canon {'идёт' if running else 'закончена'} ({run['at']})"]]
+    for c in sorted(picked, key=rank):
+        price = report.current_price(c)
+        mean = (vinted.get(c["model"]) or {}).get("sale_mean")
+        rows.append([c["model"], status_ru(c), _num(price), "да" if c.get("vb") else "", _num(mean),
+                     _num(mean - price) if mean is not None and price is not None else "", c["title"],
+                     c.get("condition") or "", report.KIT_RU.get(c.get("kit"), c.get("kit") or ""),
+                     c.get("listed_at") or "", c.get("last_seen_active") or "", c.get("removed_detected_at") or "",
+                     _flags(c), c["url"], c["id"]])
+    return rows
+
+
 def load_vinted(root):
     """Vinted's cameras from the same data repo (none without it)."""
     if root is None:
@@ -231,7 +260,9 @@ def write(writer, cards, run, root=None):
         print(f"ka sheets: new-row colours not applied: {type(exc).__name__}")
     writer.replace(REMOVED_SHEET, removed_rows(cards, now), links=True)
     writer.replace(SUMMARY_SHEET, summary_rows(cards, now), links=True)
-    writer.replace(INTERESTING_SHEET, interesting_rows(cards, vinted_model_stats(load_vinted(root))), links=True)
+    vinted = vinted_model_stats(load_vinted(root))
+    writer.replace(INTERESTING_SHEET, interesting_rows(cards, vinted), links=True)
+    writer.replace(CANON_SHEET, canon_rows(cards, vinted, run), links=True)
     writer._get(RUNS_SHEET, RUNS_HEADER).insert_row(runs_row(run), index=2, value_input_option="RAW")
 
 
