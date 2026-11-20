@@ -247,7 +247,7 @@ def canon_active_rows(cards, vinted, vinted_items, run):
     the sweep's order, the cheapest first; the last row: Vinted's average sale price of these models."""
     order = {m: n for n, m in enumerate(ka_tick.SWEEP_MODELS)}
     picked = [c for c in cards if c.get("model") in order and not c.get("closed_at") and not c.get("recheck")
-              and c["status"] == "active"]
+              and c["status"] == "active" and c.get("shipping") == "ship" and not c.get("pay_on_pickup_paypal")]
     picked.sort(key=lambda c: (order[c["model"]], report.current_price(c) or 0, -c["id"]))
     header = ["Модель", "Цена, €", "Vinted: средняя цена продажи, €", "VB", "Дешевле Vinted на, €", "Заголовок",
               "Состояние", "Комплект", "Выставлено", "Последний раз активно", "Флаги", "Ссылка", "id"]

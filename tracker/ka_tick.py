@@ -133,6 +133,8 @@ def apply_ad(card, ad, now):
         card["vb"] = ad["vb"]
     if ad.get("condition"):
         card["condition"] = ad["condition"]
+    card["shipping"] = ad.get("shipping")
+    card["pay_on_pickup_paypal"] = bool(ad.get("pay_on_pickup_paypal"))
     if not card.get("listed_at") and ad.get("date"):
         card["listed_at"] = ad["date"]
     if ad.get("description") and len(ad["description"]) > len(card.get("description") or ""):

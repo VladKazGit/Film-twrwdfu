@@ -50,7 +50,7 @@ class FakeClient:
     def ad_page(self, url):
         self.requests_made += 1
         self.opened.append(url)
-        return self.ads.get(url, {"status": "active", "price": None, "vb": False, "date": None, "condition": None})
+        return self.ads.get(url, {"status": "active", "price": None, "vb": False, "date": None, "condition": None, "shipping": "ship", "pay_on_pickup_paypal": False})
 
 
 def test_parsers():
@@ -81,7 +81,11 @@ def test_parsers():
           '<p id="viewad-description-text" class="x">Getestet &amp; sauber.<br/>Mit Objektiv.</p>')
     assert kleinanzeigen.parse_ad(ad, url, url) == {"status": "active", "price": 130.0, "vb": True,
                                                    "date": "2026-10-20", "condition": "Sehr Gut",
-                                                   "description": "Getestet & sauber.\nMit Objektiv."}
+                                                   "description": "Getestet & sauber.\nMit Objektiv.", "shipping": None, "pay_on_pickup_paypal": False}
+    assert kleinanzeigen.pays_on_pickup_paypal("Bezahlung vor Ort oder bei Versand per PayPal.")
+    assert not kleinanzeigen.pays_on_pickup_paypal("Versand möglich, Zahlung per PayPal.")
+    assert kleinanzeigen.shipping_of("<b>Nur Abholung</b>") == "pickup"
+    assert kleinanzeigen.shipping_of("Versand möglich") == "ship"
     reserved = ad.replace(">Canon AE-1<", ">Reserviert • Canon AE-1<")
     assert kleinanzeigen.parse_ad(reserved, url, url)["status"] == "reserved"
     assert kleinanzeigen.parse_ad("<html>Foto</html>", "https://www.kleinanzeigen.de/s-foto/c245", url)["status"] == "gone"
@@ -191,9 +195,14 @@ def test_sweep_and_interesting():
         assert canon[0][:-1] == ka_report.CANON_HEADER and "закончена" in canon[0][-1], canon[0]
         assert [r[:3] for r in canon[1:]] == [["Canon AE-1", "активно", 150.0], ["Canon AE-1", "снято", 350.0]], canon
         assert canon[1][5] == 80, "80 EUR below Vinted's mean sale price"
+        cards[201]["shipping"] = "ship"
         active = ka_report.canon_active_rows(list(cards.values()), ka_report.vinted_model_stats(vinted), vinted,
                                              result["run"])
         assert [r[0] for r in active[1:]] == ["Canon AE-1", "Средняя цена продаж на Vinted, все модели"], active
+        cards[201]["shipping"] = "pickup"
+        pickup_only = ka_report.canon_active_rows(list(cards.values()), ka_report.vinted_model_stats(vinted), vinted,
+                                                  result["run"])
+        assert [r[0] for r in pickup_only[1:]] == ["Средняя цена продаж на Vinted, все модели"], pickup_only
         assert active[-1][2] == 230 and active[-1][5] == "продаж: 2", active[-1]
         assert active[1][2] == 230 and active[0][2] == "Vinted: средняя цена продажи, €", active
         # missing from the searches: 'проверяется' in the list, not interesting until its page is read

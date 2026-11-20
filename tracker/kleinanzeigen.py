@@ -128,7 +128,27 @@ def parse_ad(html, final_url, url):
         text = html_lib.unescape(re.sub(r"<[^>]+>", "", re.sub(r"<br\s*/?>", "\n", text.group(1)))).strip()
     return {"status": "reserved" if title.startswith("Reserviert") else "active", "price": price, "vb": vb,
             "date": f"{date.group(6)}-{date.group(5)}-{date.group(4)}" if date and date.group(6) else None,
-            "condition": details.get("Zustand"), "description": text or None}
+            "condition": details.get("Zustand"), "description": text or None,
+            "shipping": shipping_of(html), "pay_on_pickup_paypal": pays_on_pickup_paypal(text or "")}
+
+
+_SHIP_OK = re.compile(r"Versand m\S{1,3}glich")
+_PICKUP_ONLY = re.compile(r"Nur Abholung")
+# "Bezahlung vor Ort oder bei Versand per PayPal" (pay in person or by PayPal on shipping): not wanted
+_PAY_PICKUP_PAYPAL = re.compile(r"Bezahlung\s+vor\s+Ort.{0,80}PayPal", re.S | re.I)
+
+
+def shipping_of(html):
+    """'ship' (Versand möglich), 'pickup' (Nur Abholung), or None when the page does not say."""
+    if _PICKUP_ONLY.search(html):
+        return "pickup"
+    if _SHIP_OK.search(html):
+        return "ship"
+    return None
+
+
+def pays_on_pickup_paypal(text):
+    return bool(_PAY_PICKUP_PAYPAL.search(text))
 
 
 class KaClient:
