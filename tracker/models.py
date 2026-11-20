@@ -392,7 +392,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 74
+VERSION = 76
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -905,6 +905,10 @@ def _camera_joined(head):
 
 
 def _is_accessory(norm, model_span):
+    # 'lensadapter-canon-ef-en-sony-e-camera': a run-together adapter at the start of the title is the thing,
+    # whatever 'camera' says later (the 'camera' there is the Sony E mount)
+    if re.match(r"[a-z]*adapter\b", norm):
+        return True
     adapter = _ADAPTER.search(norm)
     if (adapter and not _CAMERA_WORDS.search(_FOR_CAMERAS_SHORT.sub(" ", norm))
             and not _WITH_WORDS.search(_MOUNT_NAME.sub(" ", norm[:adapter.start()]))):
@@ -1263,7 +1267,9 @@ _JUNK = [
         r"chicco|spielzeug|giocattol|jouet|\bkinder|\btoy\b|brownie|box ?kamera|box camera|tengor|\b(?:agfa|kodak|zeiss) box\b"
         r"|\bbox (?:agfa|kodak)\b|agfa-box|einweg|jetable|usa e getta|disposable|quicksnap|fun ?saver|lomograph|\blomo\b"
         r"|\blc-?a\b|holga|\bdiana\b|super color 35|ektar h35|\bm35\b|\bm38\b|pouva|la sardina")),
-    ("not wanted (user)", re.compile(r"\bnikon f-?301\b|\bom-?30\b|\byashica fx-?7\b"
+    # 'vintage cameratas geen camera': Dutch for 'camera bag, no camera' (user report, 20.11.2026)
+    ("not wanted (user)", re.compile(r"\bcameratas\b|\bgeen camera\b"
+                                     r"|\bnikon f-?301\b|\bom-?30\b|\byashica fx-?7\b"
                                      # the Canon T line, 12.11.2026: 'Canon T70', 'Canon T-50 + FD 50mm', 'T90 Canon'
                                      r"|\bcanon\b.*\bt ?-?(?:50|60|70|80|90)\b|\bt ?-?(?:50|60|70|80|90)\b.*\bcanon\b"
                                      # Nikon AS-1, an accessory (16.11.2026)
