@@ -147,6 +147,7 @@ def older(start, n=20):
 
 def main():
     from tracker import sheets
+    tick.COLLECT_REST = True  # these tests exercise the rest rows; the collection is off in production (21.11.2026)
 
     with tempfile.TemporaryDirectory() as tmp:
         store = DataStore(tmp)

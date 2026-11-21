@@ -242,11 +242,16 @@ def is_junk(item):
         models.junk_reason(item.get("title") or "", item.get("vinted_brand")))
 
 
+# 21.11.2026 (the user's request): 'Остальные' are no longer collected (-90 % of the load). Only the list
+# cameras are followed; the rest already in the data run out their own checks. Set True to collect again.
+COLLECT_REST = False
+
+
 def worth_tracking(item):
-    """List cameras of tracked models; other cameras from REST_MIN_PRICE up that are not junk."""
+    """List cameras of tracked models; other cameras from REST_MIN_PRICE up that are not junk (if collected)."""
     if item["group"] == "list":
         return tracked(item)
-    return (item.get("price_start") or 0) >= REST_MIN_PRICE and not is_junk(item)
+    return COLLECT_REST and (item.get("price_start") or 0) >= REST_MIN_PRICE and not is_junk(item)
 
 
 def refresh_untracked(state, active, closed):
