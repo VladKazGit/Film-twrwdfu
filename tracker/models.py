@@ -392,7 +392,7 @@ MODELS = [
 ]
 
 # Bump when MODELS changes: active items are re-classified on the next tick.
-VERSION = 76
+VERSION = 77
 
 # Models added later: the model search looks for their old listings first (once).
 # Searched again first after the search covered 3714/3717 (cameras found there).
@@ -1268,7 +1268,8 @@ _JUNK = [
         r"|\bbox (?:agfa|kodak)\b|agfa-box|einweg|jetable|usa e getta|disposable|quicksnap|fun ?saver|lomograph|\blomo\b"
         r"|\blc-?a\b|holga|\bdiana\b|super color 35|ektar h35|\bm35\b|\bm38\b|pouva|la sardina")),
     # 'vintage cameratas geen camera': Dutch for 'camera bag, no camera' (user report, 20.11.2026)
-    ("not wanted (user)", re.compile(r"\bcameratas\b|\bgeen camera\b"
+    # 'Nikon MD-4' at the start of a title: a motor drive, not a camera (user report, 21.11.2026)
+    ("not wanted (user)", re.compile(r"^nikon md-?\d\b|\bcameratas\b|\bgeen camera\b"
                                      r"|\bnikon f-?301\b|\bom-?30\b|\byashica fx-?7\b"
                                      # the Canon T line, 12.11.2026: 'Canon T70', 'Canon T-50 + FD 50mm', 'T90 Canon'
                                      r"|\bcanon\b.*\bt ?-?(?:50|60|70|80|90)\b|\bt ?-?(?:50|60|70|80|90)\b.*\bcanon\b"
