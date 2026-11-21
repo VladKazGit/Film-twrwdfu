@@ -21,7 +21,7 @@ import smtplib
 from email.message import EmailMessage
 from html import escape
 
-from . import models, report
+from . import models, push, report
 from .sheets import CHEAP_MAX_PRICE
 
 SMTP_HOST, SMTP_PORT = "smtp.gmail.com", 465
@@ -180,6 +180,7 @@ def run(items, state, now, send_fn=send):
     if not new:
         return 0
     send_fn(message(new, now, stats=stats))
+    push.send_cameras(new, stats, letter="Выгодно")  # the same cameras to the phone (tracker/push.py)
     state["notified"] = ((state.get("notified") or []) + [i["id"] for i in new])[-NOTIFIED_KEEP:]
     return len(new)
 
@@ -213,7 +214,9 @@ def run_watch(items, state, now, send_fn=send, source="Vinted", stats=None):
     new = sorted((i for i in watch_now(items) if i["id"] not in done), key=lambda i: report.current_price(i) or 0)
     if not new:
         return 0
-    send_fn(message(new, now, stats=sale_stats(items) if stats is None else stats, letter="Zenit 1980", mark="🏅",
+    letter_stats = sale_stats(items) if stats is None else stats
+    send_fn(message(new, now, stats=letter_stats, letter="Zenit 1980", mark="🏅",
                     source=source, sales_where="в базе" if stats is None else "на Vinted"))
+    push.send_cameras(new, letter_stats, letter="Zenit 1980")
     state["watch_notified"] = ((state.get("watch_notified") or []) + [i["id"] for i in new])[-WATCH_KEEP:]
     return len(new)

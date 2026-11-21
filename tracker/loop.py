@@ -25,7 +25,7 @@ from . import env
 
 GAP_MIN, GAP_MAX = 13, 18  # minutes between ticks, at random
 FIRST_TICK_MIN = (3, 12)  # the day's first tick: 07:03-07:12
-QUICK_JITTER_S = 40  # quick checks at ~1/3 and ~2/3 of a gap, give or take
+QUICK_JITTER_S = 30  # quick checks every QUICK_EVERY_S, give or take
 LATE_S = 30  # a check this late after its time (the previous one overran) is skipped
 WINDOW_START_HOUR = 7
 BUDGET_MIN = 330  # a 6-hour job limit minus one tick and setup
@@ -45,18 +45,21 @@ def next_tick(after, rng):
     return tick
 
 
-# Between two ticks: quick checks at ~1/3 and ~2/3. The cheap checks (listings at 20 EUR or less) in
-# between are off since 05.11.2026: the cheap models they caught are no longer tracked (tick.TRACK_MIN_SALE_PRICE).
-CHECKS = ((1 / 3, "quick"), (2 / 3, "quick"))
+# Between two ticks: a quick check (catalog page 1) every QUICK_EVERY_S, so a new camera in the list
+# is seen within a few minutes. 21.11.2026 (the user's request): 3 minutes, was two per gap.
+QUICK_EVERY_S = 180
 
 
 def quick_times(last, tick, rng):
-    """The checks between ticks of one evening/day (none across the night): [(time, mode)]."""
+    """The quick checks between two ticks of one evening/day (none across the night): [(time, mode)]."""
     gap = seconds_until(tick, last)
     if gap > (GAP_MAX + 1) * 60:
         return []
-    return [(last + timedelta(seconds=gap * share + rng.uniform(-QUICK_JITTER_S, QUICK_JITTER_S) / (2 if mode == "cheap" else 1)),
-             mode) for share, mode in CHECKS]
+    out, step = [], QUICK_EVERY_S
+    while step < gap - 150:  # none in the last 2.5 minutes before the tick
+        out.append((last + timedelta(seconds=step + rng.uniform(-QUICK_JITTER_S, QUICK_JITTER_S)), "quick"))
+        step += QUICK_EVERY_S
+    return out
 
 
 def seconds_until(moment, now):

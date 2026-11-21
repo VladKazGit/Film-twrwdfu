@@ -71,6 +71,7 @@ jobs:
           DATA_REPO: ${{ secrets.DATA_REPO }}
           MAIL_USER: ${{ secrets.MAIL_USER }}
           MAIL_APP_PASSWORD: ${{ secrets.MAIL_APP_PASSWORD }}
+          FCM_SERVICE_ACCOUNT: ${{ secrets.FCM_SERVICE_ACCOUNT }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
         run: |
           echo "settings: backup cron ${{ vars.TRACKER_ENABLED == 'true' && 'on' || 'off (TRACKER_ENABLED is not true)' }}, event ${{ github.event_name }}, chained ${{ inputs.chained && 'yes' || 'no' }}"

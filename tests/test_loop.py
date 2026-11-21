@@ -49,7 +49,7 @@ def main():
         gaps = [minutes(a, b) for a, b in zip(c.ticks, c.ticks[1:])]
         assert 18 <= len(c.ticks) <= 26 and all(13 <= g <= 18.01 for g in gaps), gaps
         assert len({round(g, 1) for g in gaps}) > 5 and len({t.second for t in c.ticks}) > 5, "not on the clock"
-        assert len(c.quick) == 2 * len(c.ticks), (len(c.quick), len(c.ticks))
+        assert 2.5 * len(c.ticks) <= len(c.quick) <= 5 * len(c.ticks), (len(c.quick), len(c.ticks))  # every 3 min between ticks
         assert c.cheap == [], "no cheap checks since 05.11.2026"
         events = sorted(c.ticks + c.quick + c.cheap)
         assert all(minutes(a, b) >= 1.2 for a, b in zip(events, events[1:])), "no bunching"
