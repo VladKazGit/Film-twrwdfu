@@ -19,7 +19,6 @@ TOPIC = "vinted-alerts"
 SCOPE = "https://www.googleapis.com/auth/firebase.messaging"
 ENDPOINT = "https://fcm.googleapis.com/v1/projects/{project}/messages:send"
 TIMEOUT_S = 15
-MAX_HTML_BYTES = 3000  # FCM data payload limit is 4 KB for everything together
 
 _creds = None
 _project = None
@@ -93,11 +92,14 @@ def send_cameras(cameras, stats, letter="Выгодно", now=None):
         try:
             project, token = _access()
             title, body = text(item, stats, letter)
-            page = html(item, stats, now)
-            while len(page.encode("utf-8")) > MAX_HTML_BYTES and len(page) > 200:
-                page = page[: int(len(page) * 0.8)]  # the cut keeps the link if the description is long
+            lines, days = _sales(item, stats)
+            when = report.format_on_sale(days) if days is not None else ""
             data = {"title": title, "body": body, "url": item.get("url") or "", "photo": item.get("photo") or "",
-                    "html": page, "letter": letter}
+                    "letter": letter, "model": item.get("model") or "",
+                    "price": report._price_text(report.current_price(item)),
+                    "listing": item.get("title") or "", "sales": chr(10).join(lines),
+                    "when": when, "description": report._one_line(item.get("description"), 150),
+                    "checked": now or ""}
             message = {"topic": TOPIC, "data": {k: str(v) for k, v in data.items()}, "android": {"priority": "high"}}
             response = requests.post(ENDPOINT.format(project=project), json={"message": message},
                                      headers={"Authorization": f"Bearer {token}"}, timeout=TIMEOUT_S)
