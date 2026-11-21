@@ -1,11 +1,13 @@
 """Push alerts to the phone (Firebase Cloud Messaging, HTTP v1): the same cameras as the e-mail letter.
 
-One message per camera to the topic TOPIC; the Android app (a separate project, not in this repository)
-subscribes to it. Secret: FCM_SERVICE_ACCOUNT (the JSON key of a service account with the Firebase
-Cloud Messaging role). Without it nothing is sent. Failures are logged as counts only, never fail a tick.
+Data-only messages to the topic TOPIC: the Android app (a separate project, not in this repository)
+builds its own notification and keeps the last package with its links and photos. Secret:
+FCM_SERVICE_ACCOUNT (the JSON key of a service account with the Firebase Cloud Messaging role).
+Without it nothing is sent. Failures are logged as type names only (the repository is public).
 """
 import json
 import os
+from html import escape
 
 import requests
 from google.auth.transport.requests import Request
@@ -17,6 +19,7 @@ TOPIC = "vinted-alerts"
 SCOPE = "https://www.googleapis.com/auth/firebase.messaging"
 ENDPOINT = "https://fcm.googleapis.com/v1/projects/{project}/messages:send"
 TIMEOUT_S = 15
+MAX_HTML_BYTES = 3000  # FCM data payload limit is 4 KB for everything together
 
 _creds = None
 _project = None
@@ -38,28 +41,51 @@ def _access():
     return _project, _creds.token
 
 
+def _sales(item, stats):
+    """The model's sales in the data: [line, ...] and the time to sell, as in the letter."""
+    model = item.get("model") or ""
+    if model not in stats:
+        return ["Продажи модели в базе пока нет"], None
+    n, mean, low, high, days = stats[model]
+    spread = f", от {report._price_text(low)} до {report._price_text(high)} €" if n > 1 else ""
+    lines = [f"Продажи в среднем {mean} €{spread}, продаж: {n}"]
+    return lines, days
+
+
 def text(item, stats, letter):
-    """Title and body for one camera: model and price, the model's sales, the listing's age and source."""
+    """Title and short body for the notification."""
     model = item.get("model") or "камера"
     price = report.current_price(item)
     title = f"{letter}: {model}" + (f" — {report._price_text(price)} €" if price is not None else "")
-    lines = []
-    if model in stats:
-        n, mean, low, high, days = stats[model]
-        spread = f" (от {report._price_text(low)} до {report._price_text(high)} €)" if n > 1 else ""
-        lines.append(f"Продажи в среднем {mean} €{spread}, продаж: {n}")
-        if days is not None:
-            lines.append(f"Продаётся в среднем за: {report.format_on_sale(days)}")
-    else:
-        lines.append("Продаж модели в базе пока нет")
-    desc = (item.get("description") or "").replace("\n", " ").strip()[:150]
-    if desc:
-        lines.append(desc)
-    return title, "\n".join(line for line in lines if line)
+    lines, days = _sales(item, stats)
+    if days is not None:
+        lines.append(f"Продаётся в среднем за: {report.format_on_sale(days)}")
+    return title, "\n".join(lines)
 
 
-def send_cameras(cameras, stats, letter="Выгодно"):
-    """Push one message per camera. Returns the number sent; a failed one is counted, not raised."""
+def html(item, stats, now=None):
+    """The camera as in the letter's HTML part: model and price, sales, the listing link, the photo."""
+    model = item.get("model") or ""
+    price = report._price_text(report.current_price(item))
+    url = item.get("url") or ""
+    description = report._one_line(item.get("description"), 150)
+    sales, days = _sales(item, stats)
+    if days is not None:
+        sales.append(f"Продаётся в среднем за: {report.format_on_sale(days)}")
+    photo = item.get("photo")
+    image = (f'<a href="{escape(url)}"><img src="{escape(photo)}" width="150" alt=""></a><br>' if photo else "")
+    parts = [f"{image}<p><b>{escape(model)} — {escape(price)} €</b></p>",
+             f'<p style="color:#1a7f37">{"<br>".join(escape(line) for line in sales)}</p>',
+             f'<p><a href="{escape(url)}">{escape(item.get("title") or "Объявление")}</a></p>']
+    if description:
+        parts.append(f"<p>{escape(description)}</p>")
+    if now:
+        parts.append(f"<p><small>Проверка трекера: {escape(now)} (Берлин)</small></p>")
+    return "".join(parts)
+
+
+def send_cameras(cameras, stats, letter="Выгодно", now=None):
+    """Push one data message per camera. Returns the number sent; a failed one is counted, not raised."""
     if not configured() or not cameras:
         return 0
     sent = 0
@@ -67,14 +93,12 @@ def send_cameras(cameras, stats, letter="Выгодно"):
         try:
             project, token = _access()
             title, body = text(item, stats, letter)
-            message = {
-                "topic": TOPIC,
-                "notification": {"title": title, "body": body},
-                "data": {"url": item.get("url") or "", "id": str(item.get("id") or "")},
-                "android": {"priority": "high"},
-            }
-            if item.get("photo"):
-                message["notification"]["image"] = item["photo"]
+            page = html(item, stats, now)
+            while len(page.encode("utf-8")) > MAX_HTML_BYTES and len(page) > 200:
+                page = page[: int(len(page) * 0.8)]  # the cut keeps the link if the description is long
+            data = {"title": title, "body": body, "url": item.get("url") or "", "photo": item.get("photo") or "",
+                    "html": page, "letter": letter}
+            message = {"topic": TOPIC, "data": {k: str(v) for k, v in data.items()}, "android": {"priority": "high"}}
             response = requests.post(ENDPOINT.format(project=project), json={"message": message},
                                      headers={"Authorization": f"Bearer {token}"}, timeout=TIMEOUT_S)
             if response.status_code == 200:
@@ -82,7 +106,7 @@ def send_cameras(cameras, stats, letter="Выгодно"):
             else:
                 print(f"push: HTTP {response.status_code}")
         except Exception as exc:  # never fails the tick; the log has no titles or ids
-            print(f"push failed: {type(exc).__name__}")  # no message: the repository is public
+            print(f"push failed: {type(exc).__name__}")
     if sent:
         print(f"push: sent {sent}")
     return sent

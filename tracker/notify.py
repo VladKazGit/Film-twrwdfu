@@ -180,7 +180,7 @@ def run(items, state, now, send_fn=send):
     if not new:
         return 0
     send_fn(message(new, now, stats=stats))
-    push.send_cameras(new, stats, letter="Выгодно")  # the same cameras to the phone (tracker/push.py)
+    push.send_cameras(new, stats, letter="Выгодно", now=now)  # the same cameras to the phone (tracker/push.py)
     state["notified"] = ((state.get("notified") or []) + [i["id"] for i in new])[-NOTIFIED_KEEP:]
     return len(new)
 
@@ -217,6 +217,6 @@ def run_watch(items, state, now, send_fn=send, source="Vinted", stats=None):
     letter_stats = sale_stats(items) if stats is None else stats
     send_fn(message(new, now, stats=letter_stats, letter="Zenit 1980", mark="🏅",
                     source=source, sales_where="в базе" if stats is None else "на Vinted"))
-    push.send_cameras(new, letter_stats, letter="Zenit 1980")
+    push.send_cameras(new, letter_stats, letter="Zenit 1980", now=now)
     state["watch_notified"] = ((state.get("watch_notified") or []) + [i["id"] for i in new])[-WATCH_KEEP:]
     return len(new)
