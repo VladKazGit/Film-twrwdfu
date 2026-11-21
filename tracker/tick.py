@@ -245,6 +245,7 @@ def is_junk(item):
 # 21.11.2026 (the user's request): 'Остальные' are no longer collected (-90 % of the load). Only the list
 # cameras are followed; the rest already in the data run out their own checks. Set True to collect again.
 COLLECT_REST = False
+REST_STEPS_ON = False  # photo labels, names and the re-check of 'Остальные' (set True to run them again)
 
 
 def worth_tracking(item):
@@ -305,6 +306,8 @@ def rest_recheck(client, closed, now, stats, changed, quick=False):
     """Open the page of closed 'Остальные' once more ('не продано за 3 ч', deleted): the status now goes
     to recheck_status / recheck_at / recheck_price, the card's own status stays. Named cameras first; as
     many per tick as finish the lot by REST_RECHECK_BY."""
+    if not REST_STEPS_ON:  # 21.11.2026: no more checks of 'Остальные' (the load)
+        return
     # Not the cheap ones (06.11.2026): a camera name whose listings average under REST_RECHECK_MIN_PRICE, or
     # an unnamed card priced under it.
     prices = {}
@@ -1577,6 +1580,8 @@ def name_step(store, result):
     description, then the text read on its photo. A list model read on the photo of a kept card
     moves it to 'Список' (model_source 'photo'); a compact, autofocus or movie camera by its name
     is dropped from the data, like a junk title (a short record stays). Returns the counts."""
+    if not REST_STEPS_ON:
+        return {"named": 0, "unnamed": 0, "to_list": 0, "dropped": 0}
     from . import photos
 
     counts, dropped = Counter(), []
@@ -1642,6 +1647,8 @@ MORE_PHOTOS_BUDGET_S = 60  # unnamed kept cards: the 2nd and 3rd photos per full
 def more_photos_step(store, result, client, started):
     """Unnamed kept cards of 'Остальные': read the 2nd and 3rd photos (one listing page each).
     A failure never fails the tick. Counts only in the log."""
+    if not REST_STEPS_ON:
+        return
     from . import photos
 
     if time.monotonic() - started > PHOTO_START_LIMIT_S or not photos.available(store.root):
@@ -1660,6 +1667,8 @@ def photo_step(store, result, started):
     """Label new cards of 'Остальные' by photo, take the verdicts labelled outside the tracker in,
     and drop from the data what the photo check rejects (a short record stays for 'По фото: убрать').
     A failure never fails the tick. Counts only in the log."""
+    if not REST_STEPS_ON:  # 21.11.2026: photo labelling is for 'Остальные' only
+        return
     from . import photos
 
     if time.monotonic() - started > PHOTO_START_LIMIT_S or not photos.available(store.root):
