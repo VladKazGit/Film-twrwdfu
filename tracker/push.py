@@ -19,6 +19,7 @@ ENDPOINT = "https://fcm.googleapis.com/v1/projects/{project}/messages:send"
 TIMEOUT_S = 15
 
 _creds = None
+_project = None
 
 
 def configured():
@@ -27,14 +28,14 @@ def configured():
 
 def _access():
     """(project id, bearer token); the token is refreshed by google-auth when it runs out."""
-    global _creds
+    global _creds, _project
     if _creds is None:
         info = json.loads(os.environ["FCM_SERVICE_ACCOUNT"])
         _creds = service_account.Credentials.from_service_account_info(info, scopes=[SCOPE])
-        _creds.project_id = info["project_id"]
+        _project = info["project_id"]  # kept apart: the credentials object has no settable project_id
     if not _creds.valid:
         _creds.refresh(Request())
-    return _creds.project_id, _creds.token
+    return _project, _creds.token
 
 
 def text(item, stats, letter):
@@ -81,7 +82,7 @@ def send_cameras(cameras, stats, letter="Выгодно"):
             else:
                 print(f"push: HTTP {response.status_code}")
         except Exception as exc:  # never fails the tick; the log has no titles or ids
-            print(f"push failed: {type(exc).__name__}")
+            print(f"push failed: {type(exc).__name__}")  # no message: the repository is public
     if sent:
         print(f"push: sent {sent}")
     return sent
